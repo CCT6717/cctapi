@@ -1,0 +1,150 @@
+{
+  "enabled": true,
+  "virtual_models": {
+    "high/auto": {
+      "enabled": true,
+      "description": "????? ? ?????",
+      "routing_mode": "weighted",
+      "fallback_order": [
+        "doubao-code",
+        "doubao-18",
+        "doubao-16"
+      ]
+    },
+    "low/auto": {
+      "enabled": true,
+      "description": "?????? ? openrouter ???",
+      "routing_mode": "weighted",
+      "fallback_order": [
+        "openrouter-new-free",
+        "openrouter-old",
+        "openrouter-new"
+      ]
+    },
+    "all/auto": {
+      "enabled": true,
+      "description": "全部通道 — 豆包优先，openrouter 兜底",
+      "routing_mode": "sequential",
+      "fallback_order": [
+        "doubao-code",
+        "doubao-18",
+        "doubao-16",
+        "openrouter-new-free",
+        "openrouter-old",
+        "openrouter-new",
+        "all-auto-model-7"
+      ]
+    }
+  },
+  "deployments": {
+    "all-auto-model-7": {
+      "enabled": true,
+      "channel_id": 5,
+      "real_model": "doubao-seed-2-0-lite-260428",
+      "priority": 13,
+      "weight": 100,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 2000000,
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "max_context": 0,
+      "min_context": 0
+    },
+    "doubao-16": {
+      "enabled": true,
+      "channel_id": 1,
+      "real_model": "doubao-seed-1-6-251015",
+      "priority": 3,
+      "weight": 10,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 2000000,
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "max_context": 0,
+      "min_context": 0
+    },
+    "doubao-18": {
+      "enabled": true,
+      "channel_id": 1,
+      "real_model": "doubao-seed-1-8-251228",
+      "priority": 2,
+      "weight": 20,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 2000000,
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "max_context": 0,
+      "min_context": 0
+    },
+    "doubao-code": {
+      "enabled": true,
+      "channel_id": 1,
+      "real_model": "doubao-seed-2-0-code-preview-260215",
+      "priority": 1,
+      "weight": 70,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 2000000,
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "max_context": 0,
+      "min_context": 0
+    },
+    "openrouter-new": {
+      "enabled": true,
+      "channel_id": 4,
+      "real_model": "openrouter/auto",
+      "priority": 12,
+      "weight": 15,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 2000000,
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "max_context": 0,
+      "min_context": 0
+    },
+    "openrouter-new-free": {
+      "enabled": true,
+      "channel_id": 4,
+      "real_model": "openrouter/free",
+      "priority": 10,
+      "weight": 70,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 3000000,
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "max_context": 0,
+      "min_context": 0
+    },
+    "openrouter-old": {
+      "enabled": true,
+      "channel_id": 3,
+      "real_model": "openrouter/free",
+      "priority": 11,
+      "weight": 15,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 3000000,
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "max_context": 0,
+      "min_context": 0
+    }
+  },
+  "alert": {
+    "enabled": true,
+    "check_interval_seconds": 300,
+    "webhook_url": "",
+    "notify_on_soft_limit": true,
+    "notify_on_hard_limit": true,
+    "notify_on_exhausted": true,
+    "notify_on_recovered": true,
+    "notify_on_all_failed": true
+  },
+  "smart_sort": {
+    "enabled": true,
+    "weights": {
+      "base_priority_penalty": 5,
+      "success_rate_bonus": 30,
+      "error_rate_penalty": 50
+    }
+  }
+}

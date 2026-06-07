@@ -1,0 +1,444 @@
+.fallback-config-panel {
+  margin: 6px 0 24px;
+  padding: 18px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.fallback-config-loading {
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fallback-config-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.fallback-config-title.ui.header {
+  margin: 0 0 4px !important;
+  color: #172033 !important;
+  font-size: 18px !important;
+  letter-spacing: 0;
+}
+
+.fallback-config-count {
+  color: #667085;
+  font-size: 13px;
+}
+
+.fallback-config-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.fallback-config-actions .ui.button {
+  margin: 0 !important;
+}
+
+.fallback-virtual-list {
+  display: grid;
+  gap: 16px;
+}
+
+.fallback-virtual-panel {
+  padding: 16px;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.fallback-virtual-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.fallback-collapse-button.ui.button {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+  margin: 0 !important;
+  background: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.fallback-virtual-summary-main {
+  min-width: 0;
+}
+
+.fallback-virtual-name {
+  color: #172033;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.fallback-virtual-meta {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.fallback-virtual-body {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #e3e8ef;
+}
+
+.fallback-virtual-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.fallback-virtual-form {
+  min-width: 0;
+}
+
+.fallback-virtual-controls,
+.fallback-deployment-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-height: 38px;
+}
+
+.fallback-routing-panel {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.82fr) minmax(360px, 1.18fr);
+  align-items: stretch;
+  gap: 12px;
+  margin: 12px 0 10px;
+  padding: 12px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
+}
+
+.fallback-routing-summary {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid #edf1f5;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.fallback-routing-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  background: #eff6ff;
+  color: #2563eb;
+}
+
+.fallback-routing-icon.teal {
+  background: #ecfdfa;
+  color: #0f9f9a;
+}
+
+.fallback-routing-icon .icon {
+  margin: 0 !important;
+  font-size: 17px;
+}
+
+.fallback-routing-summary strong,
+.fallback-routing-summary span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.fallback-routing-summary strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.fallback-routing-summary span {
+  margin-top: 3px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fallback-routing-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.fallback-routing-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  gap: 10px;
+  width: min(100%, 520px);
+}
+
+.fallback-routing-option {
+  position: relative;
+  min-height: 88px;
+  padding: 12px 12px 12px 16px;
+  border: 1px solid #e3e8ef;
+  border-radius: 8px;
+  color: #344054;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease,
+    background 0.15s ease;
+}
+
+.fallback-routing-option::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: #e3e8ef;
+  transition: background 0.15s ease;
+}
+
+.fallback-routing-option:hover {
+  border-color: #b9c7da;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.06);
+}
+
+.fallback-routing-option:hover::before {
+  background: #d1d5db;
+}
+
+.fallback-routing-option.active.blue {
+  border-color: #2563eb;
+  background: #eff6ff;
+  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.12);
+}
+
+.fallback-routing-option.active.teal {
+  border-color: #0f9f9a;
+  background: #ecfdfa;
+  box-shadow: inset 0 0 0 1px rgba(15, 159, 154, 0.12);
+}
+
+.fallback-routing-option.active.blue::before { background: #2563eb; }
+.fallback-routing-option.active.teal::before { background: #0f9f9a; }
+
+.fallback-routing-option-head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  margin-bottom: 6px;
+}
+
+.fallback-routing-option-head .icon {
+  margin: 0 !important;
+  font-size: 18px;
+}
+
+.fallback-routing-option-head strong {
+  color: #172033;
+  font-size: 13px;
+}
+
+.fallback-routing-option > span:last-child {
+  display: block;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.fallback-routing-current {
+  margin-left: auto;
+  padding: 1px 6px;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  border-radius: 999px;
+  color: #2563eb;
+  background: rgba(255, 255, 255, 0.82);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fallback-routing-option.active.teal .fallback-routing-current {
+  border-color: rgba(15, 159, 154, 0.24);
+  color: #0f9f9a;
+}
+
+.fallback-routing-edit.ui.button {
+  flex: 0 0 auto;
+  margin: 0 !important;
+}
+
+.fallback-state-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fallback-order-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.fallback-state-actions .ui.button {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+}
+
+.fallback-order-actions .ui.button {
+  width: 32px;
+  height: 32px;
+  padding: 0 !important;
+}
+
+.fallback-virtual-controls .ui.button,
+.fallback-deployment-controls .ui.button {
+  margin: 0 !important;
+}
+
+.fallback-deployment-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.fallback-deployment-panel {
+  padding: 14px;
+  border: 1px solid #d9e0ea;
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.fallback-deployment-heading {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.fallback-deployment-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: #172033;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.fallback-deployment-name .ui.label {
+  flex: 0 0 auto;
+  font-weight: 600;
+}
+
+.fallback-state-note {
+  margin: 8px 0 0 46px;
+  color: #667085;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.fallback-deployment-form .field {
+  min-width: 0;
+}
+
+.fallback-deployment-form {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+
+.fallback-test-result {
+  margin-top: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+.fallback-test-result.success {
+  color: #067647;
+  background: #ecfdf3;
+  border: 1px solid #abefc6;
+}
+
+.fallback-test-result.failed {
+  color: #b42318;
+  background: #fef3f2;
+  border: 1px solid #fecdca;
+}
+
+.fallback-add-real-model.ui.button {
+  margin-top: 12px !important;
+}
+
+@media (max-width: 900px) {
+  .fallback-config-toolbar,
+  .fallback-virtual-header {
+    display: block;
+  }
+
+  .fallback-routing-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .fallback-virtual-summary,
+  .fallback-deployment-heading {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .fallback-virtual-summary .ui.label,
+  .fallback-deployment-controls {
+    grid-column: 2;
+  }
+
+  .fallback-config-actions,
+  .fallback-virtual-controls,
+  .fallback-routing-actions,
+  .fallback-deployment-controls {
+    justify-content: flex-start;
+    margin-top: 12px;
+  }
+
+  .fallback-routing-actions {
+    display: block;
+    margin-top: 0;
+  }
+
+  .fallback-routing-mode-grid {
+    width: 100%;
+  }
+
+  .fallback-routing-edit.ui.button {
+    margin-top: 10px !important;
+  }
+
+  .fallback-state-note {
+    margin-left: 46px;
+  }
+}
+
+.fallback-virtual-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}

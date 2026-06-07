@@ -1,0 +1,43 @@
+# Logs
+*.log
+logs/
+
+# Local databases
+*.db
+*.db-shm
+*.db-wal
+
+# Local environment and secrets
+.env
+.env.local
+
+# Temporary reports generated during staged fallback work
+PHASE*_REPORT.md
+PHASE*_SUMMARY.md
+PHASE*_FILES.md
+
+# Local build and runtime binaries
+one-api
+one-api.exe
+one-api-new.exe
+one-api-monitor.exe
+one-api-test.exe
+one-api-prev.exe
+*.exe~
+
+# Backup and runtime data
+data/backups/
+
+# Tool and dependency caches
+.claude/
+web/default/node_modules/
+coverage.txt
+tmp/
+.git-rewrite/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Keep local-only upstream workflow templates out unless intentionally force-added.
+.github/workflows/
