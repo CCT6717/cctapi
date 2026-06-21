@@ -154,7 +154,7 @@ const makeDeploymentId = (vmName, deployments) => {
   return id;
 };
 
-const FallbackConfigPanel = ({ highlightDeployment }) => {
+const FallbackConfigPanel = ({ highlightDeployment, readOnly }) => {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -724,6 +724,7 @@ const FallbackConfigPanel = ({ highlightDeployment }) => {
   };
 
   const saveConfig = async () => {
+    if (readOnly) return;
     const validationErrors = getConfigValidationErrors(config);
     if (validationErrors.length > 0) {
       showError(validationErrors.slice(0, 3).join('；'));
@@ -753,6 +754,7 @@ const FallbackConfigPanel = ({ highlightDeployment }) => {
   };
 
   const saveVirtualModel = async (vmIndex) => {
+    if (readOnly) return;
     const vm = config.virtual_models[vmIndex];
     if (!vm) return;
 
@@ -1060,6 +1062,17 @@ const FallbackConfigPanel = ({ highlightDeployment }) => {
 
   return (
     <>
+    {readOnly && (
+      <Message warning>
+        <Icon name='lock' />
+        <Message.Content>
+          <Message.Header>只读模式</Message.Header>
+          <p>
+            当前系统已使用新版 pools/strategy 三层网关配置。旧编辑器仅用于 legacy 配置查看，不再允许保存新版配置。
+          </p>
+        </Message.Content>
+      </Message>
+    )}
     <Message warning className='fallback-config-legacy-banner'>
       <Icon name='exclamation triangle' />
       <Message.Content>
@@ -1088,7 +1101,7 @@ const FallbackConfigPanel = ({ highlightDeployment }) => {
             </div>
         </div>
         <div className='fallback-config-actions'>
-          <Button icon labelPosition='left' onClick={addVirtualModel}>
+          <Button icon labelPosition='left' onClick={addVirtualModel} disabled={readOnly}>
             <Icon name='plus' />
             添加虚拟模型
           </Button>
@@ -1101,7 +1114,7 @@ const FallbackConfigPanel = ({ highlightDeployment }) => {
             labelPosition='left'
             onClick={testAllDeployments}
             loading={testing}
-            disabled={testing || saving}
+            disabled={testing || saving || readOnly}
           >
             <Icon name='play' />
             测试所有
@@ -1111,7 +1124,7 @@ const FallbackConfigPanel = ({ highlightDeployment }) => {
             labelPosition='left'
             onClick={() => batchAction('recover')}
             loading={batchLoading === 'recover'}
-            disabled={!!batchLoading}
+            disabled={!!batchLoading || readOnly}
           >
             <Icon name='undo' />
             全部恢复
@@ -1121,7 +1134,7 @@ const FallbackConfigPanel = ({ highlightDeployment }) => {
             labelPosition='left'
             onClick={() => batchAction('cooldown')}
             loading={batchLoading === 'cooldown'}
-            disabled={!!batchLoading}
+            disabled={!!batchLoading || readOnly}
           >
             <Icon name='pause' />
             全部冷却
@@ -1146,7 +1159,7 @@ const FallbackConfigPanel = ({ highlightDeployment }) => {
             labelPosition='left'
             onClick={saveConfig}
             loading={saving}
-            disabled={saving}
+            disabled={saving || readOnly}
           >
             <Icon name='save' />
             保存

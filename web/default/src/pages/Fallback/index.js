@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import FallbackConfigPanel from '../../components/FallbackConfigPanel';
 import FallbackRuntimePanel from '../../components/FallbackRuntimePanel';
+import FallbackGatewayEditor from '../../components/fallback-gateway/FallbackGatewayEditor';
 import { API, isAdmin, showError, showSuccess } from '../../helpers';
 import { clampScore, sortScoreItems } from './scoreUtils';
 import './Fallback.css';
@@ -98,6 +99,20 @@ const translateFallbackReason = (reason) => {
 };
 
 const PANEL_ITEMS = [
+  {
+    key: 'gateway',
+    title: '网关编辑器',
+    description: '新版三层网关配置编辑器：管理虚拟模型、部署和 Free Providers。',
+    icon: 'edit',
+    accent: '#0ea5e9',
+  },
+  {
+    key: 'legacy',
+    title: '旧版编辑器',
+    description: '旧版 fallback 配置查看器，仅供 legacy 配置参考，不允许保存新版配置。',
+    icon: 'history',
+    accent: '#6b7280',
+  },
   {
     key: 'status',
     title: '模型状态',
@@ -238,9 +253,9 @@ const emptyConfigMeta = {
 
 const getPanelKey = (panel) => {
   if (panel === 'dashboard') {
-    return 'status';
+    return 'gateway';
   }
-  return PANEL_KEYS.has(panel) ? panel : 'status';
+  return PANEL_KEYS.has(panel) ? panel : 'gateway';
 };
 
 const formatNumber = (value) => {
@@ -2028,7 +2043,7 @@ const Fallback = () => {
   );
 
   const renderActivePanel = () => {
-    if (loading) {
+    if (loading && activePanel !== 'gateway' && activePanel !== 'legacy') {
       return (
         <div className='fallback-loading'>
           <Loader active inline='centered' />
@@ -2037,6 +2052,24 @@ const Fallback = () => {
     }
 
     switch (activePanel) {
+      case 'gateway':
+        return <FallbackGatewayEditor />;
+      case 'legacy':
+        return (
+          <>
+            <Message warning>
+              <Icon name='exclamation triangle' />
+              <Message.Content>
+                <Message.Header>Legacy 模式</Message.Header>
+                <p>
+                  当前系统已使用新版 pools/strategy 三层网关配置。旧编辑器仅用于 legacy
+                  配置查看，不再允许保存新版配置。
+                </p>
+              </Message.Content>
+            </Message>
+            <FallbackConfigPanel readOnly highlightDeployment={highlightDeployment} />
+          </>
+        );
       case 'metrics':
         return renderMetricsPanel();
       case 'scores':
