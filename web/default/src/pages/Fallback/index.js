@@ -20,7 +20,6 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import FallbackConfigPanel from '../../components/FallbackConfigPanel';
 import FallbackRuntimePanel from '../../components/FallbackRuntimePanel';
 import FallbackGatewayEditor from '../../components/fallback-gateway/FallbackGatewayEditor';
 import { API, isAdmin, showError, showSuccess } from '../../helpers';
@@ -105,13 +104,7 @@ const PANEL_ITEMS = [
     description: '新版三层网关配置编辑器：管理虚拟模型、部署和 Free Providers。',
     icon: 'edit',
     accent: '#0ea5e9',
-  },
-  {
-    key: 'legacy',
-    title: '旧版编辑器',
-    description: '旧版 fallback 配置查看器，仅供 legacy 配置参考，不允许保存新版配置。',
-    icon: 'history',
-    accent: '#6b7280',
+    refreshLabel: '按需保存',
   },
   {
     key: 'status',
@@ -119,6 +112,7 @@ const PANEL_ITEMS = [
     description: '显示额度、Token、并发、冷却和恢复按钮，适合日常值守。',
     icon: 'server',
     accent: '#2563eb',
+    refreshLabel: '每 15 秒',
   },
   {
     key: 'metrics',
@@ -126,6 +120,7 @@ const PANEL_ITEMS = [
     description: '展示请求量、切换次数、成功失败和 token 消耗等原始监控。',
     icon: 'heartbeat',
     accent: '#0f9f9a',
+    refreshLabel: '每 30 秒',
   },
   {
     key: 'scores',
@@ -133,6 +128,7 @@ const PANEL_ITEMS = [
     description: '用当前分数和趋势图判断哪个模型变好、变差或正在恢复。',
     icon: 'sort numeric down',
     accent: '#7c3aed',
+    refreshLabel: '每 15 秒',
   },
   {
     key: 'alerts',
@@ -140,6 +136,7 @@ const PANEL_ITEMS = [
     description: '按时间记录限额、手动冷却、自动恢复和全部失败事件。',
     icon: 'bell outline',
     accent: '#d97706',
+    refreshLabel: '每 1 分钟',
   },
   {
     key: 'logs',
@@ -147,6 +144,7 @@ const PANEL_ITEMS = [
     description: '记录切换原因、状态码、耗时和 request id，方便追单次请求。',
     icon: 'exchange',
     accent: '#475569',
+    refreshLabel: '每 1 分钟',
   },
 ];
 
@@ -252,7 +250,7 @@ const emptyConfigMeta = {
 };
 
 const getPanelKey = (panel) => {
-  if (panel === 'dashboard') {
+  if (panel === 'dashboard' || panel === 'legacy') {
     return 'gateway';
   }
   return PANEL_KEYS.has(panel) ? panel : 'gateway';
@@ -663,10 +661,12 @@ const Fallback = () => {
   const activePanel = getPanelKey(panel);
   const activePanelItem =
     PANEL_ITEMS.find((item) => item.key === activePanel) || PANEL_ITEMS[0];
-  const refreshInterval = PANEL_REFRESH_INTERVALS[activePanel] || 15000;
-  const refreshHint = `自动每 ${formatInterval(
-    refreshInterval
-  )} 刷新，点击可立即显示最新数据`;
+  const refreshInterval = PANEL_REFRESH_INTERVALS[activePanel];
+  const refreshHint = refreshInterval
+    ? `自动每 ${formatInterval(refreshInterval)} 刷新，点击可立即显示最新数据`
+    : activePanelItem.refreshLabel === '只读'
+    ? '只读模式，无自动刷新'
+    : '手动刷新，按需保存';
   const admin = isAdmin();
 
   const [loading, setLoading] = useState(false);
@@ -683,6 +683,7 @@ const Fallback = () => {
   const [guideOpen, setGuideOpen] = useState(false);
   const [summary, setSummary] = useState(null);
   const [metricSamples, setMetricSamples] = useState(loadMetricSamples);
+  const [runtimeStatusRows, setRuntimeStatusRows] = useState([]);
 
   const markAllAlertsRead = useCallback(async () => {
     try {
@@ -722,6 +723,18 @@ const Fallback = () => {
     }
   }, [admin]);
 
+  const loadRuntimeStatus = useCallback(async () => {
+    try {
+      const res = await API.get('/api/fallback/deployments/runtime-status');
+      const { success, data } = res.data || {};
+      if (success && Array.isArray(data)) {
+        setRuntimeStatusRows(data);
+      }
+    } catch (e) {
+      // silently fail
+    }
+  }, []);
+
   const loadPanel = useCallback(
     async (silent = false) => {
       if (!admin) {
@@ -735,6 +748,7 @@ const Fallback = () => {
           const [statusRes] = await Promise.all([
             API.get('/api/fallback/alert/status'),
             loadConfigMeta(),
+            loadRuntimeStatus(),
           ]);
           setStatusRows(
             Array.isArray(statusRes.data?.status) ? statusRes.data.status : []
@@ -793,7 +807,7 @@ const Fallback = () => {
         }
       }
     },
-    [activePanel, admin, loadConfigMeta]
+    [activePanel, admin, loadConfigMeta, loadRuntimeStatus]
   );
 
   useEffect(() => {
@@ -818,6 +832,7 @@ const Fallback = () => {
   }, [loadSummary]);
 
   useEffect(() => {
+    if (!refreshInterval) return;
     const timer = window.setInterval(() => {
       loadPanel(true).then();
     }, refreshInterval);
@@ -1325,7 +1340,105 @@ const Fallback = () => {
   const renderStatusPanel = () => (
     <>
       <FallbackRuntimePanel />
-      <FallbackConfigPanel highlightDeployment={highlightDeployment} />
+
+      {/* Runtime Status Section — merged from gateway editor */}
+      {runtimeStatusRows.length > 0 && (
+        <>
+          <div className='fallback-content-toolbar' style={{ marginTop: 16 }}>
+            <div>
+              <h2>运行状态</h2>
+              <span>各部署的实时健康状态、限额用量和冷却信息</span>
+            </div>
+          </div>
+          <div className='fallback-table-wrap'>
+            <Table compact celled striped size='small'>
+              <Table.Header>
+                <Table.Row>
+                  <Table.HeaderCell>部署</Table.HeaderCell>
+                  <Table.HeaderCell>Pool</Table.HeaderCell>
+                  <Table.HeaderCell>状态</Table.HeaderCell>
+                  <Table.HeaderCell>Quota</Table.HeaderCell>
+                  <Table.HeaderCell>RPM</Table.HeaderCell>
+                  <Table.HeaderCell>RPD</Table.HeaderCell>
+                  <Table.HeaderCell>TPM</Table.HeaderCell>
+                  <Table.HeaderCell>TPD</Table.HeaderCell>
+                  <Table.HeaderCell>Cooldown</Table.HeaderCell>
+                  <Table.HeaderCell>最近错误</Table.HeaderCell>
+                  <Table.HeaderCell>成功率</Table.HeaderCell>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {runtimeStatusRows.map((row) => {
+                  const health = row.health || 'unknown';
+                  const healthColor = { healthy: '#22c55e', rate_limited: '#f97316', invalid: '#ef4444', error: '#ef4444', unknown: '#94a3b8' }[health] || '#94a3b8';
+                  const healthText = { healthy: '健康', rate_limited: '限流', invalid: '无效', error: '异常', unknown: '未检测' }[health] || health;
+                  const quotaPct = (used, limit) => {
+                    if (!limit || limit <= 0) return null;
+                    return Math.min(100, (Number(used || 0) / Number(limit)) * 100);
+                  };
+                  const pctColor = (pct) => pct >= 95 ? '#ef4444' : pct >= 60 ? '#f59e0b' : '#10b981';
+                  const quotas = [
+                    { label: 'RPM', used: row.minute_requests, limit: row.rpm_limit },
+                    { label: 'RPD', used: row.day_requests, limit: row.rpd_limit },
+                    { label: 'TPM', used: row.minute_tokens, limit: row.tpm_limit },
+                    { label: 'TPD', used: row.day_tokens, limit: row.tpd_limit },
+                  ];
+                  return (
+                    <Table.Row key={row.deployment_id}>
+                      <Table.Cell>
+                        <strong>{row.deployment_id}</strong>
+                        {row.virtual_model && <div className='fallback-muted' style={{ fontSize: 11 }}>{row.virtual_model}</div>}
+                      </Table.Cell>
+                      <Table.Cell><code>{row.pool || '-'}</code></Table.Cell>
+                      <Table.Cell>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: healthColor }} />
+                          {healthText}
+                        </span>
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Label basic size='mini' color={row.quota_mode === 'free' ? 'green' : 'teal'}>
+                          {row.quota_mode || 'normal'}
+                        </Label>
+                      </Table.Cell>
+                      {quotas.map((q) => {
+                        const pct = quotaPct(q.used, q.limit);
+                        if (pct === null) return <Table.Cell key={q.label}><span className='gateway-muted'>不限</span></Table.Cell>;
+                        return (
+                          <Table.Cell key={q.label}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                              <span style={{ fontSize: 11 }}>
+                                {formatNumber(q.used)}/{formatNumber(q.limit)}
+                              </span>
+                              <div className='gateway-progress' style={{ height: 4, minWidth: 50 }}>
+                                <div className='gateway-progress-bar' style={{ width: `${pct}%`, background: pctColor(pct) }} />
+                              </div>
+                            </div>
+                          </Table.Cell>
+                        );
+                      })}
+                      <Table.Cell>
+                        {row.cooldown_until ? formatTime(row.cooldown_until) : '-'}
+                      </Table.Cell>
+                      <Table.Cell>
+                        {row.last_error ? (
+                          <span style={{ fontSize: 11, color: '#991b1b' }}>{row.last_error}</span>
+                        ) : <span className='gateway-muted'>-</span>}
+                      </Table.Cell>
+                      <Table.Cell>
+                        {row.success_rate !== undefined && row.success_rate !== null
+                          ? `${Number(row.success_rate).toFixed(1)}%`
+                          : '-'}
+                      </Table.Cell>
+                    </Table.Row>
+                  );
+                })}
+              </Table.Body>
+            </Table>
+          </div>
+        </>
+      )}
+
       <div className='fallback-content-toolbar'>
         <div>
           <h2>部署状态</h2>
@@ -2054,22 +2167,6 @@ const Fallback = () => {
     switch (activePanel) {
       case 'gateway':
         return <FallbackGatewayEditor />;
-      case 'legacy':
-        return (
-          <>
-            <Message warning>
-              <Icon name='exclamation triangle' />
-              <Message.Content>
-                <Message.Header>Legacy 模式</Message.Header>
-                <p>
-                  当前系统已使用新版 pools/strategy 三层网关配置。旧编辑器仅用于 legacy
-                  配置查看，不再允许保存新版配置。
-                </p>
-              </Message.Content>
-            </Message>
-            <FallbackConfigPanel readOnly highlightDeployment={highlightDeployment} />
-          </>
-        );
       case 'metrics':
         return renderMetricsPanel();
       case 'scores':
@@ -2176,7 +2273,11 @@ const Fallback = () => {
             最后刷新：
             {lastUpdated ? formatTime(lastUpdated) : '-'}
           </span>
-          <span>自动刷新：{formatInterval(refreshInterval)}</span>
+          <span>
+            {refreshInterval
+              ? `自动刷新：${formatInterval(refreshInterval)}`
+              : activePanelItem.refreshLabel}
+          </span>
           <Popup
             content='功能说明'
             position='bottom center'
@@ -2224,7 +2325,7 @@ const Fallback = () => {
             <span className='fallback-nav-content'>
               <span className='fallback-nav-top'>
                 <strong>{item.title}</strong>
-                <span className='fallback-nav-refresh-badge'>每 {formatInterval(PANEL_REFRESH_INTERVALS[item.key])}</span>
+                <span className='fallback-nav-refresh-badge'>{item.refreshLabel}</span>
               </span>
             </span>
           </Link>

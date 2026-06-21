@@ -1,279 +1,207 @@
-import React from 'react';
-import { Checkbox, Dropdown, Icon, Input, Label, Message, Table } from 'semantic-ui-react';
+import React, { useState } from 'react';
+import { Checkbox, Dropdown, Icon, Input, Label, Message } from 'semantic-ui-react';
 
-const POOL_OPTIONS = [
-  { key: 'paid_high', value: 'paid_high', text: 'paid_high' },
-  { key: 'cheap', value: 'cheap', text: 'cheap' },
-  { key: 'local', value: 'local', text: 'local' },
-  { key: 'free', value: 'free', text: 'free' },
+const POOL_CN = { paid_high: '付费高质量池', cheap: '低成本池', local: '本地池', free: '免费池' };
+const POOL_OPTIONS = Object.entries(POOL_CN).map(([k, v]) => ({ key: k, value: k, text: v }));
+
+const QUALITY_CN = { high: '高', medium: '中', low: '低' };
+const QUALITY_OPTIONS = Object.entries(QUALITY_CN).map(([k, v]) => ({ key: k, value: k, text: v }));
+
+const COST_CN = { paid: '付费', cheap: '低成本', free: '免费' };
+const COST_OPTIONS = Object.entries(COST_CN).map(([k, v]) => ({ key: k, value: k, text: v }));
+
+const QUOTA_CN = { normal: '普通', free: '免费额度' };
+const QUOTA_OPTIONS = Object.entries(QUOTA_CN).map(([k, v]) => ({ key: k, value: k, text: v }));
+
+const FILTER_OPTIONS = [
+  { key: 'All', text: '全部' },
+  { key: 'paid_high', text: '付费高质量池' },
+  { key: 'cheap', text: '低成本池' },
+  { key: 'free', text: '免费池' },
+  { key: 'local', text: '本地池' },
+  { key: 'disabled', text: '已停用' },
 ];
 
-const QUALITY_OPTIONS = [
-  { key: 'high', value: 'high', text: 'high' },
-  { key: 'medium', value: 'medium', text: 'medium' },
-  { key: 'low', value: 'low', text: 'low' },
-];
+const isAuto = (id) => String(id || '').startsWith('free:');
 
-const COST_OPTIONS = [
-  { key: 'paid', value: 'paid', text: 'paid' },
-  { key: 'cheap', value: 'cheap', text: 'cheap' },
-  { key: 'free', value: 'free', text: 'free' },
-];
-
-const QUOTA_MODE_OPTIONS = [
-  { key: 'normal', value: 'normal', text: 'normal' },
-  { key: 'free', value: 'free', text: 'free' },
-];
-
-const isAutoDeployment = (id) => String(id || '').startsWith('free:');
-
-const NumberInput = ({ value, onChange, disabled, width }) => (
-  <Input
-    type='number'
-    size='mini'
-    value={value === undefined || value === null ? '' : value}
-    onChange={(_, { value: v }) => {
-      const parsed = v === '' ? 0 : parseInt(v, 10);
-      onChange(Number.isFinite(parsed) ? parsed : 0);
-    }}
-    disabled={disabled}
-    style={{ width: width || 80 }}
-  />
+const NumInput = ({ value, onChange, disabled, width }) => (
+  <Input type='number' size='mini' value={value == null ? '' : value}
+    onChange={(_, { value: v }) => { const n = v === '' ? 0 : parseInt(v, 10); onChange(Number.isFinite(n) ? n : 0); }}
+    disabled={disabled} style={{ width: width || 80 }} />
 );
 
 const DeploymentsEditor = ({ deployments, onChange }) => {
-  if (!deployments || typeof deployments !== 'object') {
-    return <Message warning>部署数据为空或格式错误</Message>;
-  }
+  const [filter, setFilter] = useState('All');
+  const [expandedRows, setExpandedRows] = useState({});
 
-  const depKeys = Object.keys(deployments);
+  if (!deployments || typeof deployments !== 'object') return <Message warning>部署数据为空或格式错误</Message>;
+  const allKeys = Object.keys(deployments);
+  if (allKeys.length === 0) return <Message info>暂无部署配置。</Message>;
 
+  const toggleRow = (k) => setExpandedRows((p) => ({ ...p, [k]: !p[k] }));
   const updateDep = (key, field, value) => {
-    const updated = {
-      ...deployments,
-      [key]: {
-        ...deployments[key],
-        [field]: value,
-      },
-    };
-    onChange(updated);
+    onChange({ ...deployments, [key]: { ...deployments[key], [field]: value } });
+  };
+  const updateCap = (key, cap, value) => {
+    const map = { vision: 'supports_vision', stream: 'supports_stream', tools: 'supports_tools', json: 'supports_json' };
+    updateDep(key, map[cap] || cap, value);
   };
 
-  const updateCap = (key, capField, value) => {
-    // Map short names to backend field names: vision→supports_vision, stream→supports_stream, etc.
-    const fieldMap = { vision: 'supports_vision', stream: 'supports_stream', tools: 'supports_tools', json: 'supports_json' };
-    const backendField = fieldMap[capField] || capField;
-    updateDep(key, backendField, value);
-  };
-
-  if (depKeys.length === 0) {
-    return <Message info>暂无部署配置。</Message>;
-  }
+  const filteredKeys = allKeys.filter((k) => {
+    const dep = deployments[k];
+    if (filter === 'All') return true;
+    if (filter === 'disabled') return !dep.enabled;
+    return dep.pool === filter;
+  });
 
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <Table compact celled striped size='small'>
-        <Table.Header>
-          <Table.Row>
-            <Table.HeaderCell>ID</Table.HeaderCell>
-            <Table.HeaderCell>启用</Table.HeaderCell>
-            <Table.HeaderCell>Pool</Table.HeaderCell>
-            <Table.HeaderCell>Real Model</Table.HeaderCell>
-            <Table.HeaderCell>Channel ID</Table.HeaderCell>
-            <Table.HeaderCell>Quality</Table.HeaderCell>
-            <Table.HeaderCell>Cost</Table.HeaderCell>
-            <Table.HeaderCell>Quota</Table.HeaderCell>
-            <Table.HeaderCell>Vision</Table.HeaderCell>
-            <Table.HeaderCell>Stream</Table.HeaderCell>
-            <Table.HeaderCell>Tools</Table.HeaderCell>
-            <Table.HeaderCell>JSON</Table.HeaderCell>
-            <Table.HeaderCell>Context</Table.HeaderCell>
-            <Table.HeaderCell>RPM</Table.HeaderCell>
-            <Table.HeaderCell>RPD</Table.HeaderCell>
-            <Table.HeaderCell>TPM</Table.HeaderCell>
-            <Table.HeaderCell>TPD</Table.HeaderCell>
-            <Table.HeaderCell>Priority</Table.HeaderCell>
-            <Table.HeaderCell>Weight</Table.HeaderCell>
-          </Table.Row>
-        </Table.Header>
-        <Table.Body>
-          {depKeys.map((key) => {
-            const dep = deployments[key];
-            const auto = isAutoDeployment(key);
+    <div>
+      <div className='gateway-filter-bar'>
+        {FILTER_OPTIONS.map(({ key, text }) => (
+          <button key={key} className={`gateway-filter-btn ${filter === key ? 'active' : ''}`} onClick={() => setFilter(key)}>
+            {text}
+            {key !== 'All' && key !== 'disabled' && (
+              <span style={{ marginLeft: 4, opacity: 0.7 }}>
+                ({allKeys.filter((k) => deployments[k].pool === key).length})
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
 
-            return (
-              <Table.Row key={key}>
-                <Table.Cell>
-                  <strong>{key}</strong>
-                  {auto && (
-                    <div>
-                      <Label basic size='mini' color='blue'>
-                        <Icon name='lightning' /> Auto
-                      </Label>
-                    </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table className='gateway-table'>
+          <thead>
+            <tr>
+              <th style={{ width: 30 }}></th>
+              <th>启用</th>
+              <th>部署 ID</th>
+              <th>路由池</th>
+              <th>真实模型</th>
+              <th>质量等级</th>
+              <th>成本等级</th>
+              <th>额度模式</th>
+              <th>通道</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredKeys.length === 0 ? (
+              <tr><td colSpan='9' style={{ textAlign: 'center', color: '#9ca3af' }}>无匹配部署</td></tr>
+            ) : filteredKeys.map((key) => {
+              const dep = deployments[key];
+              const auto = isAuto(key);
+              const rowOpen = !!expandedRows[key];
+              return (
+                <React.Fragment key={key}>
+                  <tr className={auto ? 'auto-row' : ''}>
+                    <td>
+                      <span className='gateway-expand-toggle' onClick={() => toggleRow(key)}>
+                        <Icon name={rowOpen ? 'chevron down' : 'chevron right'} />
+                      </span>
+                    </td>
+                    <td>
+                      <Checkbox checked={!!dep.enabled} onChange={(_, { checked }) => updateDep(key, 'enabled', checked)} disabled={auto} />
+                    </td>
+                    <td>
+                      <strong style={{ fontSize: 12 }}>{key}</strong>
+                      {auto && <Label basic size='mini' color='green' style={{ marginLeft: 6, fontSize: 10 }}><Icon name='lock' /> 自动免费池</Label>}
+                    </td>
+                    <td>
+                      <Dropdown selection compact search options={POOL_OPTIONS} value={dep.pool || ''} onChange={(_, { value }) => updateDep(key, 'pool', value)} disabled={auto} style={{ minWidth: 110 }} />
+                    </td>
+                    <td>
+                      {auto ? (
+                        <span className='gateway-muted' title='该部署由免费供应商自动生成'>{dep.real_model || '-'}</span>
+                      ) : (
+                        <Input size='mini' value={dep.real_model || ''} onChange={(_, { value }) => updateDep(key, 'real_model', value)} style={{ width: 180 }} placeholder='如 gpt-4.1' />
+                      )}
+                    </td>
+                    <td>
+                      <Dropdown selection compact options={QUALITY_OPTIONS} value={dep.quality_tier || 'medium'} onChange={(_, { value }) => updateDep(key, 'quality_tier', value)} disabled={auto} style={{ minWidth: 60 }} />
+                    </td>
+                    <td>
+                      <Dropdown selection compact options={COST_OPTIONS} value={dep.cost_tier || 'paid'} onChange={(_, { value }) => updateDep(key, 'cost_tier', value)} disabled={auto} style={{ minWidth: 70 }} />
+                    </td>
+                    <td>
+                      <Dropdown selection compact options={QUOTA_OPTIONS} value={dep.quota_mode || 'normal'} onChange={(_, { value }) => updateDep(key, 'quota_mode', value)} disabled={auto} style={{ minWidth: 70 }} />
+                    </td>
+                    <td>
+                      {auto ? <span className='gateway-muted'>{dep.channel_id || '-'}</span> : (
+                        <NumInput value={dep.channel_id} onChange={(v) => updateDep(key, 'channel_id', v)} disabled={auto} width={70} />
+                      )}
+                    </td>
+                  </tr>
+                  {rowOpen && (
+                    <tr>
+                      <td colSpan='9' className='gateway-row-expanded'>
+                        {auto && (
+                          <Message info size='small' style={{ marginBottom: 8 }}>
+                            <Icon name='lock' /> 该部署由免费供应商自动生成，请在免费供应商模块中管理。
+                          </Message>
+                        )}
+                        <div className='gateway-detail-grid'>
+                          <div className='gateway-detail-item'>
+                            <span className='detail-label'>真实模型</span>
+                            {auto ? (
+                              <span className='gateway-mono'>{dep.real_model || '-'}</span>
+                            ) : (
+                              <Input size='mini' value={dep.real_model || ''} onChange={(_, { value }) => updateDep(key, 'real_model', value)} style={{ width: 200 }} placeholder='如 deepseek-chat' />
+                            )}
+                          </div>
+                          <div className='gateway-detail-item'>
+                            <span className='detail-label'>上下文长度</span>
+                            <NumInput value={dep.context_length} onChange={(v) => updateDep(key, 'context_length', v)} disabled={auto} width={90} />
+                          </div>
+                          <div className='gateway-detail-item'>
+                            <span className='detail-label'>优先级</span>
+                            <NumInput value={dep.priority} onChange={(v) => updateDep(key, 'priority', v)} disabled={auto} width={60} />
+                          </div>
+                          <div className='gateway-detail-item'>
+                            <span className='detail-label'>权重</span>
+                            <NumInput value={dep.weight} onChange={(v) => updateDep(key, 'weight', v)} disabled={auto} width={60} />
+                          </div>
+                          <div className='gateway-detail-item'>
+                            <span className='detail-label'>每分钟请求数</span>
+                            <NumInput value={dep.rpm_limit} onChange={(v) => updateDep(key, 'rpm_limit', v)} disabled={auto} width={70} />
+                          </div>
+                          <div className='gateway-detail-item'>
+                            <span className='detail-label'>每日请求数</span>
+                            <NumInput value={dep.rpd_limit} onChange={(v) => updateDep(key, 'rpd_limit', v)} disabled={auto} width={70} />
+                          </div>
+                          <div className='gateway-detail-item'>
+                            <span className='detail-label'>每分钟 Token 数</span>
+                            <NumInput value={dep.tpm_limit} onChange={(v) => updateDep(key, 'tpm_limit', v)} disabled={auto} width={70} />
+                          </div>
+                          <div className='gateway-detail-item'>
+                            <span className='detail-label'>每日 Token 数</span>
+                            <NumInput value={dep.tpd_limit} onChange={(v) => updateDep(key, 'tpd_limit', v)} disabled={auto} width={70} />
+                          </div>
+                        </div>
+                        <div className='gateway-detail-caps'>
+                          {[
+                            { label: '视觉', field: 'vision', val: dep.supports_vision },
+                            { label: '流式', field: 'stream', val: dep.supports_stream },
+                            { label: '工具', field: 'tools',  val: dep.supports_tools },
+                            { label: 'JSON', field: 'json',   val: dep.supports_json },
+                          ].map(({ label, field, val }) => (
+                            <span key={field} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
+                              <Checkbox checked={!!val} onChange={(_, { checked }) => updateCap(key, field, checked)} disabled={auto} />
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
                   )}
-                </Table.Cell>
-                <Table.Cell>
-                  <Checkbox
-                    checked={!!dep.enabled}
-                    onChange={(_, { checked }) => updateDep(key, 'enabled', checked)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <Dropdown
-                    selection
-                    search
-                    compact
-                    options={POOL_OPTIONS}
-                    value={dep.pool || ''}
-                    onChange={(_, { value }) => updateDep(key, 'pool', value)}
-                    disabled={auto}
-                    style={{ minWidth: 100 }}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  {auto ? (
-                    <span style={{ color: '#868b94' }}>{dep.real_model || '-'}</span>
-                  ) : (
-                    <Input
-                      size='mini'
-                      value={dep.real_model || ''}
-                      onChange={(_, { value }) => updateDep(key, 'real_model', value)}
-                      style={{ width: 140 }}
-                    />
-                  )}
-                </Table.Cell>
-                <Table.Cell>
-                  {auto ? (
-                    <span style={{ color: '#868b94' }}>{dep.channel_id || '-'}</span>
-                  ) : (
-                    <NumberInput
-                      value={dep.channel_id}
-                      onChange={(v) => updateDep(key, 'channel_id', v)}
-                      disabled={auto}
-                    />
-                  )}
-                </Table.Cell>
-                <Table.Cell>
-                  <Dropdown
-                    selection
-                    compact
-                    options={QUALITY_OPTIONS}
-                    value={dep.quality_tier || 'medium'}
-                    onChange={(_, { value }) => updateDep(key, 'quality_tier', value)}
-                    disabled={auto}
-                    style={{ minWidth: 80 }}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <Dropdown
-                    selection
-                    compact
-                    options={COST_OPTIONS}
-                    value={dep.cost_tier || 'paid'}
-                    onChange={(_, { value }) => updateDep(key, 'cost_tier', value)}
-                    disabled={auto}
-                    style={{ minWidth: 80 }}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <Dropdown
-                    selection
-                    compact
-                    options={QUOTA_MODE_OPTIONS}
-                    value={dep.quota_mode || 'normal'}
-                    onChange={(_, { value }) => updateDep(key, 'quota_mode', value)}
-                    disabled={auto}
-                    style={{ minWidth: 80 }}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <Checkbox
-                    checked={!!dep.supports_vision}
-                    onChange={(_, { checked }) => updateCap(key, 'vision', checked)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <Checkbox
-                    checked={!!dep.supports_stream}
-                    onChange={(_, { checked }) => updateCap(key, 'stream', checked)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <Checkbox
-                    checked={!!dep.supports_tools}
-                    onChange={(_, { checked }) => updateCap(key, 'tools', checked)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <Checkbox
-                    checked={!!dep.supports_json}
-                    onChange={(_, { checked }) => updateCap(key, 'json', checked)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <NumberInput
-                    value={dep.context_length}
-                    onChange={(v) => updateDep(key, 'context_length', v)}
-                    disabled={auto}
-                    width={90}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <NumberInput
-                    value={dep.rpm_limit}
-                    onChange={(v) => updateDep(key, 'rpm_limit', v)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <NumberInput
-                    value={dep.rpd_limit}
-                    onChange={(v) => updateDep(key, 'rpd_limit', v)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <NumberInput
-                    value={dep.tpm_limit}
-                    onChange={(v) => updateDep(key, 'tpm_limit', v)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <NumberInput
-                    value={dep.tpd_limit}
-                    onChange={(v) => updateDep(key, 'tpd_limit', v)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <NumberInput
-                    value={dep.priority}
-                    onChange={(v) => updateDep(key, 'priority', v)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <NumberInput
-                    value={dep.weight}
-                    onChange={(v) => updateDep(key, 'weight', v)}
-                    disabled={auto}
-                  />
-                </Table.Cell>
-              </Table.Row>
-            );
-          })}
-        </Table.Body>
-      </Table>
-      <Message info style={{ marginTop: 8 }}>
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <Message info size='small' style={{ marginTop: 8 }}>
         <Icon name='info circle' />
-        以 <code>free:</code> 开头的部署为自动生成，请在"Free Providers"标签页管理。
+        <code>free:</code> 开头的部署为自动生成（<Icon name='lock' style={{ display: 'inline' }} />），请在免费供应商标签页管理。
       </Message>
     </div>
   );
