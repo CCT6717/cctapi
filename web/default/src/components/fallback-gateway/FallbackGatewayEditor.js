@@ -1,24 +1,19 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Icon, Loader, Message, Tab } from 'semantic-ui-react';
+import { Button, Header, Icon, Loader, Message } from 'semantic-ui-react';
 import { showError, showSuccess } from '../../helpers';
 import {
   getGatewayConfig,
   reloadConfig,
   saveGatewayConfig,
-  syncFreePool,
 } from './gatewayConfigApi';
 import VirtualModelsEditor from './VirtualModelsEditor';
 import DeploymentsEditor from './DeploymentsEditor';
-import FreeProvidersEditor from './FreeProvidersEditor';
-import RuntimeStatusPanel from './RuntimeStatusPanel';
-import ConfigPreview from './ConfigPreview';
 
 const FallbackGatewayEditor = () => {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actingAction, setActingAction] = useState('');
-  const [activeTab, setActiveTab] = useState(0);
 
   const loadConfig = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -77,33 +72,12 @@ const FallbackGatewayEditor = () => {
     }
   };
 
-  const handleSyncFreePool = async () => {
-    setActingAction('sync');
-    try {
-      const res = await syncFreePool();
-      if (res.data?.success !== false) {
-        showSuccess('Free Pool 同步完成');
-        await loadConfig(true);
-      } else {
-        showError(res.data?.message || 'Free Pool 同步失败');
-      }
-    } catch (e) {
-      showError(e.message || 'Free Pool 同步失败');
-    } finally {
-      setActingAction('');
-    }
-  };
-
   const updateVirtualModels = (updatedVMs) => {
     setConfig((prev) => ({ ...prev, virtual_models: updatedVMs }));
   };
 
   const updateDeployments = (updatedDeps) => {
     setConfig((prev) => ({ ...prev, deployments: updatedDeps }));
-  };
-
-  const updateFreeProviders = (updatedFPs) => {
-    setConfig((prev) => ({ ...prev, free_providers: updatedFPs }));
   };
 
   if (loading) {
@@ -129,89 +103,16 @@ const FallbackGatewayEditor = () => {
     );
   }
 
-  const tabPanes = [
-    {
-      menuItem: { key: 'vm', icon: 'server', content: '虚拟模型' },
-      render: () => (
-        <Tab.Pane attached={false}>
-          <VirtualModelsEditor
-            virtualModels={config.virtual_models || {}}
-            onChange={updateVirtualModels}
-          />
-        </Tab.Pane>
-      ),
-    },
-    {
-      menuItem: { key: 'dep', icon: 'cubes', content: '部署' },
-      render: () => (
-        <Tab.Pane attached={false}>
-          <DeploymentsEditor
-            deployments={config.deployments || {}}
-            onChange={updateDeployments}
-          />
-        </Tab.Pane>
-      ),
-    },
-    {
-      menuItem: { key: 'fp', icon: 'key', content: 'Free Providers' },
-      render: () => (
-        <Tab.Pane attached={false}>
-          <FreeProvidersEditor
-            freeProviders={config.free_providers || {}}
-            onChange={updateFreeProviders}
-          />
-        </Tab.Pane>
-      ),
-    },
-    {
-      menuItem: { key: 'rt', icon: 'heartbeat', content: '运行状态' },
-      render: () => (
-        <Tab.Pane attached={false}>
-          <RuntimeStatusPanel onReload={() => loadConfig(true)} />
-        </Tab.Pane>
-      ),
-    },
-    {
-      menuItem: { key: 'preview', icon: 'code', content: '配置预览' },
-      render: () => (
-        <Tab.Pane attached={false}>
-          <ConfigPreview
-            config={config}
-            onSave={handleSave}
-            saving={saving}
-          />
-        </Tab.Pane>
-      ),
-    },
-  ];
-
   return (
-    <div>
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 16,
-        flexWrap: 'wrap',
-        gap: 8,
-      }}>
-        <div>
-          <h2 style={{ margin: 0 }}>三层网关配置编辑器</h2>
-          <span style={{ color: '#868b94', fontSize: 13 }}>
-            管理虚拟模型、部署和 Free Providers 的新版网关配置
-          </span>
-        </div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-          <Button
-            primary
-            icon
-            labelPosition='left'
-            onClick={handleSave}
-            loading={saving}
-            disabled={saving}
-          >
-            <Icon name='save' /> 保存
-          </Button>
+    <div className='fallback-config-panel'>
+      <div className='fallback-config-toolbar'>
+        <Header as='h2' className='fallback-config-title'>
+          模型编辑器
+          <Header.Subheader>
+            管理高质量模型、低成本模型和普通模型部署。免费模型请前往「免费模型池」模块管理。
+          </Header.Subheader>
+        </Header>
+        <div className='fallback-config-actions'>
           <Button
             basic
             icon
@@ -220,27 +121,46 @@ const FallbackGatewayEditor = () => {
             loading={actingAction === 'reload'}
             disabled={!!actingAction}
           >
-            <Icon name='sync' /> 重载配置
+            <Icon name='sync' /> 重新加载配置
           </Button>
           <Button
-            basic
+            primary
             icon
             labelPosition='left'
-            onClick={handleSyncFreePool}
-            loading={actingAction === 'sync'}
-            disabled={!!actingAction}
+            onClick={handleSave}
+            loading={saving}
+            disabled={saving}
           >
-            <Icon name='lightning' /> Free Pool 同步
+            <Icon name='save' /> 保存配置
           </Button>
         </div>
       </div>
 
-      <Tab
-        menu={{ secondary: true, pointing: true }}
-        panes={tabPanes}
-        activeIndex={activeTab}
-        onTabChange={(_, { activeIndex }) => setActiveTab(activeIndex)}
-      />
+      <section className='fallback-virtual-panel'>
+        <div className='fallback-virtual-header'>
+          <div>
+            <h3>虚拟模型</h3>
+            <span>只管理高质量模型和低成本模型。路由池与策略按当前配置只读展示。</span>
+          </div>
+        </div>
+        <VirtualModelsEditor
+          virtualModels={config.virtual_models || {}}
+          onChange={updateVirtualModels}
+        />
+      </section>
+
+      <section className='fallback-virtual-panel'>
+        <div className='fallback-virtual-header'>
+          <div>
+            <h3>模型部署</h3>
+            <span>编辑普通模型部署的真实模型、通道、额度和能力字段。</span>
+          </div>
+        </div>
+        <DeploymentsEditor
+          deployments={config.deployments || {}}
+          onChange={updateDeployments}
+        />
+      </section>
     </div>
   );
 };

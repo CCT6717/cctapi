@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   Button,
   Card,
@@ -20,9 +20,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import FallbackConfigPanel from '../../components/FallbackConfigPanel';
 import FallbackRuntimePanel from '../../components/FallbackRuntimePanel';
 import FallbackGatewayEditor from '../../components/fallback-gateway/FallbackGatewayEditor';
+import FreeModelPool from '../../components/fallback-gateway/FreeModelPool';
 import { API, isAdmin, showError, showSuccess } from '../../helpers';
 import { clampScore, sortScoreItems } from './scoreUtils';
 import './Fallback.css';
@@ -100,18 +100,18 @@ const translateFallbackReason = (reason) => {
 
 const PANEL_ITEMS = [
   {
-    key: 'gateway',
-    title: '网关编辑器',
-    description: '新版三层网关配置编辑器：管理虚拟模型、部署和 Free Providers。',
-    icon: 'edit',
-    accent: '#0ea5e9',
+    key: 'free-pool',
+    title: '免费模型池',
+    description: '管理免费模型、免费供应商、限额覆盖和自动生成的免费部署。',
+    icon: 'cloud',
+    accent: '#16a34a',
   },
   {
-    key: 'legacy',
-    title: '旧版编辑器',
-    description: '旧版 fallback 配置查看器，仅供 legacy 配置参考，不允许保存新版配置。',
-    icon: 'history',
-    accent: '#6b7280',
+    key: 'gateway',
+    title: '模型编辑器',
+    description: '管理高质量模型、低成本模型和普通模型部署。',
+    icon: 'edit',
+    accent: '#0ea5e9',
   },
   {
     key: 'status',
@@ -253,9 +253,12 @@ const emptyConfigMeta = {
 
 const getPanelKey = (panel) => {
   if (panel === 'dashboard') {
+    return 'free-pool';
+  }
+  if (panel === 'legacy') {
     return 'gateway';
   }
-  return PANEL_KEYS.has(panel) ? panel : 'gateway';
+  return PANEL_KEYS.has(panel) ? panel : 'free-pool';
 };
 
 const formatNumber = (value) => {
@@ -695,8 +698,6 @@ const Fallback = () => {
     }
   }, []);
 
-  const [searchParams] = useSearchParams();
-  const highlightDeployment = searchParams.get('highlight');
 
   const loadConfigMeta = useCallback(async () => {
     const res = await API.get('/api/fallback/editor/config');
@@ -1325,7 +1326,6 @@ const Fallback = () => {
   const renderStatusPanel = () => (
     <>
       <FallbackRuntimePanel />
-      <FallbackConfigPanel highlightDeployment={highlightDeployment} />
       <div className='fallback-content-toolbar'>
         <div>
           <h2>部署状态</h2>
@@ -2043,7 +2043,7 @@ const Fallback = () => {
   );
 
   const renderActivePanel = () => {
-    if (loading && activePanel !== 'gateway' && activePanel !== 'legacy') {
+    if (loading && activePanel !== 'gateway' && activePanel !== 'free-pool') {
       return (
         <div className='fallback-loading'>
           <Loader active inline='centered' />
@@ -2052,24 +2052,10 @@ const Fallback = () => {
     }
 
     switch (activePanel) {
+      case 'free-pool':
+        return <FreeModelPool />;
       case 'gateway':
         return <FallbackGatewayEditor />;
-      case 'legacy':
-        return (
-          <>
-            <Message warning>
-              <Icon name='exclamation triangle' />
-              <Message.Content>
-                <Message.Header>Legacy 模式</Message.Header>
-                <p>
-                  当前系统已使用新版 pools/strategy 三层网关配置。旧编辑器仅用于 legacy
-                  配置查看，不再允许保存新版配置。
-                </p>
-              </Message.Content>
-            </Message>
-            <FallbackConfigPanel readOnly highlightDeployment={highlightDeployment} />
-          </>
-        );
       case 'metrics':
         return renderMetricsPanel();
       case 'scores':
