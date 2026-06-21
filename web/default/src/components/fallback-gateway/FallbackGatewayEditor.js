@@ -6,68 +6,12 @@ import {
   reloadConfig,
   saveGatewayConfig,
   syncFreePool,
-  cleanupDryRun,
 } from './gatewayConfigApi';
 import VirtualModelsEditor from './VirtualModelsEditor';
 import DeploymentsEditor from './DeploymentsEditor';
 import FreeProvidersEditor from './FreeProvidersEditor';
+import RuntimeStatusPanel from './RuntimeStatusPanel';
 import ConfigPreview from './ConfigPreview';
-import './FallbackGatewayEditor.css';
-
-const VM_LABELS = {
-  'cct/high': '高质量模型',
-  'cct/low':  '低成本模型',
-  'cct/free': '免费模型',
-};
-const VM_COLORS = {
-  'cct/high': '#6366f1',
-  'cct/low':  '#06b6d4',
-  'cct/free': '#10b981',
-};
-const POOL_CN = {
-  paid_high: '付费高质量池',
-  cheap: '低成本池',
-  free: '免费池',
-  local: '本地池',
-};
-const STRATEGY_CN = {
-  quality_first: '质量优先',
-  cost_first: '成本优先',
-  free_first: '免费优先',
-};
-
-const InlineSummary = ({ config }) => {
-  const vms = config?.virtual_models || {};
-  const fps = config?.free_providers || {};
-
-  return (
-    <div className='gateway-summary-inline'>
-      {Object.keys(VM_LABELS).map((key) => {
-        const vm = vms[key];
-        if (!vm) return null;
-        const pools = Array.isArray(vm.pools) ? vm.pools.map((p) => POOL_CN[p] || p).join(', ') : '-';
-        const strategy = STRATEGY_CN[vm.strategy] || vm.strategy || '-';
-        return (
-          <span key={key} className='gateway-summary-item'>
-            <span className='label' style={{ color: VM_COLORS[key] }}>{VM_LABELS[key]}:</span>
-            {pools} · {strategy}
-            <span className={`gateway-badge ${vm.enabled ? 'enabled' : 'disabled'}`} style={{ marginLeft: 4 }}>
-              {vm.enabled ? '已启用' : '已停用'}
-            </span>
-          </span>
-        );
-      })}
-      {Object.entries(fps).map(([k, p]) => (
-        <span key={k} className='gateway-summary-item'>
-          <span className='label'>{k === 'openrouter' ? 'OpenRouter' : k === 'groq' ? 'Groq' : k}:</span>
-          <span className={`gateway-badge ${p.enabled ? 'enabled' : 'disabled'}`}>
-            {p.enabled ? `已启用（${p.key_count || 0} 个密钥）` : '已停用'}
-          </span>
-        </span>
-      ))}
-    </div>
-  );
-};
 
 const FallbackGatewayEditor = () => {
   const [config, setConfig] = useState(null);
@@ -93,7 +37,9 @@ const FallbackGatewayEditor = () => {
     }
   }, []);
 
-  useEffect(() => { loadConfig().then(); }, [loadConfig]);
+  useEffect(() => {
+    loadConfig().then();
+  }, [loadConfig]);
 
   const handleSave = async () => {
     if (!config) return;
@@ -136,39 +82,29 @@ const FallbackGatewayEditor = () => {
     try {
       const res = await syncFreePool();
       if (res.data?.success !== false) {
-        showSuccess('免费池同步完成');
+        showSuccess('Free Pool 同步完成');
         await loadConfig(true);
       } else {
-        showError(res.data?.message || '免费池同步失败');
+        showError(res.data?.message || 'Free Pool 同步失败');
       }
     } catch (e) {
-      showError(e.message || '免费池同步失败');
+      showError(e.message || 'Free Pool 同步失败');
     } finally {
       setActingAction('');
     }
   };
 
-  const handleCleanupDryRun = async () => {
-    setActingAction('dryrun');
-    try {
-      const res = await cleanupDryRun();
-      if (res.data?.success) {
-        const result = res.data.data || res.data.result || {};
-        const removed = Array.isArray(result.removed) ? result.removed.length : (result.removed_count || 0);
-        showSuccess(`清理预检完成：${removed} 项可清理`);
-      } else {
-        showError(res.data?.message || '清理预检失败');
-      }
-    } catch (e) {
-      showError(e.message || '清理预检失败');
-    } finally {
-      setActingAction('');
-    }
+  const updateVirtualModels = (updatedVMs) => {
+    setConfig((prev) => ({ ...prev, virtual_models: updatedVMs }));
   };
 
-  const updateVM = (v) => setConfig((p) => ({ ...p, virtual_models: v }));
-  const updateDeps = (v) => setConfig((p) => ({ ...p, deployments: v }));
-  const updateFPs = (v) => setConfig((p) => ({ ...p, free_providers: v }));
+  const updateDeployments = (updatedDeps) => {
+    setConfig((prev) => ({ ...prev, deployments: updatedDeps }));
+  };
+
+  const updateFreeProviders = (updatedFPs) => {
+    setConfig((prev) => ({ ...prev, free_providers: updatedFPs }));
+  };
 
   if (loading) {
     return (
@@ -184,7 +120,7 @@ const FallbackGatewayEditor = () => {
       <div>
         <Message warning>
           <Icon name='exclamation triangle' />
-          未加载到网关配置，请检查后端 API 是否可用。
+          未加载到网关配置。请检查后端 API 是否可用。
         </Message>
         <Button onClick={() => loadConfig()} loading={loading}>
           <Icon name='refresh' /> 重新加载
@@ -195,63 +131,109 @@ const FallbackGatewayEditor = () => {
 
   const tabPanes = [
     {
-      menuItem: { key: 'vm', content: '虚拟模型' },
+      menuItem: { key: 'vm', icon: 'server', content: '虚拟模型' },
       render: () => (
         <Tab.Pane attached={false}>
-          <VirtualModelsEditor virtualModels={config.virtual_models || {}} deployments={config.deployments || {}} onChange={updateVM} />
+          <VirtualModelsEditor
+            virtualModels={config.virtual_models || {}}
+            onChange={updateVirtualModels}
+          />
         </Tab.Pane>
       ),
     },
     {
-      menuItem: { key: 'dep', content: '模型部署' },
+      menuItem: { key: 'dep', icon: 'cubes', content: '部署' },
       render: () => (
         <Tab.Pane attached={false}>
-          <DeploymentsEditor deployments={config.deployments || {}} onChange={updateDeps} />
+          <DeploymentsEditor
+            deployments={config.deployments || {}}
+            onChange={updateDeployments}
+          />
         </Tab.Pane>
       ),
     },
     {
-      menuItem: { key: 'fp', content: '免费供应商' },
+      menuItem: { key: 'fp', icon: 'key', content: 'Free Providers' },
       render: () => (
         <Tab.Pane attached={false}>
-          <FreeProvidersEditor freeProviders={config.free_providers || {}} onChange={updateFPs} />
+          <FreeProvidersEditor
+            freeProviders={config.free_providers || {}}
+            onChange={updateFreeProviders}
+          />
         </Tab.Pane>
       ),
     },
     {
-      menuItem: { key: 'preview', content: '配置预览' },
+      menuItem: { key: 'rt', icon: 'heartbeat', content: '运行状态' },
       render: () => (
         <Tab.Pane attached={false}>
-          <ConfigPreview config={config} onSave={handleSave} saving={saving} />
+          <RuntimeStatusPanel onReload={() => loadConfig(true)} />
+        </Tab.Pane>
+      ),
+    },
+    {
+      menuItem: { key: 'preview', icon: 'code', content: '配置预览' },
+      render: () => (
+        <Tab.Pane attached={false}>
+          <ConfigPreview
+            config={config}
+            onSave={handleSave}
+            saving={saving}
+          />
         </Tab.Pane>
       ),
     },
   ];
 
   return (
-    <div className='gateway-editor'>
-      <div className='gateway-toolbar'>
-        <div className='gateway-toolbar-title'>
-          <h2>网关编辑器</h2>
-          <p>编辑网关配置、模型部署和免费供应商。系统当前使用新版网关结构，旧版路由字段已废弃。</p>
+    <div>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+        flexWrap: 'wrap',
+        gap: 8,
+      }}>
+        <div>
+          <h2 style={{ margin: 0 }}>三层网关配置编辑器</h2>
+          <span style={{ color: '#868b94', fontSize: 13 }}>
+            管理虚拟模型、部署和 Free Providers 的新版网关配置
+          </span>
         </div>
-        <div className='gateway-toolbar-actions'>
-          <Button basic size='small' onClick={handleReload} loading={actingAction === 'reload'} disabled={!!actingAction}>
-            <Icon name='sync' /> 重新加载配置
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <Button
+            primary
+            icon
+            labelPosition='left'
+            onClick={handleSave}
+            loading={saving}
+            disabled={saving}
+          >
+            <Icon name='save' /> 保存
           </Button>
-          <Button basic size='small' onClick={handleSyncFreePool} loading={actingAction === 'sync'} disabled={!!actingAction}>
-            <Icon name='lightning' /> 同步免费池
+          <Button
+            basic
+            icon
+            labelPosition='left'
+            onClick={handleReload}
+            loading={actingAction === 'reload'}
+            disabled={!!actingAction}
+          >
+            <Icon name='sync' /> 重载配置
           </Button>
-          <Button basic size='small' onClick={handleCleanupDryRun} loading={actingAction === 'dryrun'} disabled={!!actingAction}>
-            <Icon name='search' /> 清理预检
-          </Button>
-          <Button className='gateway-btn-primary' size='small' onClick={handleSave} loading={saving} disabled={saving}>
-            <Icon name='save' /> 保存网关配置
+          <Button
+            basic
+            icon
+            labelPosition='left'
+            onClick={handleSyncFreePool}
+            loading={actingAction === 'sync'}
+            disabled={!!actingAction}
+          >
+            <Icon name='lightning' /> Free Pool 同步
           </Button>
         </div>
       </div>
-
-      <InlineSummary config={config} />
 
       <Tab
         menu={{ secondary: true, pointing: true }}

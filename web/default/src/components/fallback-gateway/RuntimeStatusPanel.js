@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Icon, Label, Loader } from 'semantic-ui-react';
+import { Button, Icon, Label, Loader, Table } from 'semantic-ui-react';
 import { showError, showSuccess } from '../../helpers';
 import { cleanupDryRun, getRuntimeStatus, reloadConfig, syncFreePool } from './gatewayConfigApi';
 
@@ -12,6 +12,7 @@ const HEALTH_COLOR = {
   error: '#ef4444',
   unknown: '#94a3b8',
 };
+
 const HEALTH_TEXT = {
   healthy: '健康',
   rate_limited: '限流',
@@ -25,12 +26,14 @@ const formatNumber = (value) => {
   if (!Number.isFinite(n)) return '-';
   return new Intl.NumberFormat('zh-CN').format(n);
 };
+
 const formatPercent = (value) => {
   if (value === undefined || value === null || value === '') return '-';
   const n = Number(value);
   if (!Number.isFinite(n)) return String(value);
   return `${n.toFixed(1)}%`;
 };
+
 const formatTime = (value) => {
   if (!value) return '-';
   const d = new Date(value);
@@ -38,35 +41,17 @@ const formatTime = (value) => {
   return d.toLocaleString('zh-CN', { hour12: false });
 };
 
-const progressClass = (pct) => {
-  if (pct >= 95) return 'danger';
-  if (pct >= 60) return 'warn';
-  return 'ok';
-};
-
-const QuotaBar = ({ label, used, limit }) => {
+const QuotaCell = ({ used, limit }) => {
   if (!limit || limit <= 0) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-        <span style={{ width: 32, color: '#9ca3af' }}>{label}</span>
-        <span className='gateway-muted'>不限</span>
-      </div>
-    );
+    return <span style={{ color: '#94a3b8' }}>不限</span>;
   }
-  const pct = Math.min(100, (Number(used || 0) / Number(limit)) * 100);
+  const pct = (Number(used || 0) / Number(limit)) * 100;
+  const color = pct >= 90 ? '#ef4444' : pct >= 75 ? '#f97316' : '#22c55e';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12 }}>
-      <span style={{ width: 32, fontWeight: 500 }}>{label}</span>
-      <div className='gateway-progress' style={{ flex: 1 }}>
-        <div
-          className={`gateway-progress-bar ${progressClass(pct)}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-      <span style={{ width: 80, textAlign: 'right', fontSize: 11, color: '#6b7280' }}>
-        {formatNumber(used)}/{formatNumber(limit)} ({pct.toFixed(0)}%)
-      </span>
-    </div>
+    <span>
+      {formatNumber(used)} / {formatNumber(limit)}
+      <small style={{ color, marginLeft: 4 }}>{pct.toFixed(0)}%</small>
+    </span>
   );
 };
 
@@ -75,7 +60,6 @@ const RuntimeStatusPanel = ({ onReload }) => {
   const [rows, setRows] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [actingAction, setActingAction] = useState('');
-  const [expandedRows, setExpandedRows] = useState({});
 
   const loadStatus = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -151,9 +135,6 @@ const RuntimeStatusPanel = ({ onReload }) => {
     }
   };
 
-  const toggleRow = (id) =>
-    setExpandedRows((prev) => ({ ...prev, [id]: !prev[id] }));
-
   if (loading && rows.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: 40 }}>
@@ -164,11 +145,10 @@ const RuntimeStatusPanel = ({ onReload }) => {
 
   return (
     <div>
-      {/* Toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-        <span style={{ fontSize: 12, color: '#9ca3af' }}>
-          最后刷新：{lastUpdated ? formatTime(lastUpdated) : '-'}
-        </span>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+        <div>
+          <span>最后刷新：{lastUpdated ? formatTime(lastUpdated) : '-'}</span>
+        </div>
         <div style={{ display: 'flex', gap: 6 }}>
           <Button basic size='small' onClick={() => loadStatus()} loading={loading}>
             <Icon name='refresh' /> 刷新
@@ -185,91 +165,76 @@ const RuntimeStatusPanel = ({ onReload }) => {
         </div>
       </div>
 
-      {/* Deployment cards */}
-      {rows.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: 30, color: '#9ca3af' }}>暂无运行数据</div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {rows.map((row) => {
-            const health = row.health || 'unknown';
-            const isExpanded = !!expandedRows[row.deployment_id];
-            return (
-              <div key={row.deployment_id} className='gateway-section'>
-                {/* Summary row — always visible */}
-                <div
-                  className='gateway-section-header'
-                  onClick={() => toggleRow(row.deployment_id)}
-                >
-                  <div className='gateway-section-header-title'>
-                    <Icon name={isExpanded ? 'chevron down' : 'chevron right'} style={{ fontSize: 12 }} />
-                    <strong style={{ fontSize: 13 }}>{row.deployment_id}</strong>
-                    <Label basic size='mini' color={row.quota_mode === 'free' ? 'green' : 'teal'}>
-                      {row.quota_mode || 'normal'}
-                    </Label>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12 }}>
-                      <span
-                        className='dot'
-                        style={{
+      <div style={{ overflowX: 'auto' }}>
+        <Table compact celled striped size='small'>
+          <Table.Header>
+            <Table.Row>
+              <Table.HeaderCell>Deployment</Table.HeaderCell>
+              <Table.HeaderCell>Pool</Table.HeaderCell>
+              <Table.HeaderCell>状态</Table.HeaderCell>
+              <Table.HeaderCell>Quota Mode</Table.HeaderCell>
+              <Table.HeaderCell>RPM</Table.HeaderCell>
+              <Table.HeaderCell>RPD</Table.HeaderCell>
+              <Table.HeaderCell>TPM</Table.HeaderCell>
+              <Table.HeaderCell>TPD</Table.HeaderCell>
+              <Table.HeaderCell>Cooldown</Table.HeaderCell>
+              <Table.HeaderCell>最近错误</Table.HeaderCell>
+              <Table.HeaderCell>成功率</Table.HeaderCell>
+              <Table.HeaderCell>平均延迟</Table.HeaderCell>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {rows.length === 0 ? (
+              <Table.Row>
+                <Table.Cell colSpan='12' textAlign='center'>暂无运行数据</Table.Cell>
+              </Table.Row>
+            ) : (
+              rows.map((row) => {
+                const health = row.health || 'unknown';
+                return (
+                  <Table.Row key={row.deployment_id}>
+                    <Table.Cell><strong>{row.deployment_id}</strong></Table.Cell>
+                    <Table.Cell><code>{row.pool || '-'}</code></Table.Cell>
+                    <Table.Cell>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <span style={{
                           display: 'inline-block',
                           width: 8,
                           height: 8,
                           borderRadius: '50%',
                           background: HEALTH_COLOR[health] || '#94a3b8',
-                        }}
-                      />
-                      {HEALTH_TEXT[health] || health}
-                    </span>
-                    <span style={{ fontSize: 11, color: '#9ca3af' }}>
-                      RPM {formatNumber(row.minute_requests)}/{formatNumber(row.rpm_limit || 0)}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Expanded details */}
-                {isExpanded && (
-                  <div className='gateway-section-body'>
-                    {/* Quota progress bars */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 12 }}>
-                      <QuotaBar label='RPM' used={row.minute_requests} limit={row.rpm_limit} />
-                      <QuotaBar label='RPD' used={row.day_requests} limit={row.rpd_limit} />
-                      <QuotaBar label='TPM' used={row.minute_tokens} limit={row.tpm_limit} />
-                      <QuotaBar label='TPD' used={row.day_tokens} limit={row.tpd_limit} />
-                    </div>
-
-                    {/* Additional stats */}
-                    <div className='dep-detail-grid'>
-                      <div className='dep-detail-item'>
-                        <span className='label'>Pool</span>
-                        <code>{row.pool || '-'}</code>
-                      </div>
-                      <div className='dep-detail-item'>
-                        <span className='label'>Cooldown</span>
-                        {row.cooldown_until ? formatTime(row.cooldown_until) : '-'}
-                      </div>
-                      <div className='dep-detail-item'>
-                        <span className='label'>最近错误</span>
-                        <span style={{ fontSize: 11, color: row.last_error ? '#991b1b' : '#9ca3af' }}>
-                          {row.last_error || '无'}
-                        </span>
-                      </div>
-                      <div className='dep-detail-item'>
-                        <span className='label'>成功率</span>
-                        {formatPercent(row.success_rate)}
-                      </div>
-                      <div className='dep-detail-item'>
-                        <span className='label'>平均延迟</span>
-                        {row.avg_latency_ms ? `${formatNumber(row.avg_latency_ms)}ms` : '-'}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                        }} />
+                        {HEALTH_TEXT[health] || health}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Label basic size='mini' color={row.quota_mode === 'free' ? 'blue' : 'teal'}>
+                        {row.quota_mode || 'normal'}
+                      </Label>
+                    </Table.Cell>
+                    <Table.Cell><QuotaCell used={row.minute_requests} limit={row.rpm_limit} /></Table.Cell>
+                    <Table.Cell><QuotaCell used={row.day_requests} limit={row.rpd_limit} /></Table.Cell>
+                    <Table.Cell><QuotaCell used={row.minute_tokens} limit={row.tpm_limit} /></Table.Cell>
+                    <Table.Cell><QuotaCell used={row.day_tokens} limit={row.tpd_limit} /></Table.Cell>
+                    <Table.Cell>
+                      {row.cooldown_until ? formatTime(row.cooldown_until) : '-'}
+                    </Table.Cell>
+                    <Table.Cell>
+                      {row.last_error ? (
+                        <span style={{ fontSize: 12 }}>{row.last_error}</span>
+                      ) : '-'}
+                    </Table.Cell>
+                    <Table.Cell>{formatPercent(row.success_rate)}</Table.Cell>
+                    <Table.Cell>
+                      {row.avg_latency_ms ? `${formatNumber(row.avg_latency_ms)}ms` : '-'}
+                    </Table.Cell>
+                  </Table.Row>
+                );
+              })
+            )}
+          </Table.Body>
+        </Table>
+      </div>
     </div>
   );
 };
