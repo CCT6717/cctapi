@@ -72,13 +72,14 @@ There is no separate "connectivity test" panel. Connectivity testing lives in th
 Important additions over upstream One API:
 
 - Virtual models: one exposed model name maps to multiple real upstream deployments.
-- Weighted routing and sequential routing.
+- Weighted routing, sequential routing, and fixed routing.
+- Fixed routing pins a virtual model to one selected real deployment through `fixed_deployment`; runtime upstream errors do not rotate to another deployment unless the administrator changes the fixed target.
 - Per-deployment token quota, soft limit, hard limit, and concurrency limit.
 - Manual cooldown and recover actions.
 - Smart score trend chart for deployment ordering.
 - Runtime health panel with recent success rate, failure rate, cooldown count, exhausted quota count, and Top failure aggregations.
 - Alert history and fallback switch logs.
-- Frontend validation before saving fallback config.
+- Frontend and backend validation before saving fallback config, including fixed-route target checks.
 - Smoke test script for real client testing.
 
 ## Important Files
@@ -139,4 +140,5 @@ Do not remove upstream One API / JustSong / MIT attribution.
 - Keep fallback admin features in `/fallback/status` unless there is a strong reason to expose them elsewhere.
 - Prefer existing project patterns and Semantic UI React for the default theme.
 - Do not add another standalone connectivity-test panel; extend the existing virtual model config module instead.
+- Fixed-route virtual models must keep `fixed_deployment` bound to an enabled deployment in that virtual model's `fallback_order`.
 - Top failure model/channel in the runtime panel is currently derived from switch logs. It is approximate. Exact failure ranking would require a backend deployment-attempt event table or a dedicated health aggregation endpoint.

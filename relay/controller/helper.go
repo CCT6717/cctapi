@@ -125,11 +125,17 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 		logger.Error(ctx, "error update user quota cache: "+err.Error())
 	}
 
-	// For fallback requests, log the virtual model name instead of the real model
+	// For fallback requests, keep the virtual model in model_name and persist the actual upstream model separately.
 	logModelName := textRequest.Model
+	realModelName := textRequest.Model
 	if vm := ctx.Value(ctxkey.FallbackVirtualModel); vm != nil {
 		if vmStr, ok := vm.(string); ok && vmStr != "" {
 			logModelName = vmStr
+		}
+	}
+	if rm := ctx.Value(ctxkey.FallbackRealModel); rm != nil {
+		if rmStr, ok := rm.(string); ok && rmStr != "" {
+			realModelName = rmStr
 		}
 	}
 
@@ -140,6 +146,7 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 		PromptTokens:      promptTokens,
 		CompletionTokens:  completionTokens,
 		ModelName:         logModelName,
+		RealModelName:     realModelName,
 		TokenName:         meta.TokenName,
 		Quota:             int(quota),
 		Content:           logContent,

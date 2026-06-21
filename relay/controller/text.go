@@ -155,7 +155,8 @@ convert:
 		logger.Debugf(c.Request.Context(), "converted request json_marshal_failed: %s\n", err.Error())
 		return nil, err
 	}
-	logger.Debugf(c.Request.Context(), "converted request: \n%s", string(jsonData))
+	logger.Debugf(c.Request.Context(), "converted request: model=%s messages=%d stream=%v channel_type=%d body_bytes=%d",
+		textRequest.Model, len(textRequest.Messages), textRequest.Stream, meta.ChannelType, len(jsonData))
 	requestBody = bytes.NewBuffer(jsonData)
 	return requestBody, nil
 }

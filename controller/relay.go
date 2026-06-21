@@ -1,4 +1,4 @@
-﻿package controller
+package controller
 
 import (
 	"bytes"
@@ -140,6 +140,7 @@ func fallbackSwitchLog(ctx context.Context, virtualModel, fromDeployment, toDepl
 
 func relayWithFallback(c *gin.Context) {
 	ctx := c.Request.Context()
+	requestId := c.GetString(helper.RequestIdKey)
 	requestModelValue, exists := c.Get(ctxkey.RequestModel)
 	if !exists {
 		err := model.Error{
@@ -167,7 +168,8 @@ func relayWithFallback(c *gin.Context) {
 	// Get all deployments for this virtual model
 	deployments, err := fallback.GetDeploymentsForVirtualModel(virtualModel)
 	// Sticky routing: prefer last successful deployment; skip only when it hits soft limit, error, or becomes unavailable.
-	if stickyID := fallback.GetStickyDeployment(virtualModel); stickyID != "" {
+	stickyID := fallback.GetStickyDeployment(virtualModel)
+	if stickyID != "" {
 		for i, dep := range deployments {
 			if dep.ID == stickyID {
 				if i > 0 {
@@ -213,7 +215,10 @@ func relayWithFallback(c *gin.Context) {
 	}
 
 	routingMode := fallback.GetRoutingModeForVirtualModel(virtualModel)
-	if routingMode == fallback.RoutingModeWeighted {
+	if stickyID != "" {
+		// Sticky active: preserve current order, skip weighted round-robin to avoid unwanted switching
+		logger.Infof(ctx, "[fallback] sticky active for %s -> %s, preserving order (skip weighted round-robin)", virtualModel, stickyID)
+	} else if routingMode == fallback.RoutingModeWeighted {
 		deployments = fallback.OrderDeploymentsForRequest(virtualModel, deployments)
 		if len(deployments) > 0 {
 			logger.Infof(ctx, "[fallback] weighted start deployment for %s: %s (weight=%d)",
@@ -238,6 +243,16 @@ func relayWithFallback(c *gin.Context) {
 		available, reason := fallback.IsDeploymentAvailable(dep)
 		if !available {
 			logger.Infof(ctx, "[fallback] deployment %s unavailable: %s", dep.ID, reason)
+			if fallback.IsDoubaoDeployment(dep) {
+				if strings.Contains(strings.ToLower(reason), "soft daily token limit") ||
+					strings.Contains(strings.ToLower(reason), "hard daily token limit") {
+					if err := fallback.MarkDeploymentCooldownForDuration(dep.ID, reason, 24*time.Hour); err != nil {
+						logger.SysError(fmt.Sprintf("[fallback] failed to mark 24h cooldown for %s: %v", dep.ID, err))
+					} else {
+						logger.Infof(ctx, "[fallback] deployment %s marked 24h cooldown after limit skip", dep.ID)
+					}
+				}
+			}
 			lastBizErr = &model.ErrorWithStatusCode{
 				StatusCode: http.StatusServiceUnavailable,
 				Error: model.Error{
@@ -382,9 +397,13 @@ func relayWithFallback(c *gin.Context) {
 		bizErr := relayHelper(c, relayMode)
 		durationMs := time.Since(attemptStart).Milliseconds()
 		releaseDeploymentSlot()
-		// Debug: log full error details to help diagnose fallback behaviour
+		// Debug: log full attempt details to help diagnose fallback behaviour
 		if bizErr != nil {
-			logger.Debugf(newCtx, "[fallback] attempt_result attempt=%d/%d deployment=%s status=%d msg=%q code=%q", attempts, deployCount, dep.ID, bizErr.StatusCode, bizErr.Error.Message, bizErr.Error.Code)
+			errInfo := fallback.FormatRelayErrorInfo(bizErr.StatusCode, getRelayErrorMessage(bizErr), bizErr.Error.Type, bizErr.Error.Code)
+			errClass := fallback.ClassifyRelayError(errInfo)
+			logger.Debugf(newCtx, "[fallback] attempt_result attempt=%d/%d deployment=%s status=%d msg=%q code=%q category=%v should_fallback=%v", attempts, deployCount, dep.ID, bizErr.StatusCode, bizErr.Error.Message, bizErr.Error.Code, errClass.Category, errClass.ShouldFallback)
+		} else {
+			logger.Debugf(newCtx, "[fallback] attempt_result attempt=%d/%d deployment=%s status=success duration=%dms", attempts, deployCount, dep.ID, durationMs)
 		}
 
 		if bizErr == nil {
@@ -406,26 +425,27 @@ func relayWithFallback(c *gin.Context) {
 		logger.Infof(ctx, "[fallback] deployment %s failed (attempt %d/%d, %dms): %v",
 			dep.ID, attempts, deployCount, durationMs, getRelayErrorMessage(bizErr))
 
+		// Classify error using structured info (single-pass, replaces 4 separate string scans)
+		errInfo := fallback.FormatRelayErrorInfo(bizErr.StatusCode, getRelayErrorMessage(bizErr), bizErr.Error.Type, bizErr.Error.Code)
+		errClass := fallback.ClassifyRelayError(errInfo)
+
 		// Record error state
 		fallback.RecordDeploymentError(dep.ID, relayErr)
-		// Check if error should trigger fallback to next deployment
-		shouldFallback := fallback.ShouldFallback(relayErr)
-		if !shouldFallback && bizErr != nil {
-			errType := strings.ToLower(bizErr.Error.Type)
-			errCode := fmt.Sprintf("%v", bizErr.Error.Code)
-			if errType == "zhipu_error" && errCode == "1211" {
-				shouldFallback = true
-			}
-		}
 
+		shouldFallback := errClass.ShouldFallback
 		if shouldFallback {
-			logger.Infof(ctx, "[fallback] error classified as fallbackable: %s",
-				getRelayErrorMessage(bizErr))
+			logger.Infof(ctx, "[fallback] error classified as fallbackable (category=%v): %s",
+				errClass.Category, getRelayErrorMessage(bizErr))
 		} else {
-			logger.Infof(ctx, "[fallback] error classified as non-fallbackable: %s",
-				getRelayErrorMessage(bizErr))
+			logger.Infof(ctx, "[fallback] error classified as non-fallbackable (category=%v): %s",
+				errClass.Category, getRelayErrorMessage(bizErr))
 			logger.Infof(ctx, "[fallback] deployment %s returned non-fallback error, stopping attempts: %v",
 				dep.ID, getRelayErrorMessage(bizErr))
+			errCopy := *bizErr
+			errCopy.Error.Message = helper.MessageWithRequestId(errCopy.Error.Message, requestId)
+			c.JSON(errCopy.StatusCode, gin.H{
+				"error": errCopy.Error,
+			})
 			return
 		}
 
@@ -443,17 +463,25 @@ func relayWithFallback(c *gin.Context) {
 			monitor.Emit(dep.ChannelID, false)
 		}
 
-		// Check error type and mark appropriate state
-		if fallback.IsQuotaError(relayErr) {
+		// Mark deployment state based on error category
+		if errClass.Category == fallback.ErrorCategoryQuota {
 			fallback.MarkDeploymentExhausted(dep.ID, getRelayErrorMessage(bizErr), fallback.EndOfToday())
 			logger.Infof(ctx, "[fallback] deployment %s marked exhausted until end of day: %s",
 				dep.ID, getRelayErrorMessage(bizErr))
-		} else if fallback.IsRateLimitError(relayErr) || fallback.IsTemporaryError(relayErr) {
+		} else if errClass.Category == fallback.ErrorCategoryRateLimit || errClass.Category == fallback.ErrorCategoryTemporary {
 			cooldownDuration := calculateCooldownDuration(bizErr, attempts)
 			cooldownUntil := time.Now().Add(cooldownDuration)
 			fallback.MarkDeploymentCooldown(dep.ID, getRelayErrorMessage(bizErr), cooldownUntil)
 			logger.Infof(ctx, "[fallback] deployment %s marked cooling down for %.0fs: %s",
 				dep.ID, cooldownDuration.Seconds(), getRelayErrorMessage(bizErr))
+		}
+		// Doubao-specific: quota errors get 24h cooldown
+		if fallback.IsDoubaoDeployment(dep) && shouldFallback && errClass.Category == fallback.ErrorCategoryQuota {
+			if err := fallback.MarkDeploymentCooldownForDuration(dep.ID, getRelayErrorMessage(bizErr), 24*time.Hour); err != nil {
+				logger.SysError(fmt.Sprintf("[fallback] failed to mark doubao 24h cooldown for %s: %v", dep.ID, err))
+			} else {
+				logger.Infof(ctx, "[fallback] deployment %s marked 24h cooldown after doubao quota error", dep.ID)
+			}
 		}
 
 		// Continue to next deployment
@@ -550,14 +578,15 @@ func Relay(c *gin.Context) {
 		go processChannelRelayError(ctx, userId, channelId, channelName, *bizErr)
 	}
 	if bizErr != nil {
-		if bizErr.StatusCode == http.StatusTooManyRequests {
-			bizErr.Error.Message = "当前分组上游负载已饱和，请稍后再试"
+		// Copy before mutation to avoid race with goroutines from processChannelRelayError
+		errCopy := *bizErr
+		if errCopy.StatusCode == http.StatusTooManyRequests {
+			errCopy.Error.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
 
-		// BUG: bizErr is in race condition
-		bizErr.Error.Message = helper.MessageWithRequestId(bizErr.Error.Message, requestId)
-		c.JSON(bizErr.StatusCode, gin.H{
-			"error": bizErr.Error,
+		errCopy.Error.Message = helper.MessageWithRequestId(errCopy.Error.Message, requestId)
+		c.JSON(errCopy.StatusCode, gin.H{
+			"error": errCopy.Error,
 		})
 	}
 }
@@ -654,4 +683,3 @@ func estimateTokenCount(req *model.GeneralOpenAIRequest) int {
 
 	return estimatedTokens
 }
-

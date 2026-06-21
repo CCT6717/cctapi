@@ -115,3 +115,9 @@ code {
     font-size: 0.9em !important;
   }
 }
+
+/* Toastify z-index override */
+.Toastify__toast-container {
+  z-index: 99999 !important;
+}
+

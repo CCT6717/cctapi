@@ -62,7 +62,7 @@ func CalculateScore(dep DeploymentConfig, state *DeploymentState, weights ScoreW
 	}
 
 	// Cooling down: significant penalty
-	if state.CooldownUntil != nil && state.CooldownUntil.After(now) {
+	if cooldownUntil, _, err := GetDeploymentCooldown(dep.ID); err == nil && cooldownUntil != nil && cooldownUntil.After(now) {
 		score -= 100
 	}
 

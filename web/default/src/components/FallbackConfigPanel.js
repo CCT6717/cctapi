@@ -11,13 +11,15 @@ import {
   Loader,
   Message,
   Modal,
+  Popup,
 } from 'semantic-ui-react';
-import { API, showError, showSuccess } from '../helpers';
+import { API, showError, showInfo, showSuccess } from '../helpers';
 import './FallbackConfigPanel.css';
 
 const OPENAI_COMPATIBLE_CHANNEL_TYPE = 50;
 const ROUTING_MODE_WEIGHTED = 'weighted';
 const ROUTING_MODE_SEQUENTIAL = 'sequential';
+const ROUTING_MODE_FIXED = 'fixed';
 const ROUTING_MODE_META = {
   [ROUTING_MODE_WEIGHTED]: {
     title: '按权重',
@@ -31,8 +33,29 @@ const ROUTING_MODE_META = {
     icon: 'sort amount down',
     color: 'teal',
   },
+  [ROUTING_MODE_FIXED]: {
+    title: '固定模型',
+    detail: '始终路由到指定真实模型，适合手动锁定主力部署。',
+    icon: 'bullseye',
+    color: 'purple',
+  },
 };
-const ROUTING_MODE_OPTIONS = [ROUTING_MODE_WEIGHTED, ROUTING_MODE_SEQUENTIAL];
+const ROUTING_MODE_OPTIONS = [
+  ROUTING_MODE_WEIGHTED,
+  ROUTING_MODE_SEQUENTIAL,
+  ROUTING_MODE_FIXED,
+];
+
+const normalizeBaseUrlForChannelType = (channelType, baseUrl) => {
+  const normalized = String(baseUrl || '').trim().replace(/\/+$/, '');
+  if (Number(channelType) === 40) {
+    return normalized.replace(/\/api\/v3$/i, '');
+  }
+  if (Number(channelType) === 20) {
+    return normalized.replace(/\/v1$/i, '');
+  }
+  return normalized;
+};
 
 const defaultChannel = () => ({
   id: 0,
@@ -41,6 +64,7 @@ const defaultChannel = () => ({
   base_url: '',
   key: '',
   models: '',
+  model_list: [],
   status: 1,
 });
 
@@ -61,6 +85,11 @@ const defaultDeployment = (id, priority) => ({
   channel: defaultChannel(),
 });
 
+const getDeploymentOwnerNames = (virtualModels, deploymentId) =>
+  (virtualModels || [])
+    .filter((vm) => (vm.fallback_order || []).includes(deploymentId))
+    .map((vm) => vm.name || '未命名虚拟模型');
+
 const normalizeConfig = (data) => ({
   enabled: data?.enabled ?? true,
   virtual_models: Array.isArray(data?.virtual_models)
@@ -69,6 +98,7 @@ const normalizeConfig = (data) => ({
         enabled: vm.enabled ?? true,
         description: vm.description || '',
         routing_mode: vm.routing_mode || ROUTING_MODE_WEIGHTED,
+        fixed_deployment: vm.fixed_deployment || '',
         fallback_order: Array.isArray(vm.fallback_order)
           ? vm.fallback_order
           : [],
@@ -90,6 +120,19 @@ const normalizeConfig = (data) => ({
           ...(dep.channel || {}),
           id: dep.channel?.id || dep.channel_id || 0,
         },
+      }))
+    : [],
+  channels: Array.isArray(data?.channels)
+    ? data.channels.map((channel) => ({
+        ...defaultChannel(),
+        ...channel,
+        id: channel.id || 0,
+        model_list: Array.isArray(channel.model_list)
+          ? channel.model_list
+          : String(channel.models || '')
+              .split(',')
+              .map((model) => model.trim())
+              .filter(Boolean),
       }))
     : [],
   alert: data?.alert || {},
@@ -118,6 +161,7 @@ const FallbackConfigPanel = () => {
   const [savingVirtualModel, setSavingVirtualModel] = useState('');
   const [batchLoading, setBatchLoading] = useState('');
   const [testing, setTesting] = useState(false);
+  const [testingSingle, setTestingSingle] = useState(null);
   const [testResults, setTestResults] = useState({});
   const [deploymentStatuses, setDeploymentStatuses] = useState({});
   const [actingDeployment, setActingDeployment] = useState('');
@@ -134,6 +178,31 @@ const FallbackConfigPanel = () => {
       map[dep.id] = dep;
     });
     return map;
+  }, [config]);
+
+  const channelTemplateOptions = useMemo(() => {
+    const options = [];
+    (config?.channels || []).forEach((channel) => {
+      const channelId = Number(channel.id || 0);
+      if (!channelId) {
+        return;
+      }
+      const channelName = channel.name || `channel-${channelId}`;
+      const models =
+        Array.isArray(channel.model_list) && channel.model_list.length > 0
+          ? channel.model_list
+          : [''];
+      models.forEach((modelName, modelIndex) => {
+        const model = String(modelName || '').trim();
+        options.push({
+          key: `${channelId}:${model || modelIndex}`,
+          value: `${channelId}::${model}`,
+          text: `${channelName}${model ? ` / ${model}` : ''}`,
+          description: channel.base_url || '',
+        });
+      });
+    });
+    return options.sort((a, b) => a.text.localeCompare(b.text, 'zh-Hans-CN'));
   }, [config]);
 
   const loadDeploymentStatuses = useCallback(async (silent = false) => {
@@ -160,7 +229,8 @@ const FallbackConfigPanel = () => {
       const res = await API.get('/api/fallback/editor/config');
       const { success, message, data } = res.data;
       if (success) {
-        setConfig(normalizeConfig(data));
+        const normalizedConfig = normalizeConfig(data);
+        setConfig(normalizedConfig);
         setExpandedVirtualModels({});
         setExpandedDeployments({});
         setOrderingVirtualModels({});
@@ -190,13 +260,41 @@ const FallbackConfigPanel = () => {
   };
 
   const setVirtualModelRoutingMode = (index, key, mode) => {
-    setVirtualModel(index, 'routing_mode', mode);
+    setConfig((oldConfig) => {
+      const virtualModels = [...oldConfig.virtual_models];
+      const vm = virtualModels[index];
+      const fallbackOrder = Array.isArray(vm.fallback_order)
+        ? vm.fallback_order
+        : [];
+      virtualModels[index] = {
+        ...vm,
+        routing_mode: mode,
+        fixed_deployment:
+          mode === ROUTING_MODE_FIXED
+            ? vm.fixed_deployment || fallbackOrder[0] || ''
+            : vm.fixed_deployment || '',
+      };
+      return { ...oldConfig, virtual_models: virtualModels };
+    });
     if (mode !== ROUTING_MODE_SEQUENTIAL) {
       setOrderingVirtualModels((oldState) => ({
         ...oldState,
         [key]: false,
       }));
     }
+  };
+
+  const setVirtualModelFixedDeployment = (vmIndex, deploymentId) => {
+    setConfig((oldConfig) => {
+      const virtualModels = [...oldConfig.virtual_models];
+      const vm = virtualModels[vmIndex];
+      virtualModels[vmIndex] = {
+        ...vm,
+        routing_mode: ROUTING_MODE_FIXED,
+        fixed_deployment: deploymentId,
+      };
+      return { ...oldConfig, virtual_models: virtualModels };
+    });
   };
 
   const toggleOrderEditor = (key) => {
@@ -238,14 +336,95 @@ const FallbackConfigPanel = () => {
     }));
   };
 
+  const applyDeploymentTemplate = (targetId, templateValue) => {
+    setConfig((oldConfig) => {
+      const [channelIdText, ...modelParts] = String(templateValue || '').split('::');
+      const channelId = Number(channelIdText || 0);
+      const model = modelParts.join('::');
+      const channel = (oldConfig.channels || []).find(
+        (item) => Number(item.id || 0) === channelId
+      );
+      if (!channel) {
+        return oldConfig;
+      }
+
+      const templateChannel = {
+        ...defaultChannel(),
+        ...channel,
+        id: channelId,
+      };
+
+      return {
+        ...oldConfig,
+        deployments: oldConfig.deployments.map((dep) =>
+          dep.id === targetId
+            ? {
+                ...dep,
+                channel_id: channelId,
+                real_model: model || dep.real_model,
+                channel: { ...templateChannel },
+              }
+            : dep
+        ),
+      };
+    });
+  };
+
+  const setDeploymentQuotaMode = (id, value) => {
+    setConfig((oldConfig) => ({
+      ...oldConfig,
+      deployments: oldConfig.deployments.map((dep) => {
+        if (dep.id !== id) {
+          return dep;
+        }
+        if (value === 'free') {
+          return {
+            ...dep,
+            quota_mode: value,
+            daily_limit_tokens: 0,
+          };
+        }
+        return {
+          ...dep,
+          quota_mode: value,
+          daily_limit_tokens:
+            Number(dep.daily_limit_tokens) > 0
+              ? dep.daily_limit_tokens
+              : defaultDeployment(dep.id, dep.priority).daily_limit_tokens,
+        };
+      }),
+    }));
+  };
+
   const setDeploymentChannel = (id, field, value) => {
     setConfig((oldConfig) => ({
       ...oldConfig,
-      deployments: oldConfig.deployments.map((dep) =>
-        dep.id === id
-          ? { ...dep, channel: { ...defaultChannel(), ...dep.channel, [field]: value } }
-          : dep
-      ),
+      deployments: oldConfig.deployments.map((dep) => {
+        const target = oldConfig.deployments.find((item) => item.id === id);
+        if (!target) {
+          return dep;
+        }
+
+        const targetChannelId = Number(target.channel_id || target.channel?.id || 0);
+        const depChannelId = Number(dep.channel_id || dep.channel?.id || 0);
+        const shouldSync =
+          dep.id === id || (targetChannelId > 0 && depChannelId === targetChannelId);
+
+        if (!shouldSync) {
+          return dep;
+        }
+
+        return {
+          ...dep,
+          channel_id: depChannelId || targetChannelId,
+          channel: {
+            ...defaultChannel(),
+            ...dep.channel,
+            [field]: value,
+            id: depChannelId || targetChannelId || 0,
+          },
+        };
+      }),
     }));
   };
 
@@ -287,6 +466,7 @@ const FallbackConfigPanel = () => {
             enabled: true,
             description: '',
             routing_mode: ROUTING_MODE_WEIGHTED,
+            fixed_deployment: '',
             fallback_order: [],
           },
         ],
@@ -332,6 +512,9 @@ const FallbackConfigPanel = () => {
         ...source,
         name: newName,
         description: source.description ? `${source.description} (副本)` : '(副本)',
+        fixed_deployment: source.fixed_deployment
+          ? depIdMap[source.fixed_deployment] || ''
+          : '',
         fallback_order: (source.fallback_order || []).map((depId) => depIdMap[depId] || `${newIdPrefix}-${depId}`),
       };
 
@@ -356,6 +539,10 @@ const FallbackConfigPanel = () => {
       virtualModels[vmIndex] = {
         ...vm,
         fallback_order: [...vm.fallback_order, id],
+        fixed_deployment:
+          vm.routing_mode === ROUTING_MODE_FIXED && !vm.fixed_deployment
+            ? id
+            : vm.fixed_deployment || '',
       };
       return {
         ...oldConfig,
@@ -371,6 +558,10 @@ const FallbackConfigPanel = () => {
         index === vmIndex
           ? {
               ...vm,
+              fixed_deployment:
+                vm.fixed_deployment === deploymentId
+                  ? ''
+                  : vm.fixed_deployment || '',
               fallback_order: vm.fallback_order.filter((id) => id !== deploymentId),
             }
           : vm
@@ -434,6 +625,14 @@ const FallbackConfigPanel = () => {
         if (!baseUrl) {
           errors.push(`${label} 的接口地址不能为空`);
         }
+        const normalizedBaseUrl = normalizeBaseUrlForChannelType(dep.channel?.type, baseUrl);
+        if (baseUrl && normalizedBaseUrl !== baseUrl.replace(/\/+$/, '')) {
+          if (Number(dep.channel?.type) === 40) {
+            errors.push(`${label} 的豆包 Base URL 请填写到域名，例如 https://ark.cn-beijing.volces.com，不要带 /api/v3`);
+          } else if (Number(dep.channel?.type) === 20) {
+            errors.push(`${label} 的 OpenRouter Base URL 请填写 https://openrouter.ai/api，不要带 /v1`);
+          }
+        }
         if (!key) {
           errors.push(`${label} 的密钥不能为空`);
         }
@@ -481,6 +680,8 @@ const FallbackConfigPanel = () => {
         ? vm.fallback_order.map((id) => String(id || '').trim()).filter(Boolean)
         : [];
       const uniqueOrder = new Set(fallbackOrder);
+      const routingMode = vm.routing_mode || ROUTING_MODE_WEIGHTED;
+      const fixedDeployment = String(vm.fixed_deployment || '').trim();
 
       if (!name) {
         errors.push(`虚拟模型 #${index + 1} 的名称不能为空`);
@@ -501,6 +702,15 @@ const FallbackConfigPanel = () => {
           errors.push(`${label} 引用了不存在的真实模型：${deploymentId}`);
         }
       });
+      if (vm.enabled !== false && routingMode === ROUTING_MODE_FIXED) {
+        if (!fixedDeployment) {
+          errors.push(`${label} 固定模型模式需要选择一个固定目标`);
+        } else if (!uniqueOrder.has(fixedDeployment)) {
+          errors.push(`${label} 固定目标必须是已绑定的真实模型：${fixedDeployment}`);
+        } else if (!enabledDeploymentIds.has(fixedDeployment)) {
+          errors.push(`${label} 固定目标需要是已启用的真实模型：${fixedDeployment}`);
+        }
+      }
       if (
         vm.enabled !== false &&
         fallbackOrder.length > 0 &&
@@ -597,11 +807,21 @@ const FallbackConfigPanel = () => {
     lines.push(`真实模型: ${depCount} 个`);
     config.virtual_models.forEach((vm, i) => {
       lines.push(`  ${i + 1}. ${vm.name} — ${vm.enabled ? '启用' : '停用'} ${vm.description ? `(${vm.description})` : ''}`);
-      lines.push(`     路由: ${vm.routing_mode === 'weighted' ? '按权重' : '按顺序'}`);
+      const routingText =
+        vm.routing_mode === ROUTING_MODE_FIXED
+          ? '固定模型'
+          : vm.routing_mode === ROUTING_MODE_SEQUENTIAL
+            ? '按顺序'
+            : '按权重';
+      lines.push(`     路由: ${routingText}`);
       (vm.fallback_order || []).forEach((depId) => {
         const dep = config.deployments.find(d => d.id === depId);
         if (dep) {
-          lines.push(`     - ${dep.real_model || depId} (渠道: ${dep.channel?.name || '-'})`);
+          const fixedMark =
+            vm.routing_mode === ROUTING_MODE_FIXED && vm.fixed_deployment === depId
+              ? '，固定目标'
+              : '';
+          lines.push(`     - ${dep.real_model || depId} (渠道: ${dep.channel?.name || '-'}${fixedMark})`);
         }
       });
     });
@@ -617,42 +837,89 @@ const FallbackConfigPanel = () => {
 
     setTesting(true);
     setTestResults({});
-    for (const dep of config.deployments) {
-      if (!dep.channel_id) {
-        setTestResults((oldState) => ({
-          ...oldState,
-          [dep.id]: {
-            success: false,
-            message: '请先保存，生成渠道后再测试',
-          },
-        }));
-        continue;
-      }
+    showInfo('正在测试真实模型，请稍候...');
+    try {
+      for (const dep of config.deployments) {
+        if (!dep.channel_id) {
+          setTestResults((oldState) => ({
+            ...oldState,
+            [dep.id]: {
+              success: false,
+              message: '请先保存，生成渠道后再测试',
+            },
+          }));
+          continue;
+        }
 
-      try {
-        const model = encodeURIComponent(dep.real_model || '');
-        const res = await API.get(`/api/channel/test/${dep.channel_id}?model=${model}`);
-        const { success, message, time } = res.data;
-        setTestResults((oldState) => ({
-          ...oldState,
-          [dep.id]: {
-            success,
-            message: message || (success ? '测试通过' : '测试失败'),
-            time,
-          },
-        }));
-      } catch (error) {
-        setTestResults((oldState) => ({
-          ...oldState,
-          [dep.id]: {
-            success: false,
-            message: error.message || '测试失败',
-          },
-        }));
+        try {
+          const model = encodeURIComponent(dep.real_model || '');
+          const res = await API.get(`/api/channel/test/${dep.channel_id}?model=${model}`, {
+            timeout: 30000,
+          });
+          const { success, message, time } = res?.data || {};
+          setTestResults((oldState) => ({
+            ...oldState,
+            [dep.id]: {
+              success: !!success,
+              message: message || (success ? '测试通过' : '测试失败'),
+              time,
+            },
+          }));
+        } catch (error) {
+          const isTimeout = error?.code === 'ECONNABORTED';
+          setTestResults((oldState) => ({
+            ...oldState,
+            [dep.id]: {
+              success: false,
+              message: isTimeout
+                ? '测试超时，已跳过该真实模型'
+                : error?.response?.data?.message || error.message || '测试失败',
+            },
+          }));
+        }
       }
+      showSuccess('真实模型测试完成');
+    } finally {
+      setTesting(false);
     }
-    setTesting(false);
-    showSuccess('真实模型测试完成');
+  };
+
+  const testSingleDeployment = async (dep) => {
+    if (!dep?.channel_id) {
+      setTestResults((old) => ({
+        ...old,
+        [dep.id]: { success: false, message: '请先保存，生成渠道后再测试' },
+      }));
+      return;
+    }
+
+    try {
+      const model = encodeURIComponent(dep.real_model || '');
+      const res = await API.get(
+        `/api/channel/test/${dep.channel_id}?model=${model}`,
+        { timeout: 30000 }
+      );
+      const { success, message, time } = res?.data || {};
+      setTestResults((old) => ({
+        ...old,
+        [dep.id]: {
+          success: !!success,
+          message: message || (success ? '测试通过' : '测试失败'),
+          time,
+        },
+      }));
+    } catch (error) {
+      const isTimeout = error?.code === 'ECONNABORTED';
+      setTestResults((old) => ({
+        ...old,
+        [dep.id]: {
+          success: false,
+          message: isTimeout
+            ? '测试超时'
+            : error?.response?.data?.message || error.message || '测试失败',
+        },
+      }));
+    }
   };
 
   const batchAction = async (action) => {
@@ -799,9 +1066,12 @@ const FallbackConfigPanel = () => {
           <Header as='h3' className='fallback-config-title'>
             虚拟模型
           </Header>
-          <div className='fallback-config-count'>
-            {config.virtual_models.length} 个虚拟模型，{config.deployments.length} 个真实模型
-          </div>
+           <div className='fallback-config-count'>
+             {config.virtual_models.length} 个虚拟模型，{config.deployments.length} 个真实模型
+           </div>
+            <div style={{ fontSize: 12, color: '#868b94', marginTop: 2 }}>
+              {config.virtual_models.length > 1 ? '' : '⚠️ 如只看到一个模型，请检查后端数据是否正常返回多个'}
+            </div>
         </div>
         <div className='fallback-config-actions'>
           <Button icon labelPosition='left' onClick={addVirtualModel}>
@@ -842,14 +1112,20 @@ const FallbackConfigPanel = () => {
             <Icon name='pause' />
             全部冷却
           </Button>
-          <Button
-            icon
-            labelPosition='left'
-            onClick={computeDiff}
-          >
-            <Icon name='search' />
-            预览变更
-          </Button>
+          <Popup
+            size='mini'
+            content='查看当前虚拟模型和真实模型配置摘要，不会保存改动'
+            trigger={
+              <Button
+                icon
+                labelPosition='left'
+                onClick={computeDiff}
+              >
+                <Icon name='search' />
+                预览变更
+              </Button>
+            }
+          />
           <Button
             primary
             icon
@@ -873,9 +1149,7 @@ const FallbackConfigPanel = () => {
           const modelCount = (vm.fallback_order || []).length;
           const routingMode = vm.routing_mode || ROUTING_MODE_WEIGHTED;
           const isSequentialMode = routingMode === ROUTING_MODE_SEQUENTIAL;
-          const routingModeMeta =
-            ROUTING_MODE_META[routingMode] ||
-            ROUTING_MODE_META[ROUTING_MODE_WEIGHTED];
+          const isFixedMode = routingMode === ROUTING_MODE_FIXED;
           const orderEditorOpen =
             isSequentialMode && !!orderingVirtualModels[vmKey];
 
@@ -899,17 +1173,19 @@ const FallbackConfigPanel = () => {
                     {vm.description ? ` - ${vm.description}` : ''}
                   </div>
                 </div>
-                <Label basic color={vm.enabled ? 'green' : 'grey'}>
-                  {vm.enabled ? '启用' : '停用'}
-                </Label>
-                <Button
-                  type='button'
-                  basic
-                  compact
-                  icon='copy'
-                  onClick={() => copyVirtualModel(vmIndex)}
-                  title='复制此虚拟模型'
-                />
+                <div className='fallback-virtual-summary-actions'>
+                  <Label basic color={vm.enabled ? 'green' : 'grey'}>
+                    {vm.enabled ? '启用' : '停用'}
+                  </Label>
+                  <Button
+                    type='button'
+                    basic
+                    compact
+                    icon='copy'
+                    onClick={() => copyVirtualModel(vmIndex)}
+                    title='复制此虚拟模型'
+                  />
+                </div>
               </div>
 
               {vmExpanded && (
@@ -952,17 +1228,6 @@ const FallbackConfigPanel = () => {
                   </div>
 
                   <div className='fallback-routing-panel'>
-                    <div className='fallback-routing-summary'>
-                      <div
-                        className={`fallback-routing-icon ${routingModeMeta.color}`}
-                      >
-                        <Icon name={routingModeMeta.icon} />
-                      </div>
-                      <div>
-                        <strong>当前路由：{routingModeMeta.title}</strong>
-                        <span>{routingModeMeta.detail}</span>
-                      </div>
-                    </div>
                     <div className='fallback-routing-actions'>
                       <div
                         className='fallback-routing-mode-grid'
@@ -1029,10 +1294,19 @@ const FallbackConfigPanel = () => {
                       const cooldownActionKey = `${dep.id}:cooldown`;
                       const recoverActionKey = `${dep.id}:recover`;
                       const statusActionDisabled = saving || !dep.channel_id;
+                      const isFixedDeployment =
+                        isFixedMode && vm.fixed_deployment === dep.id;
+                      const ownerNames = getDeploymentOwnerNames(
+                        config.virtual_models,
+                        dep.id
+                      );
+                      const ownerText = ownerNames.join(' / ');
 
                       return (
                         <div
-                          className='fallback-deployment-panel'
+                          className={`fallback-deployment-panel ${
+                            isFixedDeployment ? 'fixed-active' : ''
+                          }`}
                           key={deploymentKey}
                         >
                           <div className='fallback-deployment-heading'>
@@ -1046,17 +1320,24 @@ const FallbackConfigPanel = () => {
                             />
                             <div className='fallback-deployment-name'>
                               {dep.real_model || '未命名真实模型'}
-                              <Label basic size='mini'>
-                                {dep.id}
-                              </Label>
                               <Label
                                 basic
                                 size='mini'
-                                color={isSequentialMode ? 'teal' : 'blue'}
+                                color={
+                                  isFixedMode
+                                    ? 'purple'
+                                    : isSequentialMode
+                                      ? 'teal'
+                                      : 'blue'
+                                }
                               >
-                                {isSequentialMode
-                                  ? `顺序 #${orderIndex + 1}`
-                                  : `权重 ${dep.weight || 100}`}
+                                {isFixedMode
+                                  ? isFixedDeployment
+                                    ? '固定目标'
+                                    : '候选'
+                                  : isSequentialMode
+                                    ? `顺序 #${orderIndex + 1}`
+                                    : `权重 ${dep.weight || 100}`}
                               </Label>
                               <Label basic size='mini' color={statusMeta.color}>
                                 {statusMeta.label}
@@ -1064,9 +1345,16 @@ const FallbackConfigPanel = () => {
                               <Label basic size='mini' color={dep.quota_mode === 'free' ? 'blue' : 'teal'}>
                                 {dep.quota_mode === 'free' ? '用完即换' : '限额 ' + dep.daily_limit_tokens.toLocaleString()}
                               </Label>
-                              <Label basic size='mini' title={dep.channel?.base_url || ''}>
-                                {dep.channel?.base_url ? dep.channel.base_url.replace(/^https?:\/\//, '').replace(/\/$/, '') : '无地址'}
-                              </Label>
+                              {ownerNames.length > 1 && (
+                                <Label
+                                  basic
+                                  size='mini'
+                                  color='orange'
+                                  title={`共享部署：${ownerText}`}
+                                >
+                                  共享 {ownerNames.length}
+                                </Label>
+                              )}
                               {testResult && (
                                 <Label
                                   basic
@@ -1080,6 +1368,23 @@ const FallbackConfigPanel = () => {
                               )}
                             </div>
                             <div className='fallback-deployment-controls'>
+                              {isFixedMode && (
+                                <Button
+                                  type='button'
+                                  basic={!isFixedDeployment}
+                                  compact
+                                  color='purple'
+                                  icon={isFixedDeployment ? 'check circle' : 'bullseye'}
+                                  title={
+                                    isFixedDeployment
+                                      ? '当前固定模型'
+                                      : '设为固定模型'
+                                  }
+                                  onClick={() =>
+                                    setVirtualModelFixedDeployment(vmIndex, dep.id)
+                                  }
+                                />
+                              )}
                               {orderEditorOpen && (
                                 <div className='fallback-order-actions'>
                                   <Button
@@ -1147,6 +1452,62 @@ const FallbackConfigPanel = () => {
                                   disabled={savingVirtualModel === dep.id || saving}
                                   onClick={() => saveVirtualModel(vmIndex)}
                                 />
+                                <Button
+                                  type='button'
+                                  basic
+                                  compact
+                                  color='blue'
+                                  icon='play'
+                                  title='测试此真实模型'
+                                  loading={testingSingle === dep.id}
+                                  disabled={testing || testingSingle !== null}
+                                  onClick={async () => {
+                                    if (!dep?.channel_id) {
+                                      setTestResults((old) => ({
+                                        ...old,
+                                        [dep.id]: { success: false, message: '请先保存，生成渠道后再测试' },
+                                      }));
+                                      showError('请先保存，生成渠道后再测试');
+                                      return;
+                                    }
+                                    setTestingSingle(dep.id);
+                                    const startTime = Date.now();
+                                    try {
+                                      const model = encodeURIComponent(dep.real_model || '');
+                                      const res = await API.get(
+                                        `/api/channel/test/${dep.channel_id}?model=${model}`,
+                                        { timeout: 30000 }
+                                      );
+                                      const { success, message, time } = res?.data || {};
+                                      const elapsed = ((time ?? Date.now() - startTime) / 1000).toFixed(2);
+                                      setTestResults((old) => ({
+                                        ...old,
+                                        [dep.id]: {
+                                          success: !!success,
+                                          message: message || (success ? '测试通过' : '测试失败'),
+                                          time,
+                                        },
+                                      }));
+                                      if (success) {
+                                        showSuccess(`测试成功，耗时 ${elapsed}s`);
+                                      } else {
+                                        showError(`测试失败：${message || '未知原因'}`);
+                                      }
+                                    } catch (error) {
+                                      const isTimeout = error?.code === 'ECONNABORTED';
+                                      const failMessage = isTimeout
+                                        ? '测试超时'
+                                        : error?.response?.data?.message || error.message || '测试失败';
+                                      setTestResults((old) => ({
+                                        ...old,
+                                        [dep.id]: { success: false, message: failMessage },
+                                      }));
+                                      showError(`测试失败：${failMessage}`);
+                                    } finally {
+                                      setTestingSingle(null);
+                                    }
+                                  }}
+                                />
                               </div>
                               <Checkbox
                                 toggle
@@ -1183,6 +1544,32 @@ const FallbackConfigPanel = () => {
 
                           {depExpanded && (
                             <Form className='fallback-deployment-form'>
+                              <div className='fallback-config-guard'>
+                                <Icon name='info circle' />
+                                <span>
+                                  当前归属：{ownerText || vm.name || '当前虚拟模型'}。受控额度会按本地 Token 限额提前切换；用完即换不设置本地额度，依赖上游报错后立即 fallback。
+                                </span>
+                              </div>
+                              <Form.Group widths='equal'>
+                                <Form.Dropdown
+                                  label='从已有渠道选择'
+                                  selection
+                                  clearable
+                                  search
+                                  options={channelTemplateOptions}
+                                  placeholder='展开已有渠道和模型'
+                                  value={
+                                    dep.channel_id
+                                      ? `${dep.channel_id}::${dep.real_model || ''}`
+                                      : ''
+                                  }
+                                  onChange={(_, { value }) =>
+                                    applyDeploymentTemplate(dep.id, value)
+                                  }
+                                />
+                                <Form.Field />
+                                <Form.Field />
+                              </Form.Group>
                               <Form.Group widths='equal'>
                                 <Form.Input
                                   label='真实模型名'
@@ -1253,7 +1640,7 @@ const FallbackConfigPanel = () => {
                                     { key: 'free', value: 'free', text: '用完就换（不设限额）' },
                                   ]}
                                   onChange={(_, { value }) =>
-                                    setDeployment(dep.id, 'quota_mode', value)
+                                    setDeploymentQuotaMode(dep.id, value)
                                   }
                                 />
                                 <Form.Input

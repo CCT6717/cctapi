@@ -1,4 +1,4 @@
-﻿package fallback
+package fallback
 
 import (
 	"encoding/json"
@@ -17,13 +17,15 @@ type Config struct {
 	Deployments   map[string]DeploymentConfig   `json:"deployments"`
 	Alert         AlertConfig                   `json:"alert"`
 	SmartSort     SmartSortConfig               `json:"smart_sort"`
+	BlockedErrorCodes []string                  `json:"blocked_error_codes"`
 }
 
 type VirtualModelConfig struct {
-	Enabled       bool     `json:"enabled"`
-	Description   string   `json:"description"`
-	RoutingMode   string   `json:"routing_mode"`
-	FallbackOrder []string `json:"fallback_order"`
+	Enabled         bool     `json:"enabled"`
+	Description     string   `json:"description"`
+	RoutingMode     string   `json:"routing_mode"`
+	FixedDeployment string   `json:"fixed_deployment,omitempty"`
+	FallbackOrder   []string `json:"fallback_order"`
 }
 
 type DeploymentConfig struct {
@@ -35,7 +37,7 @@ type DeploymentConfig struct {
 	Weight                int     `json:"weight"`
 	MaxConcurrentRequests int     `json:"max_concurrent_requests"`
 	DailyLimitTokens      int64   `json:"daily_limit_tokens"`
-	QuotaMode            string  `json:"quota_mode"`
+	QuotaMode             string  `json:"quota_mode"`
 	SoftLimitRatio        float64 `json:"soft_limit_ratio"`
 	HardLimitRatio        float64 `json:"hard_limit_ratio"`
 	MaxContext            int     `json:"max_context"`
@@ -50,10 +52,13 @@ var (
 const (
 	RoutingModeWeighted   = "weighted"
 	RoutingModeSequential = "sequential"
+	RoutingModeFixed      = "fixed"
 )
 
 func normalizeRoutingMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case RoutingModeFixed:
+		return RoutingModeFixed
 	case RoutingModeSequential:
 		return RoutingModeSequential
 	case RoutingModeWeighted:
@@ -90,6 +95,7 @@ func loadConfigData(data []byte) (*Config, error) {
 
 	for name, vm := range cfg.VirtualModels {
 		vm.RoutingMode = normalizeRoutingMode(vm.RoutingMode)
+		vm.FixedDeployment = strings.TrimSpace(vm.FixedDeployment)
 		cfg.VirtualModels[name] = vm
 	}
 
@@ -258,6 +264,17 @@ func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error)
 		return nil, fmt.Errorf("no enabled deployments found for virtual model: %s", modelName)
 	}
 
+	if routingMode == RoutingModeFixed {
+		if vm.FixedDeployment != "" {
+			for _, dep := range deployments {
+				if dep.ID == vm.FixedDeployment {
+					return []DeploymentConfig{dep}, nil
+				}
+			}
+		}
+		return deployments[:1], nil
+	}
+
 	if routingMode == RoutingModeSequential {
 		return deployments, nil
 	}
@@ -328,11 +345,32 @@ func validateConfigData(cfg *Config) error {
 			return fmt.Errorf("virtual model %s has empty fallback_order", modelName)
 		}
 
+		fallbackOrder := make(map[string]bool, len(vm.FallbackOrder))
 		for _, deploymentID := range vm.FallbackOrder {
-			if _, ok := cfg.Deployments[deploymentID]; !ok {
+			dep, ok := cfg.Deployments[deploymentID]
+			if !ok {
 				return fmt.Errorf("virtual model %s references unknown deployment: %s", modelName, deploymentID)
 			}
+			if dep.Enabled {
+				fallbackOrder[deploymentID] = true
+			} else {
+				fallbackOrder[deploymentID] = false
+			}
 		}
+
+		if normalizeRoutingMode(vm.RoutingMode) == RoutingModeFixed {
+			if vm.FixedDeployment == "" {
+				return fmt.Errorf("fixed virtual model %s has empty fixed_deployment", modelName)
+			}
+			fixedEnabled, ok := fallbackOrder[vm.FixedDeployment]
+			if !ok {
+				return fmt.Errorf("fixed deployment %s must be in fallback_order for virtual model %s", vm.FixedDeployment, modelName)
+			}
+			if !fixedEnabled {
+				return fmt.Errorf("fixed deployment %s for virtual model %s is disabled", vm.FixedDeployment, modelName)
+			}
+		}
+
 	}
 
 	return nil

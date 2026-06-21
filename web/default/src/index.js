@@ -23,7 +23,7 @@ root.render(
           <Container className={'main-content'}>
             <App />
           </Container>
-          <ToastContainer />
+          <ToastContainer position="top-right" toastStyle={{ zIndex: 99999 }} />
           <Footer />
         </BrowserRouter>
       </UserProvider>

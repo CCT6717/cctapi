@@ -8,6 +8,7 @@ import {
   Label,
   Loader,
   Message,
+  Popup,
   Table,
 } from 'semantic-ui-react';
 import {
@@ -21,6 +22,7 @@ import {
 } from 'recharts';
 import FallbackConfigPanel from '../../components/FallbackConfigPanel';
 import { API, isAdmin, showError, showSuccess } from '../../helpers';
+import { clampScore, sortScoreItems } from './scoreUtils';
 import './Fallback.css';
 
 const getScoreDeltaMeta = (rows, deploymentId) => {
@@ -51,57 +53,82 @@ const getScoreDeltaMeta = (rows, deploymentId) => {
   return { direction: 'flat', icon: 'minus', text: '0.00' };
 };
 
-const clampScore = (value) => {
-  const number = Number(value);
-  if (!Number.isFinite(number)) {
-    return 0;
+const translateFallbackReason = (reason) => {
+  const text = String(reason || '').trim();
+  if (!text) {
+    return '-';
   }
-  return Math.max(0, Math.min(100, number));
+
+  const lower = text.toLowerCase();
+  const translations = [
+    {
+      match: 'deployment reached soft daily token limit',
+      text: '已达到每日软额度上限，已自动切换',
+    },
+    {
+      match: 'set inference limit',
+      text: '已达到推理额度上限，模型已暂停，已自动切换',
+    },
+    {
+      match: 'model service has been paused',
+      text: '模型服务已暂停，已自动切换',
+    },
+    {
+      match: 'safe experience mode',
+      text: '已触发安全体验模式限制，已自动切换',
+    },
+    {
+      match: 'rate limit',
+      text: '触发限流，已自动切换',
+    },
+    {
+      match: 'too many requests',
+      text: '请求过多，已自动切换',
+    },
+  ];
+
+  for (const item of translations) {
+    if (lower.includes(item.match)) {
+      return item.text;
+    }
+  }
+
+  return text;
 };
 
 const PANEL_ITEMS = [
   {
     key: 'status',
     title: '模型状态',
-    subtitle: '看每个真实模型还能不能用',
     description: '显示额度、Token、并发、冷却和恢复按钮，适合日常值守。',
-    metric: '状态和额度',
     icon: 'server',
     accent: '#2563eb',
   },
   {
     key: 'metrics',
-    title: '运行数据',
-    subtitle: '看系统现在跑得怎么样',
+    title: '使用统计',
     description: '展示请求量、切换次数、成功失败和 token 消耗等原始监控。',
-    metric: '请求和消耗',
     icon: 'heartbeat',
     accent: '#0f9f9a',
   },
   {
     key: 'scores',
-    title: '模型评分',
-    subtitle: '看系统为什么优先选谁',
+    title: '模型权重',
     description: '用当前分数和趋势图判断哪个模型变好、变差或正在恢复。',
-    metric: '评分趋势',
     icon: 'sort numeric down',
     accent: '#7c3aed',
   },
   {
     key: 'alerts',
-    title: '告警记录',
-    subtitle: '看谁超额、冷却或恢复过',
+    title: '异常事件',
     description: '按时间记录限额、手动冷却、自动恢复和全部失败事件。',
-    metric: '异常记录',
     icon: 'bell outline',
     accent: '#d97706',
   },
   {
     key: 'logs',
-    title: '切换日志',
-    subtitle: '看请求从哪个模型切到哪个',
+    title: '切换快照',
     description: '记录切换原因、状态码、耗时和 request id，方便追单次请求。',
-    metric: '切换过程',
     icon: 'exchange',
     accent: '#475569',
   },
@@ -134,8 +161,8 @@ const GUIDE_SECTIONS = [
     icon: 'map signs',
     items: [
       '“模型状态”看每个真实模型是否可用，并可手动冷却或恢复并重置当前周期额度。',
-      '“模型评分”看智能排序分数和趋势图，判断谁在变好或变差。',
-      '“告警记录”看谁什么时候超额、冷却或恢复；“切换日志”看每次从谁切到谁。',
+      '“模型权重”看智能排序分数和趋势图，判断谁在变好或变差。',
+      '“异常事件”看谁什么时候超额、冷却或恢复；“切换快照”看每次从谁切到谁。',
       '状态页可按配置顺序、Token 用量或模型名称排序，点击模块只刷新下方内容。',
     ],
   },
@@ -166,34 +193,7 @@ const SUCCESS_RATE_CRITICAL_THRESHOLD = 90;
 const FAILURE_RATE_WARNING_THRESHOLD = 5;
 const FAILURE_RATE_CRITICAL_THRESHOLD = 15;
 
-const SCORE_LINE_COLORS = [
-  '#4318FF',
-  '#00B5D8',
-  '#6C63FF',
-  '#05CD99',
-  '#FFB547',
-  '#FF5E7D',
-  '#41B883',
-  '#7983FF',
-  '#FF8F6B',
-  '#49BEFF',
-];
-
-const SCORE_CHART_CONFIG = {
-  grid: {
-    vertical: false,
-    horizontal: true,
-    opacity: 0.12,
-  },
-  line: {
-    strokeWidth: 2.2,
-    dot: false,
-    activeDot: { r: 5, stroke: '#ffffff', strokeWidth: 2 },
-  },
-};
-
 const SCORE_CHART_VISIBLE_LIMIT = 8;
-const SCORE_SPARK_BAR_COUNT = 10;
 
 const getScoreSeriesPoints = (rows, deploymentId, currentScore) => {
   const points = (Array.isArray(rows) ? rows : [])
@@ -211,65 +211,21 @@ const getScoreSeriesPoints = (rows, deploymentId, currentScore) => {
   return points.slice(-10);
 };
 
-const buildScoreSparkBars = (points) => {
-  if (!Array.isArray(points) || points.length === 0) {
-    return [];
+const getScoreBand = (value) => {
+  const score = Number(value);
+  if (!Number.isFinite(score)) {
+    return 'mid';
   }
-
-  const visiblePoints = points.slice(-SCORE_SPARK_BAR_COUNT);
-  const paddedPoints =
-    visiblePoints.length < SCORE_SPARK_BAR_COUNT
-      ? [
-          ...Array(SCORE_SPARK_BAR_COUNT - visiblePoints.length).fill(null),
-          ...visiblePoints,
-        ]
-      : visiblePoints;
-
-  return paddedPoints.map((value, index) => {
-    const score = Number(value);
-    const percent = Number.isFinite(score) ? clampScore(score) : 0;
-    return {
-      key: `${index}-${Number.isFinite(score) ? score.toFixed(2) : 'empty'}`,
-      height: Number.isFinite(score) ? Math.max(6, 6 + percent * 0.22) : 4,
-      isEmpty: !Number.isFinite(score),
-      isLatest: index === paddedPoints.length - 1,
-    };
-  });
-};
-
-const ScoreMiniTrend = ({ rows, deploymentId, score, color }) => {
-  const current = Number(score);
-  const series = getScoreSeriesPoints(rows, deploymentId, current);
-  const sparkBars = buildScoreSparkBars(series);
-  const deltaMeta = getScoreDeltaMeta(rows, deploymentId);
-  const trendClass = deltaMeta?.direction || 'flat';
-
-  return (
-    <div
-      className={`fallback-score-mini ${trendClass} ${
-        series.length > 1 ? 'has-history' : 'no-history'
-      }`}
-      style={{ '--score-color': color || '#4318ff' }}
-      title={
-        series.length > 1
-          ? `最近 ${series.length} 次评分走势`
-          : '暂无足够历史，显示当前分数占比'
-      }
-    >
-      <div className='fallback-score-mini-grid' aria-hidden='true' />
-      <div className='fallback-score-mini-bars' aria-hidden='true'>
-        {sparkBars.map((bar) => (
-          <span
-            className={`${bar.isEmpty ? 'empty' : ''} ${
-              bar.isLatest ? 'latest' : ''
-            }`}
-            key={bar.key}
-            style={{ height: `${bar.height}px` }}
-          />
-        ))}
-      </div>
-    </div>
-  );
+  if (score >= 90) {
+    return 'high';
+  }
+  if (score >= 70) {
+    return 'mid';
+  }
+  if (score >= 50) {
+    return 'low';
+  }
+  return 'critical';
 };
 
 const emptyConfigMeta = {
@@ -544,37 +500,6 @@ const isQuotaExhaustedRow = (row) => {
   const usedTokens = Number(row?.used_tokens || 0);
   const dailyLimit = Number(row?.daily_limit || 0);
   return dailyLimit > 0 && usedTokens >= dailyLimit;
-};
-
-const renderScoreTooltip = ({ active, payload, label }) => {
-  const rows = (payload || []).filter((item) =>
-    Number.isFinite(Number(item.value))
-  );
-  if (!active || rows.length === 0) {
-    return null;
-  }
-
-  const visibleRows = rows.slice(0, 8);
-  return (
-    <div className='fallback-score-tooltip'>
-      <div className='fallback-score-tooltip-time'>时间：{label}</div>
-      {visibleRows.map((item) => (
-        <div className='fallback-score-tooltip-row' key={item.name}>
-          <span
-            className='fallback-score-tooltip-color'
-            style={{ '--score-color': item.color || '#4318ff' }}
-          />
-          <span className='fallback-score-tooltip-name'>{item.name}</span>
-          <strong>{Number(item.value).toFixed(2)}</strong>
-        </div>
-      ))}
-      {rows.length > visibleRows.length && (
-        <div className='fallback-score-tooltip-more'>
-          还有 {rows.length - visibleRows.length} 个 deployment
-        </div>
-      )}
-    </div>
-  );
 };
 
 const buildDeploymentMeta = (config) => {
@@ -1296,6 +1221,33 @@ const Fallback = () => {
     return { rows, deployments, chartDeployments, latestScores, scoreSummary };
   }, [configMeta.orderMap, scoreHistory]);
 
+  const scoreTrendGroups = useMemo(() => {
+    return scoreGroups
+      .map((virtualModel) => {
+        const groupScores = scores[virtualModel] || {};
+        const items = sortScoreItems(
+          Object.keys(groupScores)
+          .map((deploymentId) => {
+            const value = Number(groupScores[deploymentId]);
+            return Number.isFinite(value)
+              ? {
+                  deploymentId,
+                  value,
+                }
+              : null;
+          })
+          .filter(Boolean)
+        )
+          .slice(0, SCORE_CHART_VISIBLE_LIMIT);
+
+        return {
+          virtualModel,
+          items,
+        };
+      })
+      .filter((group) => group.items.length > 0);
+  }, [scoreGroups, scores]);
+
   const runDeploymentAction = async (deploymentId, action) => {
     const actionKey = `${deploymentId}:${action}`;
     setActingDeployment(actionKey);
@@ -1392,9 +1344,12 @@ const Fallback = () => {
                         : ''
                     }`}
                   >
+                   <Table.Cell>
+                     <strong>{row.deployment_id}</strong>
+                     <div className='fallback-muted'>{row.virtual_models}</div>
+                   </Table.Cell>
                     <Table.Cell>
                       <strong>{row.deployment_id}</strong>
-                      <div className='fallback-muted'>{row.virtual_models}</div>
                     </Table.Cell>
                     <Table.Cell>
                       <span className='fallback-code-text'>
@@ -1801,15 +1756,27 @@ const Fallback = () => {
           <h2>排序分数</h2>
           <span>每个虚拟模型内按当前智能排序分数从高到低展示。</span>
         </div>
+        <Button
+          basic
+          icon
+          labelPosition='left'
+          size='small'
+          loading={loading}
+          disabled={loading}
+          onClick={() => loadPanel(true)}
+        >
+          <Icon name='refresh' />
+          刷新
+        </Button>
       </div>
       <Card fluid className='fallback-score-trend-card'>
         <Card.Content>
           <div className='fallback-score-card-head'>
             <div className='fallback-score-card-title'>
-              <Card.Header>分数趋势</Card.Header>
+              <Card.Header>分数排序</Card.Header>
               {scoreTrend.rows.length > 0 && (
                 <span>
-                  最近 {formatNumber(scoreTrend.rows.length)} 个时间点
+                  按综合得分从高到低排序
                 </span>
               )}
             </div>
@@ -1821,170 +1788,83 @@ const Fallback = () => {
               </div>
             )}
           </div>
-          {scoreTrend.rows.length === 0 ? (
+          {scoreTrendGroups.length === 0 ? (
             <Message>暂无排序分数历史</Message>
           ) : (
-            <>
-              <div className='fallback-score-chart'>
-                <ResponsiveContainer width='100%' height='100%'>
-                  <LineChart
-                    data={scoreTrend.rows}
-                    margin={{ top: 12, right: 18, left: 4, bottom: 2 }}
-                  >
-                    <CartesianGrid
-                      strokeDasharray='3 3'
-                      stroke='#e3e8ef'
-                      vertical={SCORE_CHART_CONFIG.grid.vertical}
-                      horizontal={SCORE_CHART_CONFIG.grid.horizontal}
-                      opacity={SCORE_CHART_CONFIG.grid.opacity}
-                    />
-                    <XAxis
-                      dataKey='time'
-                      minTickGap={32}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: '#667085', fontSize: 12 }}
-                      tickMargin={10}
-                    />
-                    <YAxis
-                      width={42}
-                      domain={[0, 100]}
-                      ticks={[0, 25, 50, 75, 100]}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fill: '#667085', fontSize: 12 }}
-                      tickFormatter={(value) => Number(value).toFixed(0)}
-                      tickMargin={8}
-                    />
-                    <Tooltip
-                      content={renderScoreTooltip}
-                      cursor={{ stroke: '#98a2b3', strokeDasharray: '4 4' }}
-                    />
-                    {scoreTrend.chartDeployments.map((deploymentId, index) => (
-                      <Line
-                        key={deploymentId}
-                        type='linear'
-                        dataKey={(row) => row.values[deploymentId]}
-                        name={deploymentId}
-                        stroke={SCORE_LINE_COLORS[index % SCORE_LINE_COLORS.length]}
-                        strokeWidth={SCORE_CHART_CONFIG.line.strokeWidth}
-                        dot={SCORE_CHART_CONFIG.line.dot}
-                        activeDot={SCORE_CHART_CONFIG.line.activeDot}
-                        strokeLinecap='round'
-                        strokeLinejoin='round'
-                        connectNulls
-                        isAnimationActive
-                        animationDuration={450}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-              {scoreTrend.latestScores.length > 0 && (
-                <div className='fallback-score-series'>
-                  {scoreTrend.latestScores.map((item, index) => (
-                    <span
-                      className='fallback-score-series-item'
-                      key={item.deploymentId}
-                      style={{
-                        '--score-color':
-                          SCORE_LINE_COLORS[index % SCORE_LINE_COLORS.length],
-                      }}
-                    >
-                      <span className='fallback-score-series-color' />
-                      <span className='fallback-score-series-name'>
-                        {item.deploymentId}
-                      </span>
-                      <strong>{item.value.toFixed(1)}</strong>
-                    </span>
-                  ))}
-                </div>
-              )}
-            </>
+            <div className='fallback-score-trend-rank'>
+              {scoreTrendGroups.map((group) => (
+                <section
+                  className='fallback-score-trend-group'
+                  key={group.virtualModel}
+                >
+                  <div className='fallback-score-trend-group-head'>
+                    <strong>{group.virtualModel}</strong>
+                    <span>{formatNumber(group.items.length)} 个部署</span>
+                  </div>
+                  {group.items.map((item, index) => {
+                    const deltaMeta = getScoreDeltaMeta(
+                      scoreTrend.rows,
+                      item.deploymentId
+                    );
+                    const series = getScoreSeriesPoints(
+                      scoreTrend.rows,
+                      item.deploymentId,
+                      item.value
+                    );
+                    const rankClass =
+                      index === 0
+                        ? 'gold'
+                        : index === 1
+                        ? 'silver'
+                        : index === 2
+                        ? 'bronze'
+                        : 'normal';
+
+                    return (
+                      <article
+                        className={`fallback-score-trend-row ${
+                          index === 0 ? 'is-top' : ''
+                        }`}
+                        data-score-band={getScoreBand(item.value)}
+                        key={`${group.virtualModel}:${item.deploymentId}`}
+                      >
+                        <span className={`fallback-rank-badge ${rankClass}`}>
+                          {String(index + 1).padStart(2, '0')}
+                        </span>
+                        <div className='fallback-score-trend-main'>
+                          <div className='fallback-score-trend-name'>
+                            <strong title={item.deploymentId}>
+                              {item.deploymentId}
+                            </strong>
+                            {index === 0 && (
+                              <span className='fallback-score-rank-top'>Top</span>
+                            )}
+                          </div>
+                          <div className='fallback-score-trend-track'>
+                            <span
+                              style={{
+                                width: `${clampScore(item.value)}%`,
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <div className='fallback-score-trend-meta'>
+                          <strong>{item.value.toFixed(1)}</strong>
+                          <span className={deltaMeta?.direction || 'flat'}>
+                            <Icon name={deltaMeta?.icon || 'minus'} />
+                            {deltaMeta?.text || '暂无'}
+                          </span>
+                          <em>{series.length} 点</em>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </section>
+              ))}
+            </div>
           )}
         </Card.Content>
       </Card>
-      {scoreGroups.length === 0 ? (
-        <Message>暂无排序分数</Message>
-      ) : (
-        scoreGroups.map((virtualModel) => {
-          const groupScores = scores[virtualModel] || {};
-          const deploymentIds = Object.keys(groupScores).sort((left, right) => {
-            const scoreDiff = Number(groupScores[right]) - Number(groupScores[left]);
-            if (scoreDiff !== 0) {
-              return scoreDiff;
-            }
-            return left.localeCompare(right, 'zh-CN');
-          });
-          return (
-            <section className='fallback-subsection' key={virtualModel}>
-              <h3>{virtualModel}</h3>
-              <div className='fallback-table-wrap'>
-                <Table compact celled striped>
-                  <Table.Header>
-                    <Table.Row>
-                      <Table.HeaderCell>排名</Table.HeaderCell>
-                      <Table.HeaderCell>部署</Table.HeaderCell>
-                      <Table.HeaderCell>模型</Table.HeaderCell>
-                      <Table.HeaderCell>分数</Table.HeaderCell>
-                    </Table.Row>
-                  </Table.Header>
-                  <Table.Body>
-                    {deploymentIds.length === 0 ? (
-                      <Table.Row>
-                        <Table.Cell colSpan='4' textAlign='center'>
-                          暂无排序分数
-                        </Table.Cell>
-                      </Table.Row>
-                    ) : (
-                      deploymentIds.map((deploymentId, index) => (
-                        <Table.Row key={deploymentId}>
-                          <Table.Cell><span className={`fallback-rank-badge ${index === 0 ? 'gold' : index === 1 ? 'silver' : index === 2 ? 'bronze' : 'normal'}`}>{index + 1}</span></Table.Cell>
-                          <Table.Cell>
-                            <strong>{deploymentId}</strong>
-                          </Table.Cell>
-                          <Table.Cell>
-                            {configMeta.deploymentMap[deploymentId]?.real_model ||
-                              '-'}
-                          </Table.Cell>
-                          <Table.Cell className='fallback-value-cell'>
-                            {(() => {
-                              const currentScore = Number(groupScores[deploymentId]);
-                              const hasScore = Number.isFinite(currentScore);
-                              const deltaMeta = getScoreDeltaMeta(scoreTrend.rows, deploymentId);
-                              return (
-                                <div className='fallback-score-summary'>
-                                  <span className={`fallback-score-summary-value ${hasScore && currentScore >= 90 ? 'fallback-score-high' : hasScore && currentScore < 60 ? 'fallback-score-low' : ''}` }>
-                                    {hasScore ? currentScore.toFixed(2) : '-'}
-                                  </span>
-                                  <ScoreMiniTrend
-                                    rows={scoreTrend.rows}
-                                    deploymentId={deploymentId}
-                                    score={currentScore}
-                                    color={
-                                      SCORE_LINE_COLORS[
-                                        index % SCORE_LINE_COLORS.length
-                                      ]
-                                    }
-                                  />
-                                  <span className={`fallback-score-summary-delta ${deltaMeta?.direction || 'flat'}` }>
-                                    <Icon name={deltaMeta?.icon || 'minus'} />
-                                    {deltaMeta?.text || '暂无'}
-                                  </span>
-                                </div>
-                              );
-                            })()}
-                          </Table.Cell>
-                        </Table.Row>
-                      ))
-                    )}
-                  </Table.Body>
-                </Table>
-              </div>
-            </section>
-          );
-        })
-      )}
     </>
   );
 
@@ -2093,7 +1973,7 @@ const Fallback = () => {
                     <span className='fallback-arrow'>-&gt;</span>
                     <strong>{event.to_deployment || '-'}</strong>
                   </Table.Cell>
-                  <Table.Cell>{event.reason || '-'}</Table.Cell>
+                  <Table.Cell>{translateFallbackReason(event.reason)}</Table.Cell>
                   <Table.Cell>
                     <Label
                       color={
@@ -2182,9 +2062,6 @@ const Fallback = () => {
 
   return (
     <div className='fallback-page'>
-      <div className='fallback-page-header'>
-        <h1>Fallback 面板</h1>
-      </div>
       <section className='fallback-guide-panel' id='fallback-guide'>
         <div className='fallback-guide-head'>
           <div>
@@ -2196,15 +2073,13 @@ const Fallback = () => {
           <Button
             type='button'
             basic
-            icon
-            labelPosition='left'
             size='small'
             aria-expanded={guideOpen}
             aria-controls='fallback-guide-content'
             onClick={() => setGuideOpen((open) => !open)}
           >
-            <Icon name={guideOpen ? 'angle up' : 'angle down'} />
             {guideOpen ? '收起说明' : '首次配置看这里'}
+            <Icon name={guideOpen ? 'angle up' : 'arrow right'} />
           </Button>
         </div>
         {guideOpen && (
@@ -2236,7 +2111,6 @@ const Fallback = () => {
           <p>{activePanelItem.description}</p>
           <div className='fallback-page-kicker'>
             <span>{activePanelItem.title}</span>
-            <span>{activePanelItem.metric}</span>
           </div>
         </div>
         <div className='fallback-header-actions'>
@@ -2245,18 +2119,24 @@ const Fallback = () => {
             {lastUpdated ? formatTime(lastUpdated) : '-'}
           </span>
           <span>自动刷新：{formatInterval(refreshInterval)}</span>
-          <Button
-            as='a'
-            href='#fallback-guide'
-            basic
-            icon
-            labelPosition='left'
-            size='small'
-            onClick={() => setGuideOpen(true)}
-          >
-            <Icon name='book' />
-            功能说明
-          </Button>
+          <Popup
+            content='功能说明'
+            position='bottom center'
+            trigger={
+              <Button
+                as='a'
+                href='#fallback-guide'
+                basic
+                icon
+                size='small'
+                className='fallback-help-trigger'
+                aria-label='功能说明'
+                onClick={() => setGuideOpen(true)}
+              >
+                <Icon name='hand pointer outline' />
+              </Button>
+            }
+          />
           <Button
             basic
             icon
@@ -2278,6 +2158,7 @@ const Fallback = () => {
               activePanel === item.key ? 'active' : ''
             }`}
             style={{ '--panel-accent': item.accent }}
+            title={item.description}
           >
             <span className='fallback-nav-icon'>
               <Icon name={item.icon} />
@@ -2285,13 +2166,8 @@ const Fallback = () => {
             <span className='fallback-nav-content'>
               <span className='fallback-nav-top'>
                 <strong>{item.title}</strong>
-                <small>每 {formatInterval(PANEL_REFRESH_INTERVALS[item.key])}</small>
+                <span className='fallback-nav-refresh-badge'>每 {formatInterval(PANEL_REFRESH_INTERVALS[item.key])}</span>
               </span>
-              <span className='fallback-nav-subtitle'>{item.subtitle}</span>
-              <span className='fallback-nav-description'>
-                {item.description}
-              </span>
-              <span className='fallback-nav-foot'>{item.metric}</span>
             </span>
           </Link>
         ))}

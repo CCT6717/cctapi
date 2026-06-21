@@ -238,13 +238,13 @@ func (am *AlertManager) checkDeployment(id string, dep DeploymentConfig, alertCf
 	}
 
 	// Check cooldown
-	if state.CooldownUntil != nil && state.CooldownUntil.After(time.Now()) {
+	if cooldownUntil, _, err := GetDeploymentCooldown(id); err == nil && cooldownUntil != nil && cooldownUntil.After(time.Now()) {
 		if alertCfg.NotifyOnExhausted {
 			am.fireAlert(AlertEvent{
 				DeploymentID: id,
 				Level:        AlertWarning,
 				Type:         AlertCooldown,
-				Message:      fmt.Sprintf("deployment %s cooling down until %s", id, state.CooldownUntil.Format(time.RFC3339)),
+				Message:      fmt.Sprintf("deployment %s cooling down until %s", id, cooldownUntil.Format(time.RFC3339)),
 				UsedTokens:   used,
 				DailyLimit:   limit,
 				Percentage:   pct,
@@ -465,7 +465,7 @@ func GetAlertStatus() []map[string]interface{} {
 		if state.ExhaustedUntil != nil && state.ExhaustedUntil.After(time.Now()) {
 			alertLevel = "critical"
 			alertType = "exhausted"
-		} else if state.CooldownUntil != nil && state.CooldownUntil.After(time.Now()) {
+		} else if cooldownUntil, _, err := GetDeploymentCooldown(id); err == nil && cooldownUntil != nil && cooldownUntil.After(time.Now()) {
 			alertLevel = "warning"
 			alertType = "cooldown"
 		} else if dep.DailyLimitTokens > 0 && dep.HardLimitRatio > 0 && pct >= dep.HardLimitRatio*100 {
@@ -493,7 +493,7 @@ func GetAlertStatus() []map[string]interface{} {
 			"alert_type":              alertType,
 			"silenced":                silenced,
 			"exhausted_until":         state.ExhaustedUntil,
-			"cooldown_until":          state.CooldownUntil,
+			"cooldown_until":          func() *time.Time { cooldownUntil, _, _ := GetDeploymentCooldown(id); return cooldownUntil }(),
 		}
 		result = append(result, entry)
 	}

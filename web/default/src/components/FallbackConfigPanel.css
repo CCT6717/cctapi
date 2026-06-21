@@ -40,7 +40,18 @@
 }
 
 .fallback-config-actions .ui.button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  min-height: 34px !important;
+  line-height: 1 !important;
   margin: 0 !important;
+}
+
+.fallback-config-actions .ui.button .icon {
+  margin: 0 !important;
+  line-height: 1 !important;
 }
 
 .fallback-virtual-list {
@@ -60,6 +71,32 @@
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
+}
+
+.fallback-virtual-summary-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fallback-virtual-summary-actions .ui.label {
+  margin: 0 !important;
+  line-height: 1.3;
+}
+
+.fallback-virtual-summary-actions .ui.button {
+  width: 32px !important;
+  height: 32px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #ffffff !important;
+}
+
+.fallback-virtual-summary-actions .ui.button .icon {
+  margin: 0 !important;
 }
 
 .fallback-collapse-button.ui.button {
@@ -110,71 +147,16 @@
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
-  min-height: 38px;
+  gap: 8px;
+  min-height: 34px;
 }
 
 .fallback-routing-panel {
-  display: grid;
-  grid-template-columns: minmax(240px, 0.82fr) minmax(360px, 1.18fr);
-  align-items: stretch;
-  gap: 12px;
   margin: 12px 0 10px;
   padding: 12px;
   border: 1px solid #d9e0ea;
   border-radius: 8px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
-}
-
-.fallback-routing-summary {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  align-items: center;
-  gap: 12px;
-  min-width: 0;
-  padding: 10px;
-  border: 1px solid #edf1f5;
-  border-radius: 8px;
-  background: #ffffff;
-}
-
-.fallback-routing-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 8px;
-  background: #eff6ff;
-  color: #2563eb;
-}
-
-.fallback-routing-icon.teal {
-  background: #ecfdfa;
-  color: #0f9f9a;
-}
-
-.fallback-routing-icon .icon {
-  margin: 0 !important;
-  font-size: 17px;
-}
-
-.fallback-routing-summary strong,
-.fallback-routing-summary span {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
-.fallback-routing-summary strong {
-  color: #172033;
-  font-size: 13px;
-}
-
-.fallback-routing-summary span {
-  margin-top: 3px;
-  color: #667085;
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 .fallback-routing-actions {
@@ -187,9 +169,9 @@
 
 .fallback-routing-mode-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(150px, 1fr));
+  grid-template-columns: repeat(3, minmax(150px, 1fr));
   gap: 10px;
-  width: min(100%, 520px);
+  width: 100%;
 }
 
 .fallback-routing-option {
@@ -236,8 +218,15 @@
   box-shadow: inset 0 0 0 1px rgba(15, 159, 154, 0.12);
 }
 
+.fallback-routing-option.active.purple {
+  border-color: #7c3aed;
+  background: #f5f3ff;
+  box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.12);
+}
+
 .fallback-routing-option.active.blue::before { background: #2563eb; }
 .fallback-routing-option.active.teal::before { background: #0f9f9a; }
+.fallback-routing-option.active.purple::before { background: #7c3aed; }
 
 .fallback-routing-option-head {
   display: flex;
@@ -280,6 +269,11 @@
   color: #0f9f9a;
 }
 
+.fallback-routing-option.active.purple .fallback-routing-current {
+  border-color: rgba(124, 58, 237, 0.24);
+  color: #7c3aed;
+}
+
 .fallback-routing-edit.ui.button {
   flex: 0 0 auto;
   margin: 0 !important;
@@ -288,30 +282,75 @@
 .fallback-state-actions {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  min-height: 32px;
+  flex: 0 0 auto;
 }
 
 .fallback-order-actions {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  min-height: 32px;
+  flex: 0 0 auto;
 }
 
-.fallback-state-actions .ui.button {
-  width: 32px;
-  height: 32px;
+.fallback-state-actions .ui.button,
+.fallback-order-actions .ui.button,
+.fallback-virtual-controls .ui.button,
+.fallback-deployment-controls > .ui.button {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 32px;
+  width: 32px !important;
+  height: 32px !important;
+  min-width: 32px !important;
   padding: 0 !important;
+  line-height: 1 !important;
 }
 
-.fallback-order-actions .ui.button {
-  width: 32px;
-  height: 32px;
-  padding: 0 !important;
+.fallback-state-actions .ui.button .icon,
+.fallback-order-actions .ui.button .icon,
+.fallback-virtual-controls .ui.button .icon,
+.fallback-deployment-controls > .ui.button .icon {
+  margin: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  line-height: 1 !important;
 }
 
 .fallback-virtual-controls .ui.button,
 .fallback-deployment-controls .ui.button {
   margin: 0 !important;
+}
+
+.fallback-deployment-controls > .ui.checkbox,
+.fallback-virtual-controls > .ui.checkbox {
+  display: inline-flex !important;
+  align-items: center !important;
+  min-height: 32px;
+  margin: 0 !important;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.fallback-deployment-controls > .ui.checkbox.toggle label,
+.fallback-virtual-controls > .ui.checkbox.toggle label {
+  padding-top: 0 !important;
+  padding-bottom: 0 !important;
+  line-height: 32px !important;
+}
+
+.fallback-deployment-controls {
+  flex-wrap: nowrap;
+}
+
+.fallback-deployment-controls > .ui.button[color='red'],
+.fallback-deployment-controls > .ui.button.red {
+  flex: 0 0 32px;
 }
 
 .fallback-deployment-list {
@@ -325,6 +364,12 @@
   border: 1px solid #d9e0ea;
   border-radius: 8px;
   background: #ffffff;
+}
+
+.fallback-deployment-panel.fixed-active {
+  border-color: #c4b5fd;
+  background: linear-gradient(90deg, #f5f3ff 0%, #ffffff 72%);
+  box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.08);
 }
 
 .fallback-deployment-heading {
@@ -364,6 +409,26 @@
   margin-top: 12px;
   padding-top: 12px;
   border-top: 1px solid #edf1f5;
+}
+
+.fallback-config-guard {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 9px 10px;
+  border: 1px solid #dbeafe;
+  border-radius: 8px;
+  color: #475569;
+  background: #eff6ff;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.fallback-config-guard .icon {
+  flex: 0 0 auto;
+  margin: 2px 0 0 !important;
+  color: #2563eb;
 }
 
 .fallback-test-result {
@@ -407,6 +472,10 @@
 
   .fallback-virtual-summary .ui.label,
   .fallback-deployment-controls {
+    grid-column: 2;
+  }
+
+  .fallback-virtual-summary-actions {
     grid-column: 2;
   }
 

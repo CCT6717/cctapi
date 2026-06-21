@@ -85,6 +85,9 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	if request == nil {
 		return nil, errors.New("request is nil")
 	}
+	if a.ChannelType == channeltype.OpenAICompatible {
+		sanitizeOpenAICompatibleRequest(request)
+	}
 	if request.Stream {
 		// always return usage in stream mode
 		if request.StreamOptions == nil {
@@ -93,6 +96,49 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		request.StreamOptions.IncludeUsage = true
 	}
 	return request, nil
+}
+
+func sanitizeOpenAICompatibleRequest(request *model.GeneralOpenAIRequest) {
+	for i := range request.Messages {
+		request.Messages[i].Content = stripCacheControlFromContent(request.Messages[i].Content)
+	}
+}
+
+func stripCacheControlFromContent(content any) any {
+	switch parts := content.(type) {
+	case []any:
+		cleaned := make([]any, 0, len(parts))
+		for _, part := range parts {
+			cleaned = append(cleaned, stripCacheControlFromContentPart(part))
+		}
+		return cleaned
+	case []map[string]any:
+		cleaned := make([]map[string]any, 0, len(parts))
+		for _, part := range parts {
+			cleanedPart, ok := stripCacheControlFromContentPart(part).(map[string]any)
+			if ok {
+				cleaned = append(cleaned, cleanedPart)
+			}
+		}
+		return cleaned
+	default:
+		return content
+	}
+}
+
+func stripCacheControlFromContentPart(part any) any {
+	partMap, ok := part.(map[string]any)
+	if !ok {
+		return part
+	}
+	cleaned := make(map[string]any, len(partMap))
+	for key, value := range partMap {
+		if key == "cache_control" {
+			continue
+		}
+		cleaned[key] = value
+	}
+	return cleaned
 }
 
 func (a *Adaptor) ConvertImageRequest(request *model.ImageRequest) (any, error) {

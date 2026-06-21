@@ -1,7 +1,9 @@
 package fallback
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/songquanpeng/one-api/model"
+	"gorm.io/gorm/clause"
 )
 
 type DeploymentState struct {
@@ -30,6 +33,15 @@ type DeploymentState struct {
 	UpdatedAt            time.Time  `gorm:"column:updated_at"`
 }
 
+type DeploymentCooldownState struct {
+	Id            int        `gorm:"primaryKey"`
+	DeploymentID  string     `gorm:"uniqueIndex"`
+	Reason        string     `gorm:"column:reason"`
+	CooldownUntil *time.Time `gorm:"column:cooldown_until"`
+	CreatedAt     time.Time  `gorm:"column:created_at"`
+	UpdatedAt     time.Time  `gorm:"column:updated_at"`
+}
+
 type UsageInfo struct {
 	PromptTokens     int
 	CompletionTokens int
@@ -47,6 +59,9 @@ func InitStateStore() error {
 		logger.SysError(fmt.Sprintf("state migration failed: %v", err))
 	}
 	if err := model.DB.AutoMigrate(&DeploymentState{}); err != nil {
+		return err
+	}
+	if err := model.DB.AutoMigrate(&DeploymentCooldownState{}); err != nil {
 		return err
 	}
 	if err := InitAlertHistoryStore(); err != nil {
@@ -111,7 +126,8 @@ func GetDeploymentState(deploymentID string, date string) (*DeploymentState, err
 // EnsureDeploymentState ensures deployment state exists, creating if necessary
 func EnsureDeploymentState(deploymentID string, date string) (*DeploymentState, error) {
 	state, err := GetDeploymentState(deploymentID, date)
-	if err == gorm.ErrRecordNotFound {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		now := time.Now().UTC()
 		state = &DeploymentState{
 			DeploymentID:         deploymentID,
 			Date:                 date,
@@ -125,13 +141,17 @@ func EnsureDeploymentState(deploymentID string, date string) (*DeploymentState, 
 			CooldownUntil:        nil,
 			LastErrorCode:        "",
 			LastErrorMessage:     "",
-			CreatedAt:            time.Now().UTC(),
-			UpdatedAt:            time.Now().UTC(),
+			CreatedAt:            now,
+			UpdatedAt:            now,
 		}
-		err = model.DB.Create(state).Error
+		err = model.DB.Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "deployment_id"}, {Name: "date"}},
+			DoNothing: true,
+		}).Create(state).Error
 		if err != nil {
 			return nil, err
 		}
+		return GetDeploymentState(deploymentID, date)
 	} else if err != nil {
 		return nil, err
 	}
@@ -152,6 +172,13 @@ func IsDeploymentAvailable(dep DeploymentConfig) (bool, string) {
 
 	now := time.Now().UTC()
 
+	if cooldownUntil, reason, err := GetDeploymentCooldown(dep.ID); err == nil && cooldownUntil != nil && cooldownUntil.After(now) {
+		if reason == "" {
+			reason = "deployment cooling down"
+		}
+		return false, fmt.Sprintf("%s until %s", reason, cooldownUntil.Format(time.RFC3339))
+	}
+
 	// Check exhausted state
 	if state.ExhaustedUntil != nil && state.ExhaustedUntil.After(now) {
 		return false, fmt.Sprintf("deployment exhausted until %s", state.ExhaustedUntil.Format(time.RFC3339))
@@ -163,7 +190,8 @@ func IsDeploymentAvailable(dep DeploymentConfig) (bool, string) {
 	}
 
 	// Check soft limit (preemptive skip: redirect to next deployment before hitting hard limit)
-	if dep.DailyLimitTokens > 0 && dep.SoftLimitRatio > 0 {
+	// Skip soft limit for free quota mode (openrouter / free tiers): only switch on actual errors, not preemptive limit checks
+	if dep.QuotaMode != "free" && dep.DailyLimitTokens > 0 && dep.SoftLimitRatio > 0 {
 		softLimit := int64(float64(dep.DailyLimitTokens) * dep.SoftLimitRatio)
 		if state.UsedTotalTokens >= softLimit {
 			logger.SysLog(fmt.Sprintf("[fallback] deployment %s soft-limited (skip to next): %d/%d (%.1f%%)",
@@ -177,6 +205,10 @@ func IsDeploymentAvailable(dep DeploymentConfig) (bool, string) {
 	if dep.DailyLimitTokens > 0 && dep.HardLimitRatio > 0 {
 		hardLimit := int64(float64(dep.DailyLimitTokens) * dep.HardLimitRatio)
 		if state.UsedTotalTokens >= hardLimit {
+			logger.SysLog(fmt.Sprintf("[fallback] deployment %s hard-limited: %d/%d (%.1f%% >= %.0f%% hard)",
+				dep.ID, state.UsedTotalTokens, dep.DailyLimitTokens,
+				float64(state.UsedTotalTokens)/float64(dep.DailyLimitTokens)*100,
+				dep.HardLimitRatio*100))
 			return false, fmt.Sprintf("deployment reached hard daily token limit: %d/%d", state.UsedTotalTokens, dep.DailyLimitTokens)
 		}
 	}
@@ -247,17 +279,74 @@ func MarkDeploymentExhausted(deploymentID string, reason string, until time.Time
 
 // MarkDeploymentCooldown marks deployment as cooling down until specific time
 func MarkDeploymentCooldown(deploymentID string, reason string, until time.Time) error {
-	state, err := EnsureDeploymentState(deploymentID, todayString())
+	return saveDeploymentCooldown(deploymentID, reason, until)
+}
+
+// MarkDeploymentCooldownForDuration marks deployment as cooling down for a fixed duration.
+func MarkDeploymentCooldownForDuration(deploymentID string, reason string, duration time.Duration) error {
+	if duration <= 0 {
+		return nil
+	}
+	return saveDeploymentCooldown(deploymentID, reason, time.Now().Add(duration))
+}
+
+// IsDoubaoDeployment returns true when the deployment belongs to Doubao models.
+func IsDoubaoDeployment(dep DeploymentConfig) bool {
+	realModel := strings.ToLower(strings.TrimSpace(dep.RealModel))
+	id := strings.ToLower(strings.TrimSpace(dep.ID))
+	return strings.Contains(realModel, "doubao") || strings.Contains(id, "doubao")
+}
+
+func saveDeploymentCooldown(deploymentID string, reason string, until time.Time) error {
+	state, err := EnsureDeploymentCooldownState(deploymentID)
 	if err != nil {
 		return err
 	}
 
+	state.Reason = reason
 	state.CooldownUntil = &until
-	state.LastErrorCode = "cooldown"
-	state.LastErrorMessage = fmt.Sprintf("%s: %s", reason, until.Format(time.RFC3339))
 	state.UpdatedAt = time.Now().UTC()
 
 	return model.DB.Save(state).Error
+}
+
+func GetDeploymentCooldown(deploymentID string) (*time.Time, string, error) {
+	state, err := EnsureDeploymentCooldownState(deploymentID)
+	if err != nil {
+		return nil, "", err
+	}
+	return state.CooldownUntil, state.Reason, nil
+}
+
+func EnsureDeploymentCooldownState(deploymentID string) (*DeploymentCooldownState, error) {
+	if model.DB == nil {
+		return nil, fmt.Errorf("database is not initialized")
+	}
+
+	var state DeploymentCooldownState
+	err := model.DB.Where("deployment_id = ?", deploymentID).First(&state).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			now := time.Now().UTC()
+			state = DeploymentCooldownState{
+				DeploymentID:  deploymentID,
+				Reason:        "",
+				CooldownUntil: nil,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+			if err = model.DB.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "deployment_id"}},
+				DoNothing: true,
+			}).Create(&state).Error; err != nil {
+				return nil, err
+			}
+			err = model.DB.Where("deployment_id = ?", deploymentID).First(&state).Error
+			return &state, err
+		}
+		return nil, err
+	}
+	return &state, nil
 }
 
 // todayString returns the quota period date. A period starts at 12:00 UTC+8
@@ -414,4 +503,37 @@ func ClearStickyDeployment(virtualModel string) {
 	stickyDepMu.Lock()
 	defer stickyDepMu.Unlock()
 	delete(stickyDep, virtualModel)
+}
+
+// WarmUpStickyState pre-populates sticky deployment preferences after a restart.
+//
+// Without warm-up, a fresh process has no sticky state, so the first request for each
+// virtual model hits whatever deployment the router picks first (often the same one for
+// all models due to identical sort results). This can cause a brief traffic spike on a
+// single deployment.
+//
+// Warm-up walks each virtual model's deployment list and picks the first available one
+// as the initial sticky target, distributing the initial load across deployments.
+func WarmUpStickyState() {
+	vmNames := GetAllVirtualModelNames()
+	if len(vmNames) == 0 {
+		return
+	}
+
+	warmed := 0
+	for _, vmName := range vmNames {
+		deployments, err := GetDeploymentsForVirtualModel(vmName)
+		if err != nil || len(deployments) == 0 {
+			continue
+		}
+		for _, dep := range deployments {
+			available, _ := IsDeploymentAvailable(dep)
+			if available {
+				SetStickyDeployment(vmName, dep.ID)
+				warmed++
+				break
+			}
+		}
+	}
+	logger.SysLogf("[fallback] warm-up: set initial sticky for %d/%d virtual models", warmed, len(vmNames))
 }

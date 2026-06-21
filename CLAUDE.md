@@ -12,6 +12,90 @@ The user usually works in Chinese and verifies the local app at:
 http://localhost:3007
 ```
 
+## Current Verified Local State
+
+Last locally checked state:
+
+- Project path: `D:\project\cctapi`.
+- Default port: `3007`.
+- Local service helpers exist:
+  - `scripts\start-cctapi.ps1`
+  - `scripts\stop-cctapi.ps1`
+- Current start command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-cctapi.ps1 -NoBrowser
+```
+
+- Current stop command:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\stop-cctapi.ps1
+```
+
+- `http://localhost:3007` was checked locally and returned HTTP 200 while a process was listening on port `3007`.
+- The repository was not clean at the last check: `web/build/default` generated assets were modified and `one-api-check.exe` was untracked. Treat these as likely build/check artifacts unless the user says otherwise.
+
+Recently verified feature locations:
+
+- Structured fallback error classification: `fallback/error.go`; `controller/relay.go` calls `fallback.ClassifyRelayError`.
+- Per-deployment concurrency guard: `fallback/concurrency.go`; relay loop uses `fallback.TryAcquireDeploymentSlot`.
+- Sticky warm-up: `fallback/state.go` contains `WarmUpStickyState`.
+- Fallback history cleanup: `fallback/cleanup.go`; `main.go` calls `fallback.StartHistoryCleanup()`.
+- Fixed routing: `fallback/config.go`, `router/fallback_config.go`, and related tests.
+- Soft limit default: backend config loading defaults `soft_limit_ratio` to `0.95`.
+- Free/upstream-managed quota mode: local token quota is skipped when `quota_mode == "free"` or `daily_limit_tokens == 0`.
+- Doubao 24-hour cooldown: relay code calls `MarkDeploymentCooldownForDuration(..., 24*time.Hour)` for Doubao quota/limit skip paths.
+- Real routed model logging: `model.Log.RealModelName`, `relay/controller/helper.go`, and `web/default/src/components/LogsTable.js`.
+- Default frontend fallback panel: `web/default/src/pages/Fallback/`.
+
+Priority observation points during trial use:
+
+- Usage statistics should show both the virtual model and the actual routed real model, with correct token usage.
+- Doubao quota recovery should be counted from the moment the deployment is skipped, using a relative 24-hour cooldown, not a natural-day reset.
+- OpenRouter/free deployments should not be blocked by local daily quota logic.
+- Fixed routing should stay pinned to the selected deployment and not drift to another deployment.
+- If the virtual model list only shows one model, inspect `data/fallback.json`, fallback config normalization, API filtering, and frontend rendering conditions first.
+
+## Recent SenseNova Fix
+
+On 2026-06-10, channel `商汤2` / model `sensenova-6.7-flash-lite` was fixed for real relay traffic through `core/go`.
+
+What was fixed:
+
+- `controller/relay.go`: non-fallbackable errors must write a JSON response before returning; otherwise clients can see an empty body and fail with `Unexpected end of JSON input`.
+- `fallback/error.go`: provider payloads with `code = "internal_server_error"` should be treated as temporary upstream errors even when the HTTP status is 400. SenseNova wraps upstream 500 this way.
+- `relay/adaptor/openai/adaptor.go`: for generic `OpenAICompatible` channels, strip Anthropic-style `cache_control` fields from `messages.content[]` before sending upstream. SenseNova accepts normal OpenAI content parts but can fail on this extension.
+- `relay/controller/text.go`: debug logs should not print the full converted request body. Log request metadata only, because real requests can contain large prompts and private context.
+- `fallback/state.go`: deployment state creation is idempotent under startup concurrency via `ON CONFLICT DO NOTHING`, preventing `UNIQUE constraint failed: deployment_states.deployment_id, deployment_states.date`.
+- `common/message/email.go`: SMTP address construction uses `net.JoinHostPort`, so IPv6 SMTP hosts are valid.
+
+Current SenseNova config:
+
+- `data/fallback.json` contains deployment `core-go-model-16` for channel `10`, real model `sensenova-6.7-flash-lite`.
+- `core/go` is currently fixed to `core-go-model-16`.
+- Do not add a custom model ratio unless the user asks; falling back to the default ratio is acceptable.
+
+Verification after the fix:
+
+```powershell
+go test ./relay/adaptor/openai ./relay/controller ./fallback/...
+go vet ./...
+go test ./...
+go build -o one-api.exe .
+powershell -ExecutionPolicy Bypass -File scripts\stop-cctapi.ps1
+powershell -ExecutionPolicy Bypass -File scripts\start-cctapi.ps1 -NoBrowser
+```
+
+The local service was restarted on port `3007`, `http://localhost:3007` returned HTTP 200, and the user confirmed SenseNova responded normally.
+
+## Git Convention
+
+- Commit messages must be written in **Chinese**.
+- Do not push to remote without asking.
+- If a commit fails due to hooks, fix and create a **new** commit — do not amend.
+- The user should confirm before any `git push` or force push.
+
 ## Build And Run
 
 Always rebuild the default frontend before rebuilding the Go binary, because the Go server serves the generated `web/build/default` assets.
@@ -37,6 +121,20 @@ cd D:\project\cctapi\web\default; npm run build
 ```
 
 The frontend build has existing ESLint warnings in unrelated files. A successful build with warnings is expected.
+
+## Windows Local Service Helpers
+
+Use the scripts in `scripts/` for local startup:
+
+```powershell
+cd D:\project\cctapi
+powershell -ExecutionPolicy Bypass -File scripts\start-cctapi.ps1
+powershell -ExecutionPolicy Bypass -File scripts\stop-cctapi.ps1
+powershell -ExecutionPolicy Bypass -File scripts\install-cctapi-autostart.ps1
+powershell -ExecutionPolicy Bypass -File scripts\uninstall-cctapi-autostart.ps1
+```
+
+The autostart installer creates a Windows scheduled task named `CCT API Local Server` that runs `scripts/start-cctapi.ps1 -NoBrowser` at user logon.
 
 ## Runtime Files
 
@@ -71,8 +169,8 @@ There is no separate "connectivity test" panel. Connectivity testing lives in th
 
 The model scoring page uses a bounded trend view:
 
-- The large score chart only renders the top scoring deployments, currently capped to avoid noisy multi-line charts.
-- The score table uses compact mini trend bars plus the latest delta instead of the older full-width score bar.
+- The score trend area is no longer a line chart. It is a grouped leaderboard, one group per virtual model, so deployments from `high/auto`, `low/auto`, and `all/auto` are not mixed together.
+- The score table uses compact horizontal leaderboard bars plus the latest delta instead of the older full-width score bar.
 - Real deployment base URLs should be visible in the virtual model edit/detail UI so administrators can identify which upstream each real model uses.
 
 ## Added CCT API Features
@@ -80,7 +178,8 @@ The model scoring page uses a bounded trend view:
 Important additions over upstream One API:
 
 - Virtual models: one exposed model name maps to multiple real upstream deployments.
-- Weighted routing and sequential routing.
+- Weighted routing, sequential routing, and fixed routing.
+- Fixed routing pins a virtual model to one selected real deployment through `fixed_deployment`; runtime upstream errors do not rotate to another deployment unless the administrator changes the fixed target.
 - Sticky routing: after a virtual model selects a healthy deployment, keep using that deployment until quota threshold, hard limit, cooldown, or an upstream error forces a switch. Do not rotate on every request just because another deployment is also available.
 - Per-deployment token quota, soft limit, hard limit, and concurrency limit.
 - Quota modes:
@@ -90,7 +189,7 @@ Important additions over upstream One API:
 - Smart score trend chart for deployment ordering, including compact table trends and a simplified top-deployment chart.
 - Runtime health panel with recent success rate, failure rate, cooldown count, exhausted quota count, and Top failure aggregations.
 - Alert history and fallback switch logs.
-- Frontend validation before saving fallback config.
+- Frontend and backend validation before saving fallback config, including fixed-route target checks.
 - Smoke test script for real client testing.
 
 ## Important Files
@@ -125,6 +224,53 @@ The script checks:
 
 Do not hardcode real tokens in repo files.
 
+## Key Environment Variables
+
+Most settings are controlled via `.env` at the project root:
+
+| Variable | Default | Description |
+|---|---|---|
+| `PORT` | 3007 | Server listen port |
+| `FALLBACK_CONFIG_PATH` | data/fallback.json | Fallback config file |
+| `SESSION_SECRET` | (auto) | Session encryption key |
+| `GIN_MODE` | release | Gin debug/release mode |
+| `GLOBAL_API_RATE_LIMIT` | 480 | Global API rate limit |
+| `ENABLE_METRIC` | false | Enable Prometheus metrics |
+| `THEME` | default | Frontend theme: default/air/berry |
+| `SQLITE_PATH` | one-api.db | SQLite database location |
+| `RELAY_TIMEOUT` | 0 | Relay timeout in seconds |
+| `DEBUG` | false | Enable debug logging |
+| `CHANNEL_TEST_FREQUENCY` | — | Auto test channels (seconds) |
+
+## Frontend Themes
+
+Three themes available, toggled via `THEME` env or admin settings:
+
+| Theme | Framework | Source |
+|---|---|---|
+| `default` | Semantic UI React | `web/default/` |
+| `air` | Semi UI (ByteDance) | `web/air/` |
+| `berry` | MUI (Material) | `web/berry/` |
+
+To build a specific theme:
+```powershell
+cd D:\project\cctapi\web\<theme>
+npm run build
+# Result goes to web/build/<theme>/
+```
+
+## Router Structure (Gin)
+
+| Route | Package | Description |
+|---|---|---|
+| `/api/fallback/*` | `router/fallback.go` | Fallback admin API + built-in HTML pages |
+| `/api/*` | `router/api.go` | Main API (channels, tokens, logs, etc.) |
+| `/relay/*` | `router/relay.go` | Relay proxy endpoints |
+| `/dashboard/*` | `router/dashboard.go` | Dashboard data endpoints |
+| `/web/*` | `router/web.go` | Static files and settings UI |
+
+The fallback router has admin endpoints for reading deployment states, managing cooldown/recover, batch operations, switch logs, alert records, model scores, and config editing.
+
 ## CI
 
 `.github/workflows/ci.yml` includes:
@@ -135,7 +281,63 @@ Do not hardcode real tokens in repo files.
 
 The frontend CI build sets `CI=false` because this inherited codebase has existing ESLint warnings that should not block build verification.
 
-## Footer Attribution
+## Current Fallback Config
+
+The file `data/fallback.json` is intentionally committed as the current working fallback skeleton. It currently uses an object-based config shape:
+
+```json
+{
+  "enabled": true,
+  "virtual_models": {
+    "high/auto": {
+      "enabled": true,
+      "routing_mode": "weighted",
+      "fallback_order": ["doubao-pro", "doubao-code", "doubao-vision", "glm-47"]
+    },
+    "low/auto": {
+      "enabled": true,
+      "routing_mode": "weighted",
+      "fallback_order": [
+        "doubao-lite",
+        "doubao-mini",
+        "doubao-18",
+        "doubao-16",
+        "openrouter-new-free",
+        "openrouter-old",
+        "openrouter-new"
+      ]
+    },
+    "all/auto": {
+      "enabled": true,
+      "routing_mode": "sequential",
+      "fallback_order": [
+        "doubao-code",
+        "doubao-18",
+        "doubao-16",
+        "openrouter-new-free",
+        "openrouter-old",
+        "openrouter-new",
+        "all-auto-model-7"
+      ]
+    }
+  },
+  "deployments": {}
+}
+```
+
+Key fields per virtual model: `enabled`, `routing_mode` (`weighted`, `sequential`, or `fixed`), `fixed_deployment` for fixed routing, and `fallback_order`.
+
+Key fields per deployment: `enabled`, `channel_id`, `real_model`, `priority` (lower = tried first), `weight` (for weighted routing), `daily_limit_tokens` (0 = upstream-managed), `soft_limit_ratio`, `hard_limit_ratio`, `max_concurrent_requests`, `max_context`, and `min_context`.
+
+Current deployment groups:
+
+- `high/auto`: premium/high capability Doubao + GLM group, weighted routing.
+- `low/auto`: lightweight Doubao models plus OpenRouter fallback models, weighted routing.
+- `all/auto`: broad fallback chain, sequential routing. `doubao-pro` is not currently part of `all/auto`.
+
+## Incomplete Features
+
+- **Alert enhancement**: The alerts panel (`/fallback/status` section 4) still needs a "mark all read" button, jump-to-deployment links, and alert rules UI.
 
 Default footer should preserve upstream attribution and add CCT fork attribution:
 

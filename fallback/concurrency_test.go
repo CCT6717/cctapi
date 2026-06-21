@@ -5,7 +5,7 @@ import "testing"
 func resetDeploymentConcurrencyForTest() {
 	deploymentConcurrency.Lock()
 	defer deploymentConcurrency.Unlock()
-	deploymentConcurrency.inFlight = make(map[string]int)
+	deploymentConcurrency.locks = make(map[string]*perDeploymentLock)
 }
 
 func TestTryAcquireDeploymentSlotSkipsWhenLimitReached(t *testing.T) {
@@ -50,4 +50,24 @@ func TestTryAcquireDeploymentSlotUnlimited(t *testing.T) {
 		t.Fatalf("expected unlimited acquire to succeed without tracking, got acquired=%v inFlight=%d", acquired, inFlight)
 	}
 	release()
+}
+
+func TestTryAcquireDifferentDeploymentsDoNotBlock(t *testing.T) {
+	resetDeploymentConcurrencyForTest()
+
+	dep1 := DeploymentConfig{ID: "dep-a", MaxConcurrentRequests: 1}
+	dep2 := DeploymentConfig{ID: "dep-b", MaxConcurrentRequests: 1}
+
+	release1, acquired1, inFlight1 := TryAcquireDeploymentSlot(dep1)
+	if !acquired1 || inFlight1 != 1 {
+		t.Fatalf("dep-a first acquire should succeed, got acquired=%v inFlight=%d", acquired1, inFlight1)
+	}
+	defer release1()
+
+	// dep-b should succeed even though dep-a is at its limit — no cross-deployment blocking
+	release2, acquired2, inFlight2 := TryAcquireDeploymentSlot(dep2)
+	if !acquired2 || inFlight2 != 1 {
+		t.Fatalf("dep-b should not be blocked by dep-a, got acquired=%v inFlight=%d", acquired2, inFlight2)
+	}
+	release2()
 }

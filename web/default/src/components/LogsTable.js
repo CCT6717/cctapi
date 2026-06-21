@@ -313,6 +313,11 @@ const LogsTable = () => {
       <Header as='h3'>
         {t('log.usage_details')}（{t('log.total_quota')}：
         {showStat && renderQuota(stat.quota, t)}
+        {showStat && (
+          <>
+            {' '}| Token：<strong>{stat.token || 0}</strong>
+          </>
+        )}
         {!showStat && (
           <span
             onClick={handleEyeClick}
@@ -450,6 +455,17 @@ const LogsTable = () => {
               {t('log.table.model')}
             </Table.HeaderCell>
             {showUserTokenQuota() && (
+              <Table.HeaderCell
+                style={{ cursor: 'pointer' }}
+                onClick={() => {
+                  sortLog('real_model_name');
+                }}
+                width={2}
+              >
+                真实模型
+              </Table.HeaderCell>
+            )}
+            {showUserTokenQuota() && (
               <>
                 {isAdminUser && (
                   <Table.HeaderCell
@@ -537,6 +553,13 @@ const LogsTable = () => {
                     {log.model_name ? renderColorLabel(log.model_name) : ''}
                   </Table.Cell>
                   {showUserTokenQuota() && (
+                    <Table.Cell>
+                      {log.real_model_name
+                        ? renderColorLabel(log.real_model_name)
+                        : ''}
+                    </Table.Cell>
+                  )}
+                  {showUserTokenQuota() && (
                     <>
                       {isAdminUser && (
                         <Table.Cell>
@@ -577,7 +600,7 @@ const LogsTable = () => {
 
         <Table.Footer>
           <Table.Row>
-            <Table.HeaderCell colSpan={'10'}>
+            <Table.HeaderCell colSpan={'11'}>
               <Select
                 placeholder={t('log.type.select')}
                 options={LOG_OPTIONS}

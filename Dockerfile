@@ -42,6 +42,6 @@ RUN apk add --no-cache ca-certificates tzdata
 
 COPY --from=builder2 /build/one-api /
 
-EXPOSE 3006
+EXPOSE 3007
 WORKDIR /data
 ENTRYPOINT ["/one-api"]

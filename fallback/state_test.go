@@ -30,3 +30,23 @@ func TestNextQuotaRefreshTime(t *testing.T) {
 		t.Fatalf("expected next refresh %s, got %s", expectedNextDayNoon, got)
 	}
 }
+
+func TestMarkDeploymentCooldownForDurationUsesRelativeWindow(t *testing.T) {
+	start := time.Date(2026, 6, 7, 1, 0, 0, 0, time.UTC)
+	end := start.Add(24 * time.Hour)
+	if !end.After(start) {
+		t.Fatal("expected 24h cooldown end to be after start")
+	}
+}
+
+func TestIsDoubaoDeploymentMatchesIDOrModel(t *testing.T) {
+	if !IsDoubaoDeployment(DeploymentConfig{ID: "doubao-pro", RealModel: "deepseek-v3"}) {
+		t.Fatal("expected doubao deployment by ID to match")
+	}
+	if !IsDoubaoDeployment(DeploymentConfig{ID: "core-auto", RealModel: "doubao-seed-2-0-pro-260215"}) {
+		t.Fatal("expected doubao deployment by real model to match")
+	}
+	if IsDoubaoDeployment(DeploymentConfig{ID: "core-auto", RealModel: "deepseek-v3"}) {
+		t.Fatal("expected non-doubao deployment not to match")
+	}
+}

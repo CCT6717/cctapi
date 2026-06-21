@@ -1,11 +1,227 @@
+/* ============================================================
+   CCT API Fallback Panel — Modern Dashboard Design
+   Inspired by Vercel Dashboard / Linear design language
+   ============================================================ */
+
+/* --- CSS Variables --- */
+:root {
+  --fb-primary: #3b82f6;
+  --fb-primary-light: rgba(59, 130, 246, 0.08);
+  --fb-primary-lighter: #eff6ff;
+  --fb-purple: #8b5cf6;
+  --fb-gradient: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  --fb-bg: #f8fafc;
+  --fb-surface: #ffffff;
+  --fb-border: #e3e8ef;
+  --fb-border-light: #eef2f6;
+  --fb-border-medium: #d9e0ea;
+  --fb-text: #172033;
+  --fb-text-secondary: #53627a;
+  --fb-text-muted: #8a9bb5;
+  --fb-text-light: #94a3b8;
+  --fb-shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.05);
+  --fb-shadow-md: 0 4px 12px rgba(16, 24, 40, 0.07);
+  --fb-shadow-lg: 0 12px 28px rgba(16, 24, 40, 0.10);
+  --fb-radius-sm: 8px;
+  --fb-radius-md: 10px;
+  --fb-radius-lg: 12px;
+  --fb-radius-xl: 14px;
+  --fb-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --fb-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+/* --- Font Stack - Inter (loaded via public/index.html) + system CJK --- */
+
+/* --- Global Reset in Fallback Context --- */
+.fallback-page,
+.fallback-page *,
+.fallback-page *::before,
+.fallback-page *::after {
+  box-sizing: border-box;
+}
+.fallback-page {
+  font-family: var(--fb-font-sans);
+}
+
+/* --- Custom Scrollbar --- */
+.fallback-page ::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+.fallback-page ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.fallback-page ::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cbd5e1;
+}
+.fallback-page ::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* --- Focus Visible --- */
+.fallback-page *:focus-visible {
+  outline: 2px solid var(--fb-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ============================================================
+   Page Layout
+   ============================================================ */
 .fallback-page {
   max-width: 1600px;
   margin: -15px auto 40px;
   padding: 20px 24px 40px;
-  color: #172033;
-  background: #f8fafc;
+  color: var(--fb-text);
+  background: var(--fb-bg);
+  transition: all 0.2s ease;
 }
 
+/* ============================================================
+   Announcement / Guide Panel
+   ============================================================ */
+.fallback-guide-panel {
+  position: relative;
+  margin-bottom: 14px;
+  padding: 12px 16px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-primary-light);
+  box-shadow: var(--fb-shadow-sm);
+}
+
+.fallback-guide-panel::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: 0;
+  bottom: 8px;
+  width: 4px;
+  background: var(--fb-gradient);
+  border-radius: 0 2px 2px 0;
+}
+
+.fallback-guide-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-left: 14px;
+}
+
+.fallback-guide-head h2 {
+  margin: 0;
+  color: var(--fb-primary);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1.3;
+  letter-spacing: 0;
+}
+
+.fallback-guide-head p {
+  margin: 5px 0 0;
+  color: var(--fb-text-light);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fallback-guide-head .ui.button {
+  flex: 0 0 auto;
+  margin: 0 !important;
+  height: 36px;
+  padding: 0 16px !important;
+  border-radius: 999px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 36px !important;
+  background: var(--fb-surface) !important;
+  border: 1px solid var(--fb-border) !important;
+  color: var(--fb-text) !important;
+  transition: all 0.2s ease !important;
+}
+
+.fallback-guide-head .ui.button:hover {
+  background: var(--fb-primary-lighter) !important;
+  border-color: var(--fb-primary) !important;
+  color: var(--fb-primary) !important;
+}
+
+.fallback-guide-head .ui.button .icon {
+  margin-right: 4px !important;
+}
+
+.fallback-guide-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.fallback-guide-card {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr);
+  gap: 12px;
+  min-height: 196px;
+  padding: 14px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: linear-gradient(180deg, var(--fb-surface) 0%, #fbfcfe 100%);
+  transition: all 0.2s ease;
+}
+
+.fallback-guide-card:hover {
+  border-color: var(--fb-border-medium);
+  box-shadow: var(--fb-shadow-sm);
+}
+
+.fallback-guide-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  color: var(--fb-primary);
+  background: var(--fb-bg);
+  transition: all 0.2s ease;
+}
+
+.fallback-guide-card:hover .fallback-guide-icon {
+  background: var(--fb-primary-lighter);
+  border-color: var(--fb-primary);
+}
+
+.fallback-guide-icon .icon {
+  margin: 0;
+  font-size: 17px;
+}
+
+.fallback-guide-card h3 {
+  margin: 0 0 8px;
+  color: var(--fb-text);
+  font-size: 15px;
+  line-height: 1.35;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+
+.fallback-guide-card ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--fb-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.fallback-guide-card li + li {
+  margin-top: 6px;
+}
+
+/* ============================================================
+   Fallback Header / Title Area
+   ============================================================ */
 .fallback-page-header {
   display: flex;
   align-items: flex-end;
@@ -13,22 +229,28 @@
   gap: 18px;
   padding: 18px;
   margin-bottom: 16px;
-  border: 1px solid #d9e0ea;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  border: 1px solid var(--fb-border-medium);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+  transition: all 0.2s ease;
 }
 
 .fallback-page-header h1 {
   margin: 0;
-  font-size: 26px;
+  font-size: 24px;
+  font-weight: 700;
   line-height: 1.25;
-  letter-spacing: 0;
+  letter-spacing: -0.3px;
+  background: var(--fb-gradient);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .fallback-page-header p {
   margin: 6px 0 0;
-  color: #53627a;
+  color: var(--fb-text-secondary);
   max-width: 780px;
   line-height: 1.5;
 }
@@ -43,14 +265,24 @@
 .fallback-page-kicker span {
   display: inline-flex;
   align-items: center;
-  min-height: 24px;
-  padding: 3px 9px;
-  border: 1px solid #d9e0ea;
+  min-height: 26px;
+  padding: 3px 12px 3px 8px;
+  border: none;
   border-radius: 999px;
-  color: #344054;
-  background: #f8fafc;
+  color: var(--fb-primary);
+  background: var(--fb-primary-lighter);
   font-size: 12px;
   font-weight: 600;
+  gap: 6px;
+}
+
+.fallback-page-kicker span::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fb-primary);
+  flex-shrink: 0;
 }
 
 .fallback-header-actions {
@@ -59,57 +291,124 @@
   align-items: center;
   justify-content: flex-end;
   gap: 10px;
-  color: #53627a;
+  color: var(--fb-text-secondary);
 }
 
+.fallback-header-actions span {
+  font-family: var(--fb-font-mono);
+  font-size: 12px;
+  color: var(--fb-text-muted);
+}
+
+.fallback-header-actions .ui.button.basic {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 5px !important;
+  height: 34px !important;
+  padding: 0 14px !important;
+  border-radius: var(--fb-radius-sm) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  border: 1px solid var(--fb-border) !important;
+  color: var(--fb-text-secondary) !important;
+  background: transparent !important;
+  transition: all 0.2s ease !important;
+  line-height: 1 !important;
+}
+
+.fallback-header-actions .ui.button.basic:hover {
+  background: var(--fb-bg) !important;
+  border-color: var(--fb-border-medium) !important;
+  color: var(--fb-text) !important;
+}
+
+.fallback-header-actions .ui.button.basic .icon {
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+.fallback-header-actions .ui.button.basic.icon {
+  width: 34px !important;
+  padding: 0 !important;
+  justify-content: center !important;
+}
+
+.fallback-header-actions .fallback-help-trigger.ui.button.basic.icon {
+  width: 34px !important;
+  min-width: 34px !important;
+  overflow: hidden !important;
+}
+
+@keyframes fb-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.fallback-header-actions .ui.button.basic.icon:hover .icon {
+  animation: fb-spin 0.6s ease-in-out;
+}
+
+/* ============================================================
+   5 Navigation Cards
+   ============================================================ */
 .fallback-panel-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  grid-auto-rows: 1fr;
-  align-items: stretch;
-  gap: 12px;
-  margin-bottom: 18px;
+  gap: 14px;
+  margin-bottom: 20px;
 }
 
 .fallback-nav-card {
   position: relative;
-  display: grid;
-  grid-template-columns: 42px minmax(0, 1fr);
-  align-items: flex-start;
-  gap: 12px;
-  height: 148px;
-  padding: 13px;
-  color: #172033;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  height: 120px;
+  padding: 14px 12px;
+  color: var(--fb-text-secondary);
   text-decoration: none;
-  background: #ffffff;
-  border: 1px solid #d9e0ea;
-  border-radius: 8px;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  background: var(--fb-surface);
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-lg);
+  box-shadow: var(--fb-shadow-sm);
+  transition: all 0.2s ease;
   overflow: hidden;
+  cursor: pointer;
 }
 
 .fallback-nav-card::before {
   content: "";
   position: absolute;
-  inset: 0 auto 0 0;
-  width: 4px;
-  background: var(--panel-accent, #2185d0);
-  opacity: 0.72;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--panel-accent, var(--fb-primary));
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.fallback-nav-card:hover::before,
+.fallback-nav-card.active::before {
+  opacity: 1;
 }
 
 .fallback-nav-card:hover {
-  color: #172033;
-  border-color: #b9c7da;
-  box-shadow: 0 6px 18px rgba(16, 24, 40, 0.08);
-  transform: translateY(-1px);
+  color: var(--fb-text);
+  border-color: var(--panel-accent, var(--fb-primary));
+  box-shadow: var(--fb-shadow-lg);
+  transform: translateY(-2px);
 }
 
 .fallback-nav-card.active {
-  border-color: var(--panel-accent, #2185d0);
-  background: #ffffff;
-  box-shadow: inset 0 0 0 1px var(--panel-accent, #2185d0),
-    0 1px 2px rgba(16, 24, 40, 0.04);
+  background: var(--fb-surface);
+  border: 2px solid transparent;
+  border-image: linear-gradient(135deg, var(--panel-accent, var(--fb-primary)), rgba(139, 92, 246, 0.4)) 1;
+  box-shadow: 0 0 20px rgba(59, 130, 246, 0.12), var(--fb-shadow-sm);
+  margin: -1px;
 }
 
 .fallback-nav-icon {
@@ -118,189 +417,91 @@
   justify-content: center;
   width: 42px;
   height: 42px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  color: var(--panel-accent, #2185d0);
-  background: #f8fafc;
+  border: none;
+  border-radius: 50%;
+  color: var(--panel-accent, var(--fb-primary));
+  background: rgba(59, 130, 246, 0.1);
+  transition: all 0.2s ease;
+}
+
+/* Per-card icon background color based on accent */
+.fallback-nav-card[style*="--panel-accent: #2563eb"] .fallback-nav-icon,
+.fallback-nav-card:nth-child(1) .fallback-nav-icon {
+  background: #eff6ff;
+}
+.fallback-nav-card[style*="--panel-accent: #0f9f9a"] .fallback-nav-icon,
+.fallback-nav-card:nth-child(2) .fallback-nav-icon {
+  background: #f0fdfa;
+}
+.fallback-nav-card[style*="--panel-accent: #7c3aed"] .fallback-nav-icon,
+.fallback-nav-card:nth-child(3) .fallback-nav-icon {
+  background: #f5f3ff;
+}
+.fallback-nav-card[style*="--panel-accent: #d97706"] .fallback-nav-icon,
+.fallback-nav-card:nth-child(4) .fallback-nav-icon {
+  background: #fffbeb;
+}
+.fallback-nav-card[style*="--panel-accent: #475569"] .fallback-nav-icon,
+.fallback-nav-card:nth-child(5) .fallback-nav-icon {
+  background: #f1f5f9;
+}
+
+.fallback-nav-card:hover .fallback-nav-icon,
+.fallback-nav-card.active .fallback-nav-icon {
+  transform: scale(1.06);
+  color: var(--fb-surface);
+  background: var(--panel-accent, var(--fb-primary));
 }
 
 .fallback-nav-icon .icon {
   margin: 0;
-  font-size: 20px;
+  font-size: 18px;
 }
 
 .fallback-nav-content {
-  display: grid;
-  grid-template-rows: auto auto 1fr auto;
-  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
 }
 
-.fallback-nav-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 8px;
-}
-
 .fallback-nav-card strong {
-  font-size: 16px;
-  line-height: 1.3;
-  overflow-wrap: anywhere;
-}
-
-.fallback-nav-top small {
-  flex: 0 0 auto;
-  padding: 2px 7px;
-  border: 1px solid #e3e8ef;
-  border-radius: 999px;
-  color: #53627a;
-  background: #f8fafc;
-  font-size: 11px;
-  line-height: 1.35;
-  white-space: nowrap;
-}
-
-.fallback-nav-subtitle,
-.fallback-nav-description,
-.fallback-nav-foot {
-  display: block;
-  overflow-wrap: anywhere;
-}
-
-.fallback-nav-subtitle {
-  margin-top: 6px;
-  color: #344054;
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 15px;
   font-weight: 600;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
-}
-
-.fallback-nav-description {
-  margin-top: 4px;
-  color: #53627a;
-  font-size: 12px;
-  line-height: 1.45;
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.fallback-nav-foot {
-  justify-self: flex-start;
-  align-self: end;
-  margin-top: 5px;
-  padding: 3px 8px;
-  border: 1px solid #e3e8ef;
-  border-radius: 999px;
-  color: var(--panel-accent, #2185d0);
-  background: #f8fafc;
-  font-size: 11px;
-  font-weight: 700;
-  white-space: nowrap;
-}
-
-.fallback-guide-panel {
-  margin-bottom: 14px;
-  padding: 12px;
-  border: 1px solid #d9e0ea;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-}
-
-.fallback-guide-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 14px;
-}
-
-.fallback-guide-head h2 {
-  margin: 0;
-  color: #172033;
-  font-size: 15px;
   line-height: 1.3;
+  letter-spacing: 0.3px;
+  overflow-wrap: anywhere;
+  text-align: center;
+}
+
+.fallback-nav-refresh-badge {
+  padding: 1px 10px;
+  border: none;
+  border-radius: 999px;
+  color: var(--fb-text-light);
+  background: var(--fb-bg);
+  font-family: var(--fb-font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  white-space: nowrap;
   letter-spacing: 0;
 }
 
-.fallback-guide-head p {
-  margin: 5px 0 0;
-  color: #94a3b8;
-  font-size: 13px;
-  line-height: 1.5;
+.fallback-nav-card:hover .fallback-nav-refresh-badge,
+.fallback-nav-card.active .fallback-nav-refresh-badge {
+  color: var(--panel-accent, var(--fb-primary));
+  background: rgba(59, 130, 246, 0.08);
 }
 
-.fallback-guide-head .ui.button {
-  flex: 0 0 auto;
-  margin: 0 !important;
-}
-
-.fallback-guide-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-top: 14px;
-}
-
-.fallback-guide-card {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr);
-  gap: 12px;
-  min-height: 220px;
-  padding: 14px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfcfe 100%);
-}
-
-.fallback-guide-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  color: #2563eb;
-  background: #f8fafc;
-}
-
-.fallback-guide-icon .icon {
-  margin: 0;
-  font-size: 17px;
-}
-
-.fallback-guide-card h3 {
-  margin: 0 0 8px;
-  color: #172033;
-  font-size: 15px;
-  line-height: 1.35;
-  letter-spacing: 0;
-}
-
-.fallback-guide-card ul {
-  margin: 0;
-  padding-left: 18px;
-  color: #53627a;
-  font-size: 13px;
-  line-height: 1.5;
-}
-
-.fallback-guide-card li + li {
-  margin-top: 6px;
-}
-
+/* ============================================================
+   Content Panel & Toolbar
+   ============================================================ */
 .fallback-content-panel {
   padding: 18px;
-  border: 1px solid #d9e0ea;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--fb-border-medium);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
 }
 
 .fallback-content-toolbar {
@@ -316,14 +517,246 @@
   font-size: 18px;
   line-height: 1.3;
   letter-spacing: 0;
+  font-weight: 600;
 }
 
 .fallback-content-toolbar span {
   display: block;
   margin-top: 4px;
-  color: #53627a;
+  color: var(--fb-text-secondary);
 }
 
+/* --- Virtual Model Toolbar Buttons --- */
+.fallback-content-toolbar .ui.button,
+.fallback-content-panel .ui.button,
+.fallback-toolbar-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 36px !important;
+  padding: 0 16px !important;
+  border-radius: var(--fb-radius-sm) !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1 !important;
+  border: 1px solid var(--fb-border) !important;
+  background: var(--fb-surface) !important;
+  color: var(--fb-text) !important;
+  transition: all 0.2s ease !important;
+  gap: 6px !important;
+}
+
+.fallback-content-toolbar .ui.button .icon,
+.fallback-content-panel .ui.button .icon,
+.fallback-toolbar-btn .icon {
+  font-size: 16px !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+.fallback-content-toolbar .ui.button:hover,
+.fallback-content-panel .ui.button:hover {
+  background: #f1f5f9 !important;
+  border-color: var(--fb-border-medium) !important;
+}
+
+/* Orange outline button for "全部冷却" */
+.fallback-content-toolbar .ui.button.orange-outline {
+  color: #ea580c !important;
+  border-color: #fed7aa !important;
+}
+.fallback-content-toolbar .ui.button.orange-outline:hover {
+  background: #fff7ed !important;
+  border-color: #fb923c !important;
+}
+
+/* Primary "保存" button */
+.fallback-content-toolbar .ui.button.primary,
+.fallback-content-panel .ui.button.primary {
+  background: var(--fb-primary) !important;
+  border-color: var(--fb-primary) !important;
+  color: var(--fb-surface) !important;
+  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25) !important;
+}
+.fallback-content-toolbar .ui.button.primary:hover,
+.fallback-content-panel .ui.button.primary:hover {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35) !important;
+}
+
+/* Button group spacing */
+.fallback-content-toolbar .buttons,
+.ui.buttons {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 4px;
+}
+
+.fallback-content-panel .ui.buttons.mini .ui.button {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 10px !important;
+  line-height: 1 !important;
+}
+
+.fallback-content-panel .ui.buttons.mini .ui.button .icon {
+  margin: 0 4px 0 0 !important;
+  line-height: 1 !important;
+}
+
+/* --- Virtual Model Rows --- */
+.fallback-vm-section .ui.segment,
+.fallback-vm-section .ui.card,
+.fallback-content-panel .ui.segment {
+  border-radius: var(--fb-radius-sm) !important;
+  border: 1px solid var(--fb-border) !important;
+  box-shadow: var(--fb-shadow-sm) !important;
+  transition: all 0.2s ease !important;
+}
+
+.fallback-vm-section .ui.segment:hover,
+.fallback-content-panel .ui.segment:hover {
+  border-color: var(--fb-border-medium) !important;
+  box-shadow: var(--fb-shadow-md) !important;
+}
+
+.fallback-content-panel .ui.divided.list > .item,
+.fallback-vm-section .item {
+  padding: 12px 14px !important;
+  border-bottom: 1px solid var(--fb-border-light) !important;
+  border-radius: var(--fb-radius-sm) !important;
+  transition: background 0.15s ease !important;
+}
+
+.fallback-content-panel .ui.divided.list > .item:hover,
+.fallback-vm-section .item:hover {
+  background: var(--fb-bg) !important;
+}
+
+/* VM model name — monospace */
+.fallback-content-panel code,
+.fallback-vm-code,
+.fallback-vm-section .ui.segment .header code {
+  font-family: var(--fb-font-mono);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fb-text);
+  background: var(--fb-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* "启用" toggle */
+.fallback-content-panel .ui.toggle.checkbox label,
+.fallback-vm-section .ui.toggle.checkbox label {
+  font-size: 13px !important;
+}
+
+.fallback-content-panel .ui.toggle.checkbox input:checked ~ label::before,
+.fallback-vm-section .ui.toggle.checkbox input:checked ~ label::before {
+  background-color: #22c55e !important;
+}
+
+/* Badge for counts */
+.fallback-count-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  background: var(--fb-bg);
+  border: 1px solid var(--fb-border);
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fb-text-secondary);
+  gap: 4px;
+}
+
+.fallback-count-badge strong {
+  font-weight: 600;
+  color: var(--fb-text);
+}
+
+/* Copy icon button */
+.fallback-content-panel .ui.button.copy-btn {
+  width: 28px !important;
+  height: 28px !important;
+  min-width: 28px !important;
+  padding: 0 !important;
+  border-radius: 6px !important;
+  border: none !important;
+  background: transparent !important;
+  color: var(--fb-text-muted) !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  transition: all 0.15s ease !important;
+  position: relative !important;
+}
+
+.fallback-content-panel .ui.button.copy-btn:hover {
+  background: var(--fb-bg) !important;
+  color: var(--fb-text) !important;
+}
+
+.fallback-content-panel .ui.button.copy-btn:hover::after {
+  content: "复制配置";
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  background: var(--fb-text);
+  color: var(--fb-surface);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 4px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+/* ============================================================
+   Summary Bar
+   ============================================================ */
+.fallback-summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  border-radius: var(--fb-radius-sm);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.5;
+  transition: all 0.2s ease;
+}
+
+.fallback-summary-bar.warning {
+  color: #7c2d12;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+}
+
+.fallback-summary-bar.info {
+  color: #14532d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+}
+
+.fallback-summary-icon {
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.fallback-summary-text {
+  overflow-wrap: anywhere;
+}
+
+/* ============================================================
+   Runtime Grid & Health Panel
+   ============================================================ */
 .fallback-runtime-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -332,18 +765,38 @@
 }
 
 .fallback-runtime-card {
+  position: relative;
+  overflow: hidden;
   min-height: 112px;
   padding: 16px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+  transition: all 0.2s ease;
 }
+
+.fallback-runtime-card:hover {
+  border-color: var(--fb-border-medium);
+  box-shadow: var(--fb-shadow-md);
+}
+
+.fallback-runtime-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: transparent;
+}
+
+.fallback-runtime-card.normal::before { background: #22c55e; }
+.fallback-runtime-card.warning::before { background: #f59e0b; }
+.fallback-runtime-card.critical::before { background: #ef4444; }
 
 .fallback-runtime-card span,
 .fallback-runtime-card small {
   display: block;
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
   line-height: 1.35;
 }
@@ -351,7 +804,7 @@
 .fallback-runtime-card strong {
   display: block;
   margin: 8px 0 6px;
-  color: #172033;
+  color: var(--fb-text);
   font-size: 28px;
   line-height: 1.15;
   letter-spacing: 0;
@@ -373,6 +826,7 @@
   background: #fff8f6;
 }
 
+/* --- Health Panel --- */
 .fallback-health-panel {
   display: flex;
   align-items: flex-start;
@@ -381,8 +835,9 @@
   margin-bottom: 14px;
   padding: 16px;
   border: 1px solid #d7dee8;
-  border-radius: 8px;
-  background: #f8fafc;
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-bg);
+  transition: all 0.2s ease;
 }
 
 .fallback-health-panel.warning {
@@ -398,14 +853,14 @@
 .fallback-health-label {
   display: block;
   margin-bottom: 5px;
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
   line-height: 1.35;
 }
 
 .fallback-health-panel h3 {
   margin: 0;
-  color: #172033;
+  color: var(--fb-text);
   font-size: 18px;
   line-height: 1.35;
   letter-spacing: 0;
@@ -436,6 +891,7 @@
   white-space: nowrap;
 }
 
+/* --- Health Lists --- */
 .fallback-health-grid {
   margin-bottom: 18px;
 }
@@ -453,14 +909,24 @@
 .fallback-health-list {
   min-width: 0;
   padding: 14px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  border-left: 3px solid transparent;
+  transition: all 0.2s ease;
 }
+
+.fallback-health-list:hover {
+  box-shadow: var(--fb-shadow-sm);
+}
+
+.fallback-health-list.critical { border-left-color: #ef4444; }
+.fallback-health-list.warning { border-left-color: #f59e0b; }
+.fallback-health-list.info { border-left-color: #eab308; }
 
 .fallback-health-list h4 {
   margin: 0 0 10px;
-  color: #172033;
+  color: var(--fb-text);
   font-size: 14px;
   line-height: 1.35;
   letter-spacing: 0;
@@ -472,7 +938,7 @@
   justify-content: space-between;
   gap: 10px;
   padding: 10px 0;
-  border-top: 1px solid #eef2f6;
+  border-top: 1px solid var(--fb-border-light);
 }
 
 .fallback-health-row:first-of-type {
@@ -496,7 +962,7 @@
 }
 
 .fallback-health-row strong {
-  color: #172033;
+  color: var(--fb-text);
   font-size: 13px;
   line-height: 1.35;
 }
@@ -504,7 +970,7 @@
 .fallback-health-row span,
 .fallback-health-row em {
   margin-top: 3px;
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
   line-height: 1.35;
 }
@@ -518,6 +984,9 @@
   margin: 0 0 14px;
 }
 
+/* ============================================================
+   Runtime Sections & Token Bars
+   ============================================================ */
 .fallback-runtime-section {
   margin-top: 18px;
 }
@@ -532,14 +1001,14 @@
 
 .fallback-runtime-section-head h3 {
   margin: 0;
-  color: #172033;
+  color: var(--fb-text);
   font-size: 16px;
   line-height: 1.35;
   letter-spacing: 0;
 }
 
 .fallback-runtime-section-head span {
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
   white-space: nowrap;
 }
@@ -555,9 +1024,15 @@
   align-items: center;
   gap: 14px;
   padding: 12px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  transition: all 0.2s ease;
+}
+
+.fallback-runtime-token-row:hover {
+  border-color: var(--fb-border-medium);
+  box-shadow: var(--fb-shadow-sm);
 }
 
 .fallback-runtime-token-row strong,
@@ -567,21 +1042,21 @@
 }
 
 .fallback-runtime-token-row strong {
-  color: #172033;
+  color: var(--fb-text);
   font-size: 13px;
   line-height: 1.35;
 }
 
 .fallback-runtime-token-row span {
   margin-top: 3px;
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
 }
 
 .fallback-runtime-token-track {
   height: 10px;
   border-radius: 999px;
-  background: #eef2f6;
+  background: var(--fb-border-light);
   overflow: hidden;
 }
 
@@ -590,9 +1065,12 @@
   height: 100%;
   min-width: 3%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #3b82f6, #6366f1);
+  background: linear-gradient(90deg, var(--fb-primary), #6366f1);
 }
 
+/* ============================================================
+   Tables, Code, Misc
+   ============================================================ */
 .fallback-table-wrap {
   width: 100%;
   overflow-x: auto;
@@ -605,19 +1083,19 @@
 
 .fallback-muted {
   margin-top: 4px;
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
 }
 
 .fallback-code-text {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--fb-font-mono);
   overflow-wrap: anywhere;
 }
 
 .fallback-value-cell {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--fb-font-mono);
   white-space: nowrap;
 }
 
@@ -630,10 +1108,10 @@
 
 .fallback-raw-block {
   margin-top: 14px;
-  border: 1px solid #d9e0ea;
-  border-radius: 8px;
+  border: 1px solid var(--fb-border-medium);
+  border-radius: var(--fb-radius-sm);
   padding: 12px;
-  background: #f8fafc;
+  background: var(--fb-bg);
 }
 
 .fallback-raw-block summary {
@@ -647,7 +1125,7 @@
 
 .fallback-raw-metrics-note {
   margin-top: 12px;
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
   font-weight: 600;
 }
@@ -670,16 +1148,130 @@
   letter-spacing: 0;
 }
 
+.fallback-subsection:has(.fallback-score-summary) {
+  margin-bottom: 16px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+
+.fallback-subsection:has(.fallback-score-summary) h3 {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 18px;
+  color: #0f172a;
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.fallback-subsection:has(.fallback-score-summary) h3::before {
+  content: '';
+  width: 9px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+  box-shadow: 0 0 0 4px #eff6ff;
+}
+
+.fallback-subsection:has(.fallback-score-summary) h3::after {
+  content: '按综合得分从高到低排序';
+  position: absolute;
+  left: 26px;
+  top: 23px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-table-wrap {
+  margin-top: 24px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+  box-shadow: none;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table {
+  border: 0 !important;
+  background: transparent !important;
+  border-collapse: separate !important;
+  border-spacing: 0 8px !important;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table thead {
+  display: none;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table tr {
+  height: 42px;
+  background: #ffffff !important;
+  transition: all 0.2s ease;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table tbody tr:first-child {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.1), rgba(255, 255, 255, 0)) !important;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table tbody tr:hover {
+  background: #f8fafc !important;
+  transform: translateX(2px);
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table td {
+  padding: 6px 10px !important;
+  border: 0 !important;
+  vertical-align: middle;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table td:first-child {
+  width: 48px;
+  border-radius: 10px 0 0 10px;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table td:nth-child(2) {
+  width: min(32%, 360px);
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table td:nth-child(2) strong,
+.fallback-subsection:has(.fallback-score-summary) table.ui.table td:nth-child(3) {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table td:nth-child(3) {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.fallback-subsection:has(.fallback-score-summary) table.ui.table td:last-child {
+  border-radius: 0 10px 10px 0;
+}
+
+/* --- Score Related --- */
 .fallback-score-trend-card.ui.card {
   width: 100%;
   margin: 0 0 18px !important;
-  border: none !important;
-  border-radius: 8px !important;
-  box-shadow: 0 2px 12px rgba(16, 24, 40, 0.06) !important;
+  border: 1px solid #e5e7eb !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06) !important;
 }
 
 .fallback-score-trend-card.ui.card > .content {
-  padding: 18px !important;
+  padding: 16px !important;
 }
 
 .fallback-score-card-head {
@@ -691,74 +1283,33 @@
 }
 
 .fallback-score-card-title .header {
+  position: relative;
+  display: flex !important;
+  align-items: center;
+  gap: 9px;
   margin: 0;
-  color: #2b3674;
-  font-size: 18px !important;
+  color: #0f172a;
+  font-size: 17px !important;
   line-height: 1.3;
-  font-weight: 600 !important;
+  font-weight: 700 !important;
   letter-spacing: 0;
+}
+
+.fallback-score-card-title .header::before {
+  content: '';
+  width: 9px;
+  height: 18px;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+  box-shadow: 0 0 0 4px #eff6ff;
 }
 
 .fallback-score-card-title span {
   display: block;
   margin-top: 5px;
-  color: #667085;
+  color: #64748b;
   font-size: 12px;
   white-space: nowrap;
-}
-
-.fallback-score-chart {
-  width: 100%;
-  height: 360px;
-  margin-bottom: 12px;
-  padding: 16px;
-  border-radius: 8px;
-  background-color: #ffffff;
-  overflow: hidden;
-}
-
-.fallback-score-series {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin: -2px 0 12px;
-}
-
-.fallback-score-series-item {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  max-width: 260px;
-  min-height: 28px;
-  padding: 4px 9px;
-  border: 1px solid #e3e8ef;
-  border-radius: 999px;
-  color: #344054;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
-  font-size: 12px;
-  white-space: nowrap;
-}
-
-.fallback-score-series-color,
-.fallback-score-tooltip-color {
-  flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--score-color, #4318ff);
-}
-
-.fallback-score-series-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.fallback-score-series-item strong {
-  color: #172033;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  font-size: 12px;
 }
 
 .fallback-score-stats {
@@ -773,212 +1324,198 @@
   align-items: center;
   min-height: 24px;
   padding: 3px 9px;
-  border: 1px solid #e3e8ef;
+  border: 1px solid var(--fb-border);
   border-radius: 999px;
   color: #344054;
-  background: #f8fafc;
+  background: var(--fb-bg);
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
 }
 
-.fallback-score-tooltip {
-  min-width: 220px;
-  max-width: 360px;
-  padding: 10px 12px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  color: #172033;
-  background: rgba(255, 255, 255, 0.98);
-  box-shadow: 0 12px 28px rgba(16, 24, 40, 0.14);
-}
-
-.fallback-score-tooltip-time {
-  margin-bottom: 8px;
-  color: #667085;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.fallback-score-tooltip-row {
+.fallback-score-trend-rank {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 0;
-  font-size: 12px;
+  gap: 12px;
 }
 
-.fallback-score-tooltip-name {
+.fallback-score-trend-group {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.fallback-score-trend-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px 2px;
+}
+
+.fallback-score-trend-group-head strong {
+  min-width: 0;
   overflow: hidden;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.fallback-score-tooltip-row strong {
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+.fallback-score-trend-group-head span {
+  flex: 0 0 auto;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.fallback-score-tooltip-more {
-  margin-top: 6px;
-  padding-top: 6px;
-  border-top: 1px solid #edf1f5;
-  color: #667085;
-  font-size: 12px;
+.fallback-score-trend-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 128px;
+  align-items: center;
+  gap: 12px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.fallback-score-trend-row.is-top {
+  background: linear-gradient(90deg, rgba(245, 158, 11, 0.1), rgba(255, 255, 255, 0));
+}
+
+.fallback-score-trend-row:hover {
+  background: #f8fafc;
+  transform: translateX(2px);
+}
+
+.fallback-score-trend-main {
+  min-width: 0;
+}
+
+.fallback-score-trend-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 7px;
+}
+
+.fallback-score-trend-name strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallback-score-trend-track {
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #f1f5f9;
+}
+
+.fallback-score-trend-track span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transition: width 0.35s ease, filter 0.2s ease;
+}
+
+.fallback-score-trend-row.is-top .fallback-score-trend-track span {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+.fallback-score-trend-row:hover .fallback-score-trend-track span {
+  filter: brightness(1.08);
+}
+
+.fallback-score-trend-meta {
+  display: grid;
+  justify-items: end;
+  gap: 3px;
+  min-width: 0;
+}
+
+.fallback-score-trend-meta strong {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.fallback-score-trend-row .fallback-score-trend-meta strong {
+  color: #2563eb;
+}
+
+.fallback-score-trend-row[data-score-band='high'] .fallback-score-trend-meta strong {
+  color: #16a34a;
+}
+
+.fallback-score-trend-row[data-score-band='mid'] .fallback-score-trend-meta strong {
+  color: #2563eb;
+}
+
+.fallback-score-trend-row[data-score-band='low'] .fallback-score-trend-meta strong {
+  color: #f59e0b;
+}
+
+.fallback-score-trend-row[data-score-band='critical'] .fallback-score-trend-meta strong {
+  color: #ef4444;
+}
+
+.fallback-score-trend-meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.fallback-score-trend-meta span.up {
+  color: #067647;
+  background: #ecfdf3;
+}
+
+.fallback-score-trend-meta span.down {
+  color: #b42318;
+  background: #fef3f2;
+}
+
+.fallback-score-trend-meta span.flat {
+  color: #475467;
+  background: #f2f4f7;
+}
+
+.fallback-score-trend-meta em {
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: normal;
 }
 
 .fallback-arrow {
   display: inline-block;
   margin: 0 8px;
-  color: #667085;
+  color: var(--fb-text-secondary);
 }
 
-@media screen and (max-width: 1200px) {
-  .fallback-panel-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .fallback-runtime-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .fallback-health-lists {
-    grid-template-columns: 1fr;
-  }
-
-  .fallback-guide-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .fallback-guide-card {
-    min-height: 0;
-  }
-}
-
-@media screen and (max-width: 768px) {
-  .fallback-page {
-    padding: 10px 16px 32px;
-    max-width: 100%;
-  }
-
-  .fallback-page-header,
-  .fallback-content-toolbar {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .fallback-header-actions {
-    justify-content: space-between;
-    white-space: normal;
-  }
-
-  .fallback-guide-head {
-    display: block;
-  }
-
-  .fallback-guide-head .ui.button {
-    margin-top: 10px;
-  }
-
-  .fallback-panel-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
-
-  .fallback-nav-card {
-    height: 170px;
-    padding: 14px;
-  }
-
-  .fallback-content-panel {
-    padding: 12px;
-  }
-
-  .fallback-runtime-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .fallback-health-panel {
-    display: block;
-  }
-
-  .fallback-health-meta {
-    justify-content: flex-start;
-    min-width: 0;
-    margin-top: 12px;
-  }
-
-  .fallback-runtime-section-head {
-    display: block;
-  }
-
-  .fallback-runtime-section-head span {
-    display: block;
-    margin-top: 4px;
-    white-space: normal;
-  }
-
-  .fallback-runtime-token-row {
-    grid-template-columns: 1fr;
-    gap: 8px;
-  }
-
-  .fallback-score-card-head {
-    display: block;
-  }
-
-  .fallback-score-stats {
-    justify-content: flex-start;
-    margin-top: 8px;
-  }
-
-  .fallback-score-chart {
-    height: 320px;
-  }
-}
-
-.fallback-summary-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  line-height: 1.5;
-}
-
-.fallback-summary-bar.warning {
-  color: #7c2d12;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-}
-
-.fallback-summary-bar.info {
-  color: #14532d;
-  background: #f0fdf4;
-  border: 1px solid #bbf7d0;
-}
-
-.fallback-summary-icon {
-  flex-shrink: 0;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.fallback-summary-text {
-  overflow-wrap: anywhere;
-}
-
-@media screen and (max-width: 768px) {
-  .fallback-summary-bar {
-    padding: 10px 12px;
-    font-size: 13px;
-  }
-}
-
-/* === 状态表格美化 === */
+/* --- Status Row & Deploy Styles --- */
 .fallback-deploy-row.cooling {
   background: #fffbeb !important;
 }
@@ -1003,68 +1540,118 @@
   flex-shrink: 0;
 }
 
-.fallback-runtime-card {
-  position: relative;
-  overflow: hidden;
-}
-.fallback-runtime-card::before {
-  content: "";
-  position: absolute;
-  inset: 0 auto 0 0;
-  width: 3px;
-  background: transparent;
-}
-.fallback-runtime-card.normal::before { background: #22c55e; }
-.fallback-runtime-card.warning::before { background: #f59e0b; }
-.fallback-runtime-card.critical::before { background: #ef4444; }
-.fallback-health-list {
-  border-left: 3px solid transparent;
-}
-.fallback-health-list.critical { border-left-color: #ef4444; }
-.fallback-health-list.warning { border-left-color: #f59e0b; }
-.fallback-health-list.info { border-left-color: #eab308; }
+/* --- Rank Badge --- */
 .fallback-rank-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
   font-size: 12px;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
-.fallback-rank-badge.gold { color: #92400e; background: #fef3c7; }
-.fallback-rank-badge.silver { color: #475569; background: #e2e8f0; }
-.fallback-rank-badge.bronze { color: #78350f; background: #ffedd5; }
-.fallback-rank-badge.normal { color: #475467; background: #f2f4f7; }
+
+.fallback-rank-badge.gold {
+  color: #92400e;
+  background: #fef3c7;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.26);
+}
+
+.fallback-rank-badge.silver {
+  color: #5b21b6;
+  background: #ede9fe;
+  box-shadow: inset 0 0 0 1px rgba(139, 92, 246, 0.22);
+}
+
+.fallback-rank-badge.bronze {
+  color: #0e7490;
+  background: #cffafe;
+  box-shadow: inset 0 0 0 1px rgba(6, 182, 212, 0.22);
+}
+
+.fallback-rank-badge.normal {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-rank-badge {
+  font-size: 11px;
+}
+
 .fallback-score-high { color: #16a34a; font-weight: 600; }
 .fallback-score-low { color: #dc2626; font-weight: 600; }
+
 .fallback-score-summary {
   display: grid;
-  grid-template-columns: 68px minmax(132px, 1fr) 74px;
+  grid-template-columns: minmax(160px, 1fr) 74px 42px;
   align-items: center;
-  gap: 12px;
-  width: min(100%, 330px);
-  min-width: 270px;
+  gap: 10px;
+  width: 100%;
+  min-width: 240px;
 }
 
 .fallback-score-summary-value {
-  color: #172033;
-  font-size: 13px;
+  color: var(--fb-text);
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: end;
+  font-size: 14px;
   font-weight: 700;
-  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-family: var(--fb-font-mono);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+.fallback-subsection:has(.fallback-score-summary) tbody tr:first-child .fallback-score-summary::after {
+  content: 'Top';
+  justify-self: end;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #92400e;
+  background: #fef3c7;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-score-summary-value:not(.fallback-score-high):not(.fallback-score-low) {
+  color: #2563eb;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-score-summary-value.fallback-score-high {
+  color: #16a34a;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-score-summary-value.fallback-score-low {
+  color: #ef4444;
+}
+
 .fallback-score-mini {
   position: relative;
-  height: 34px;
-  min-width: 132px;
+  height: 10px;
+  min-width: 160px;
   overflow: hidden;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 0;
+  border-radius: 999px;
+  background: #f1f5f9;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-score-mini {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-score-summary-delta {
+  grid-column: 3;
+  grid-row: 1;
+  min-width: 42px;
+  padding: 2px 6px;
+  font-size: 11px;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-score-mini-grid {
+  display: none;
 }
 
 .fallback-score-mini-grid {
@@ -1073,17 +1660,36 @@
   opacity: 0.75;
   background:
     linear-gradient(to top, transparent 0 48%, #eef2f7 49% 51%, transparent 52%),
-    linear-gradient(to right, #f8fafc 1px, transparent 1px);
+    linear-gradient(to right, var(--fb-bg) 1px, transparent 1px);
   background-size: 100% 100%, 20% 100%;
 }
 
 .fallback-score-mini-bars {
   position: absolute;
-  inset: 6px 9px 6px;
-  display: grid;
-  grid-template-columns: repeat(10, minmax(0, 1fr));
-  align-items: end;
-  gap: 4px;
+  inset: 0;
+  display: block;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-score-mini-bars span {
+  display: none;
+}
+
+.fallback-subsection:has(.fallback-score-summary) .fallback-score-mini-bars::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: var(--score-percent, 0%);
+  border-radius: inherit;
+  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  transition: width 0.35s ease, filter 0.2s ease;
+}
+
+.fallback-subsection:has(.fallback-score-summary) tbody tr:first-child .fallback-score-mini-bars::before {
+  background: linear-gradient(90deg, #f59e0b, #ef4444);
+}
+
+.fallback-subsection:has(.fallback-score-summary) tbody tr:hover .fallback-score-mini-bars::before {
+  filter: brightness(1.08);
 }
 
 .fallback-score-mini-bars span {
@@ -1100,7 +1706,7 @@
 }
 
 .fallback-score-mini-bars span.empty {
-  background: #e3e8ef;
+  background: var(--fb-border);
   opacity: 0.9;
 }
 
@@ -1137,7 +1743,7 @@
   background: #f2f4f7;
 }
 
-/* === 趋势图表 === */
+/* --- Trend Charts --- */
 .fallback-trend-section {
   margin-bottom: 18px;
 }
@@ -1150,22 +1756,27 @@
 
 .fallback-trend-card {
   padding: 14px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.fallback-trend-card:hover {
+  box-shadow: var(--fb-shadow-md);
 }
 
 .fallback-trend-label {
   display: block;
   margin-bottom: 8px;
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
   font-weight: 600;
   line-height: 1.35;
 }
 
-/* === Top 3 失败模型 === */
+/* --- Top 3 Failures --- */
 .fallback-top3-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1178,10 +1789,15 @@
   align-items: flex-start;
   gap: 10px;
   padding: 14px;
-  border: 1px solid #e3e8ef;
-  border-radius: 8px;
-  background: #ffffff;
-  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04);
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.fallback-top3-card:hover {
+  box-shadow: var(--fb-shadow-md);
 }
 
 .fallback-top3-card.rank-1 {
@@ -1231,7 +1847,7 @@
 
 .fallback-top3-body strong {
   display: block;
-  color: #172033;
+  color: var(--fb-text);
   font-size: 14px;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1240,7 +1856,7 @@
 .fallback-top3-body span {
   display: block;
   margin-top: 3px;
-  color: #667085;
+  color: var(--fb-text-secondary);
   font-size: 12px;
   line-height: 1.35;
   overflow-wrap: anywhere;
@@ -1256,16 +1872,204 @@
   line-height: 1.35;
 }
 
+/* ============================================================
+   Responsive
+   ============================================================ */
 @media screen and (max-width: 1200px) {
+  .fallback-panel-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .fallback-runtime-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .fallback-health-lists {
+    grid-template-columns: 1fr;
+  }
+
+  .fallback-guide-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fallback-guide-card {
+    min-height: 0;
+  }
+
   .fallback-trend-grid,
   .fallback-top3-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
+@media screen and (max-width: 950px) {
+  .fallback-panel-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media screen and (max-width: 768px) {
+  .fallback-page {
+    padding: 10px 16px 32px;
+    max-width: 100%;
+  }
+
+  .fallback-page-header,
+  .fallback-content-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .fallback-header-actions {
+    justify-content: space-between;
+    white-space: normal;
+  }
+
+  .fallback-guide-head {
+    display: block;
+  }
+
+  .fallback-guide-head .ui.button {
+    margin-top: 10px !important;
+  }
+
+  .fallback-panel-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .fallback-nav-card {
+    height: 100px;
+    padding: 12px;
+  }
+
+  .fallback-content-panel {
+    padding: 12px;
+  }
+
+  .fallback-runtime-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fallback-health-panel {
+    display: block;
+  }
+
+  .fallback-health-meta {
+    justify-content: flex-start;
+    min-width: 0;
+    margin-top: 12px;
+  }
+
+  .fallback-runtime-section-head {
+    display: block;
+  }
+
+  .fallback-runtime-section-head span {
+    display: block;
+    margin-top: 4px;
+    white-space: normal;
+  }
+
+  .fallback-runtime-token-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .fallback-score-card-head {
+    display: block;
+  }
+
+  .fallback-score-stats {
+    justify-content: flex-start;
+    margin-top: 8px;
+  }
+
   .fallback-trend-grid,
   .fallback-top3-grid {
     grid-template-columns: 1fr;
   }
+
+  .fallback-summary-bar {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+}
+
+/* ============================================================
+   Empty State Placeholder
+   ============================================================ */
+.fallback-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 80px;
+  padding: 24px;
+  color: var(--fb-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: center;
+}
+
+/* ============================================================
+   Alert Highlights & Tags
+   ============================================================ */
+.fallback-alert-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
+}
+.fallback-alert-tag.info {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.fallback-alert-tag.warning {
+  background: #fffbeb;
+  color: #b45309;
+}
+.fallback-alert-tag.error {
+  background: #fef2f2;
+  color: #b91c1c;
+}
+.fallback-alert-tag.success {
+  background: #f0fdf4;
+  color: #15803d;
+}
+
+/* ============================================================
+   Semantic UI Overrides for Consistency
+   ============================================================ */
+.fallback-page .ui.table {
+  font-size: 13px !important;
+  border-radius: var(--fb-radius-sm) !important;
+  border: 1px solid var(--fb-border) !important;
+}
+
+.fallback-page .ui.table thead th {
+  background: var(--fb-bg) !important;
+  color: var(--fb-text-secondary) !important;
+  font-weight: 600 !important;
+  font-size: 12px !important;
+  text-transform: none !important;
+  border-bottom: 1px solid var(--fb-border) !important;
+}
+
+.fallback-page .ui.table tbody tr:hover {
+  background: var(--fb-bg) !important;
+}
+
+.fallback-page .ui.message {
+  border-radius: var(--fb-radius-sm) !important;
+  border: 1px solid var(--fb-border) !important;
+  box-shadow: var(--fb-shadow-sm) !important;
+}
+
+.fallback-page .ui.label {
+  border-radius: 999px !important;
+  font-weight: 500 !important;
 }

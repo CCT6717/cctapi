@@ -69,6 +69,8 @@ func main() {
 	// Initialize alert manager (用量告警)
 	if common.IsFallbackEnabled {
 		fallback.InitAlertManager()
+		fallback.WarmUpStickyState()
+		fallback.StartHistoryCleanup()
 	}
 
 	var err error
