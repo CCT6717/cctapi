@@ -1,29 +1,31 @@
 import React from 'react';
 import { Checkbox, Dropdown, Icon, Input, Label, Message, Table } from 'semantic-ui-react';
-import { isFreeDeployment } from './freePoolUtils';
 
 const POOL_OPTIONS = [
-  { key: 'paid_high', value: 'paid_high', text: '付费高质量池' },
-  { key: 'cheap', value: 'cheap', text: '低成本池' },
-  { key: 'local', value: 'local', text: '本地池' },
+  { key: 'paid_high', value: 'paid_high', text: 'paid_high' },
+  { key: 'cheap', value: 'cheap', text: 'cheap' },
+  { key: 'local', value: 'local', text: 'local' },
+  { key: 'free', value: 'free', text: 'free' },
 ];
 
 const QUALITY_OPTIONS = [
-  { key: 'high', value: 'high', text: '高' },
-  { key: 'medium', value: 'medium', text: '中' },
-  { key: 'low', value: 'low', text: '低' },
+  { key: 'high', value: 'high', text: 'high' },
+  { key: 'medium', value: 'medium', text: 'medium' },
+  { key: 'low', value: 'low', text: 'low' },
 ];
 
 const COST_OPTIONS = [
-  { key: 'paid', value: 'paid', text: '付费' },
-  { key: 'cheap', value: 'cheap', text: '低成本' },
-  { key: 'free', value: 'free', text: '免费' },
+  { key: 'paid', value: 'paid', text: 'paid' },
+  { key: 'cheap', value: 'cheap', text: 'cheap' },
+  { key: 'free', value: 'free', text: 'free' },
 ];
 
 const QUOTA_MODE_OPTIONS = [
-  { key: 'normal', value: 'normal', text: '普通' },
-  { key: 'free', value: 'free', text: '用完即换' },
+  { key: 'normal', value: 'normal', text: 'normal' },
+  { key: 'free', value: 'free', text: 'free' },
 ];
+
+const isAutoDeployment = (id) => String(id || '').startsWith('free:');
 
 const NumberInput = ({ value, onChange, disabled, width }) => (
   <Input
@@ -44,9 +46,7 @@ const DeploymentsEditor = ({ deployments, onChange }) => {
     return <Message warning>部署数据为空或格式错误</Message>;
   }
 
-  const depKeys = Object.keys(deployments).filter(
-    (key) => !isFreeDeployment(key, deployments[key])
-  );
+  const depKeys = Object.keys(deployments);
 
   const updateDep = (key, field, value) => {
     const updated = {
@@ -75,31 +75,31 @@ const DeploymentsEditor = ({ deployments, onChange }) => {
       <Table compact celled striped size='small'>
         <Table.Header>
           <Table.Row>
-            <Table.HeaderCell>部署 ID</Table.HeaderCell>
+            <Table.HeaderCell>ID</Table.HeaderCell>
             <Table.HeaderCell>启用</Table.HeaderCell>
-            <Table.HeaderCell>路由池</Table.HeaderCell>
-            <Table.HeaderCell>真实模型</Table.HeaderCell>
-            <Table.HeaderCell>通道</Table.HeaderCell>
-            <Table.HeaderCell>质量等级</Table.HeaderCell>
-            <Table.HeaderCell>成本等级</Table.HeaderCell>
-            <Table.HeaderCell>额度模式</Table.HeaderCell>
+            <Table.HeaderCell>Pool</Table.HeaderCell>
+            <Table.HeaderCell>Real Model</Table.HeaderCell>
+            <Table.HeaderCell>Channel ID</Table.HeaderCell>
+            <Table.HeaderCell>Quality</Table.HeaderCell>
+            <Table.HeaderCell>Cost</Table.HeaderCell>
+            <Table.HeaderCell>Quota</Table.HeaderCell>
             <Table.HeaderCell>Vision</Table.HeaderCell>
             <Table.HeaderCell>Stream</Table.HeaderCell>
             <Table.HeaderCell>Tools</Table.HeaderCell>
             <Table.HeaderCell>JSON</Table.HeaderCell>
-            <Table.HeaderCell>上下文</Table.HeaderCell>
+            <Table.HeaderCell>Context</Table.HeaderCell>
             <Table.HeaderCell>RPM</Table.HeaderCell>
             <Table.HeaderCell>RPD</Table.HeaderCell>
             <Table.HeaderCell>TPM</Table.HeaderCell>
             <Table.HeaderCell>TPD</Table.HeaderCell>
-            <Table.HeaderCell>优先级</Table.HeaderCell>
-            <Table.HeaderCell>权重</Table.HeaderCell>
+            <Table.HeaderCell>Priority</Table.HeaderCell>
+            <Table.HeaderCell>Weight</Table.HeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {depKeys.map((key) => {
             const dep = deployments[key];
-            const auto = isFreeDeployment(key, dep);
+            const auto = isAutoDeployment(key);
 
             return (
               <Table.Row key={key}>
@@ -273,7 +273,7 @@ const DeploymentsEditor = ({ deployments, onChange }) => {
       </Table>
       <Message info style={{ marginTop: 8 }}>
         <Icon name='info circle' />
-        免费模型和 <code>free:</code> 自动部署已迁移到「免费模型池」模块管理。
+        以 <code>free:</code> 开头的部署为自动生成，请在「免费模型池」模块管理。
       </Message>
     </div>
   );

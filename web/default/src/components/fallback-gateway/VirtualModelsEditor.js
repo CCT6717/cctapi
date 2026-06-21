@@ -1,22 +1,23 @@
 import React from 'react';
-import { Checkbox, Icon, Label, Message, Table } from 'semantic-ui-react';
+import { Card, Checkbox, Dropdown, Form, Icon, Label, Message } from 'semantic-ui-react';
 
-const STRATEGY_LABELS = {
-  quality_first: '质量优先',
-  cost_first: '成本优先',
-  free_first: '免费优先',
-};
+const STRATEGY_OPTIONS = [
+  { key: 'quality_first', value: 'quality_first', text: '质量优先' },
+  { key: 'cost_first', value: 'cost_first', text: '成本优先' },
+  { key: 'free_first', value: 'free_first', text: '免费优先' },
+];
 
-const POOL_LABELS = {
-  paid_high: '付费高质量池',
-  cheap: '低成本池',
-  local: '本地池',
-  free: '免费池',
-};
+const DEFAULT_POOL_OPTIONS = [
+  { key: 'paid_high', value: 'paid_high', text: 'paid_high' },
+  { key: 'cheap', value: 'cheap', text: 'cheap' },
+  { key: 'local', value: 'local', text: 'local' },
+  { key: 'free', value: 'free', text: 'free' },
+];
 
 const VM_DISPLAY = {
-  'cct/high': { title: '高质量模型', color: 'blue' },
-  'cct/low': { title: '低成本模型', color: 'teal' },
+  'cct/high': { title: 'CCT High', color: 'blue', desc: '高质量模型路由' },
+  'cct/low': { title: 'CCT Low', color: 'teal', desc: '低成本模型路由' },
+  'cct/free': { title: 'CCT Free', color: 'green', desc: '免费模型路由' },
 };
 
 const VirtualModelsEditor = ({ virtualModels, onChange }) => {
@@ -24,7 +25,7 @@ const VirtualModelsEditor = ({ virtualModels, onChange }) => {
     return <Message warning>虚拟模型数据为空或格式错误</Message>;
   }
 
-  const vmKeys = ['cct/high', 'cct/low'].filter((key) => virtualModels[key]);
+  const vmKeys = Object.keys(virtualModels);
 
   const updateVM = (key, field, value) => {
     const updated = {
@@ -37,89 +38,90 @@ const VirtualModelsEditor = ({ virtualModels, onChange }) => {
     onChange(updated);
   };
 
-  const formatPools = (pools) => {
-    const values = Array.isArray(pools) ? pools : [];
-    if (values.length === 0) return '-';
-    return values.map((pool) => POOL_LABELS[pool] || pool).join(' / ');
-  };
-
-  const formatDegrade = (vm) => {
-    const labels = [];
-    if (vm.allow_degrade_to_low) labels.push('可降级到低成本模型');
-    if (vm.allow_degrade_to_free) labels.push('可降级到免费模型');
-    return labels.length > 0 ? labels.join('，') : '不降级';
-  };
-
   return (
-    <div>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {vmKeys.length === 0 && (
-        <Message info>暂无高质量模型或低成本模型配置。</Message>
+        <Message info>暂无虚拟模型配置，请检查后端数据。</Message>
       )}
-      {vmKeys.length > 0 && (
-        <Table compact celled striped>
-          <Table.Header>
-            <Table.Row>
-              <Table.HeaderCell>启用</Table.HeaderCell>
-              <Table.HeaderCell>虚拟模型</Table.HeaderCell>
-              <Table.HeaderCell>路由池</Table.HeaderCell>
-              <Table.HeaderCell>路由策略</Table.HeaderCell>
-              <Table.HeaderCell>降级设置</Table.HeaderCell>
-            </Table.Row>
-          </Table.Header>
-          <Table.Body>
-            {vmKeys.map((key) => {
-              const vm = virtualModels[key];
-              const display = VM_DISPLAY[key] || { title: key, color: 'grey' };
-              return (
-                <Table.Row key={key}>
-                  <Table.Cell collapsing>
-                    <Checkbox
-                      toggle
-                      checked={!!vm.enabled}
-                      onChange={(_, { checked }) => updateVM(key, 'enabled', checked)}
-                    />
-                  </Table.Cell>
-                  <Table.Cell>
-                    <strong>{display.title}</strong>
-                    <div style={{ marginTop: 4 }}>
-                      <Label basic color={display.color} size='small'>
-                        <Icon name='server' /> {key}
-                      </Label>
-                    </div>
-                  </Table.Cell>
-                  <Table.Cell>{formatPools(vm.pools)}</Table.Cell>
-                  <Table.Cell>{STRATEGY_LABELS[vm.strategy] || vm.strategy || '-'}</Table.Cell>
-                  <Table.Cell>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                      <span>{formatDegrade(vm)}</span>
-                      {key === 'cct/high' && (
-                        <Checkbox
-                          label='允许降级到低成本模型'
-                          checked={!!vm.allow_degrade_to_low}
-                          onChange={(_, { checked }) => updateVM(key, 'allow_degrade_to_low', checked)}
-                        />
-                      )}
-                      {(key === 'cct/high' || key === 'cct/low') && (
-                        <Checkbox
-                          label='允许降级到免费模型'
-                          checked={!!vm.allow_degrade_to_free}
-                          onChange={(_, { checked }) => updateVM(key, 'allow_degrade_to_free', checked)}
-                        />
-                      )}
-                    </div>
-                  </Table.Cell>
-                </Table.Row>
-              );
-            })}
-          </Table.Body>
-        </Table>
-      )}
-      {virtualModels['cct/free'] && (
-        <Message info>
-          <Icon name='info circle' />
-          免费模型已迁移到「免费模型池」模块管理。
-        </Message>
-      )}
+      {vmKeys.map((key) => {
+        const vm = virtualModels[key];
+        const display = VM_DISPLAY[key] || { title: key, color: 'grey', desc: '' };
+        const showDegradeToLow = key === 'cct/high';
+        const showDegradeToFree = key === 'cct/high' || key === 'cct/low';
+
+        return (
+          <Card fluid key={key} color={display.color}>
+            <Card.Content>
+              <Card.Header style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <Icon name='server' />
+                {display.title}
+                <Label basic size='small'>{key}</Label>
+              </Card.Header>
+              <Card.Meta>{display.desc}</Card.Meta>
+              <Card.Description style={{ marginTop: 12 }}>
+                <Form>
+                  <Form.Group inline style={{ flexWrap: 'wrap', gap: 8 }}>
+                    <Form.Field>
+                      <Checkbox
+                        toggle
+                        label='启用'
+                        checked={!!vm.enabled}
+                        onChange={(_, { checked }) => updateVM(key, 'enabled', checked)}
+                      />
+                    </Form.Field>
+                    <Form.Field width={4}>
+                      <label>策略</label>
+                      <Dropdown
+                        selection
+                        search
+                        options={STRATEGY_OPTIONS}
+                        value={vm.strategy || 'quality_first'}
+                        onChange={(_, { value }) => updateVM(key, 'strategy', value)}
+                        style={{ minWidth: 140 }}
+                      />
+                    </Form.Field>
+                    <Form.Field width={6}>
+                      <label>Pools</label>
+                      <Dropdown
+                        selection
+                        multiple
+                        search
+                        allowAdditions
+                        options={DEFAULT_POOL_OPTIONS}
+                        value={Array.isArray(vm.pools) ? vm.pools : []}
+                        onChange={(_, { value }) => updateVM(key, 'pools', value)}
+                        onAddItem={(_, { value }) => {
+                          // allowAdditions handles this automatically
+                        }}
+                        style={{ minWidth: 240 }}
+                        placeholder='选择或添加 pool'
+                      />
+                    </Form.Field>
+                  </Form.Group>
+                  {showDegradeToLow && (
+                    <Form.Field style={{ marginTop: 8 }}>
+                      <Checkbox
+                        label='允许降级到 cct/low'
+                        checked={!!vm.allow_degrade_to_low}
+                        onChange={(_, { checked }) => updateVM(key, 'allow_degrade_to_low', checked)}
+                      />
+                    </Form.Field>
+                  )}
+                  {showDegradeToFree && (
+                    <Form.Field style={{ marginTop: 4 }}>
+                      <Checkbox
+                        label='允许降级到 cct/free'
+                        checked={!!vm.allow_degrade_to_free}
+                        onChange={(_, { checked }) => updateVM(key, 'allow_degrade_to_free', checked)}
+                      />
+                    </Form.Field>
+                  )}
+                </Form>
+              </Card.Description>
+            </Card.Content>
+          </Card>
+        );
+      })}
     </div>
   );
 };

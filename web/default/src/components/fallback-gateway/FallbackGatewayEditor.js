@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Button, Header, Icon, Loader, Message } from 'semantic-ui-react';
+import { Button, Icon, Loader, Message, Tab } from 'semantic-ui-react';
 import { showError, showSuccess } from '../../helpers';
 import {
   getGatewayConfig,
@@ -14,6 +14,7 @@ const FallbackGatewayEditor = () => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actingAction, setActingAction] = useState('');
+  const [activeTab, setActiveTab] = useState(0);
 
   const loadConfig = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -103,26 +104,48 @@ const FallbackGatewayEditor = () => {
     );
   }
 
+  const tabPanes = [
+    {
+      menuItem: { key: 'vm', icon: 'server', content: '虚拟模型' },
+      render: () => (
+        <Tab.Pane attached={false}>
+          <VirtualModelsEditor
+            virtualModels={config.virtual_models || {}}
+            onChange={updateVirtualModels}
+          />
+        </Tab.Pane>
+      ),
+    },
+    {
+      menuItem: { key: 'dep', icon: 'cubes', content: '模型部署' },
+      render: () => (
+        <Tab.Pane attached={false}>
+          <DeploymentsEditor
+            deployments={config.deployments || {}}
+            onChange={updateDeployments}
+          />
+        </Tab.Pane>
+      ),
+    },
+  ];
+
   return (
-    <div className='fallback-config-panel'>
-      <div className='fallback-config-toolbar'>
-        <Header as='h2' className='fallback-config-title'>
-          模型编辑器
-          <Header.Subheader>
-            管理高质量模型、低成本模型和普通模型部署。免费模型请前往「免费模型池」模块管理。
-          </Header.Subheader>
-        </Header>
-        <div className='fallback-config-actions'>
-          <Button
-            basic
-            icon
-            labelPosition='left'
-            onClick={handleReload}
-            loading={actingAction === 'reload'}
-            disabled={!!actingAction}
-          >
-            <Icon name='sync' /> 重新加载配置
-          </Button>
+    <div>
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 16,
+        flexWrap: 'wrap',
+        gap: 8,
+      }}>
+        <div>
+          <h2 style={{ margin: 0 }}>模型编辑器</h2>
+          <span style={{ color: '#868b94', fontSize: 13 }}>
+            管理虚拟模型和模型部署。免费供应商和免费部署请前往「免费模型池」管理。
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
           <Button
             primary
             icon
@@ -133,34 +156,30 @@ const FallbackGatewayEditor = () => {
           >
             <Icon name='save' /> 保存配置
           </Button>
+          <Button
+            basic
+            icon
+            labelPosition='left'
+            onClick={handleReload}
+            loading={actingAction === 'reload'}
+            disabled={!!actingAction}
+          >
+            <Icon name='sync' /> 重新加载配置
+          </Button>
         </div>
       </div>
 
-      <section className='fallback-virtual-panel'>
-        <div className='fallback-virtual-header'>
-          <div>
-            <h3>虚拟模型</h3>
-            <span>只管理高质量模型和低成本模型。路由池与策略按当前配置只读展示。</span>
-          </div>
-        </div>
-        <VirtualModelsEditor
-          virtualModels={config.virtual_models || {}}
-          onChange={updateVirtualModels}
-        />
-      </section>
+      <Message info>
+        <Icon name='info circle' />
+        免费模型池功能已独立到主导航，不在这里配置 OpenRouter、Groq、limits_override 或清理预检。
+      </Message>
 
-      <section className='fallback-virtual-panel'>
-        <div className='fallback-virtual-header'>
-          <div>
-            <h3>模型部署</h3>
-            <span>编辑普通模型部署的真实模型、通道、额度和能力字段。</span>
-          </div>
-        </div>
-        <DeploymentsEditor
-          deployments={config.deployments || {}}
-          onChange={updateDeployments}
-        />
-      </section>
+      <Tab
+        menu={{ secondary: true, pointing: true }}
+        panes={tabPanes}
+        activeIndex={activeTab}
+        onTabChange={(_, { activeIndex }) => setActiveTab(activeIndex)}
+      />
     </div>
   );
 };

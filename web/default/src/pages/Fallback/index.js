@@ -100,18 +100,18 @@ const translateFallbackReason = (reason) => {
 
 const PANEL_ITEMS = [
   {
-    key: 'free-pool',
-    title: '免费模型池',
-    description: '管理免费模型、免费供应商、限额覆盖和自动生成的免费部署。',
-    icon: 'cloud',
-    accent: '#16a34a',
-  },
-  {
     key: 'gateway',
     title: '模型编辑器',
     description: '管理高质量模型、低成本模型和普通模型部署。',
     icon: 'edit',
     accent: '#0ea5e9',
+  },
+  {
+    key: 'free-pool',
+    title: '免费模型池',
+    description: '管理免费模型、免费供应商、限额覆盖和自动生成的免费部署。',
+    icon: 'cloud',
+    accent: '#16a34a',
   },
   {
     key: 'status',
@@ -253,12 +253,12 @@ const emptyConfigMeta = {
 
 const getPanelKey = (panel) => {
   if (panel === 'dashboard') {
-    return 'free-pool';
+    return 'gateway';
   }
   if (panel === 'legacy') {
     return 'gateway';
   }
-  return PANEL_KEYS.has(panel) ? panel : 'free-pool';
+  return PANEL_KEYS.has(panel) ? panel : 'gateway';
 };
 
 const formatNumber = (value) => {
