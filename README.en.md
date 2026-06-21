@@ -98,29 +98,55 @@ go build -o one-api.exe .
 
 ## Configuration
 
-Virtual model config is stored in `data/fallback.json`. Edit via `/channel` UI or directly, then hot-reload.
+Virtual model config is stored in `data/fallback.json` (added to `.gitignore`, never committed).
+First-time setup:
+
+```bash
+cp data/fallback.json.example data/fallback.json
+```
+
+### Channel Setup (do this first)
+
+Create two channels in the One API admin panel (`/channel`):
+
+| Channel | Type | Base URL | Model | Get Key |
+|---------|------|----------|-------|---------|
+| Google Gemini | 55 (Gemini OpenAI Compatible) | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.0-flash-exp` | [aistudio.google.com](https://aistudio.google.com/) |
+| OpenRouter | 24 | `https://openrouter.ai/api` | `openrouter/free` | [openrouter.ai/keys](https://openrouter.ai/keys) |
+
+Then edit `fallback.json` and set the correct `channel_id` for each deployment.
+
+Edit via `/channel` UI or directly, then hot-reload.
 
 ```json
 {
   "enabled": true,
   "virtual_models": {
-    "high/auto": {
+    "cct/free": {
       "enabled": true,
-      "description": "Coding virtual model",
-      "routing_mode": "weighted",
-      "fallback_order": ["doubao-code", "doubao-18"]
+      "description": "Free model pool",
+      "routing_mode": "sequential",
+      "fallback_order": ["cct/gemini", "cct/openrouter"]
     }
   },
   "deployments": {
-    "doubao-code": {
-      "channel_id": 1,
-      "real_model": "doubao-1.5-pro-256k",
+    "cct/gemini": {
+      "channel_id": 0,
+      "real_model": "gemini-2.0-flash-exp",
       "priority": 1,
-      "weight": 5,
-      "daily_limit_tokens": 8000000,
-      "soft_limit_ratio": 0.9,
-      "hard_limit_ratio": 0.98,
-      "max_concurrent_requests": 20
+      "weight": 100,
+      "max_concurrent_requests": 10,
+      "daily_limit_tokens": 0,
+      "quota_mode": "free"
+    },
+    "cct/openrouter": {
+      "channel_id": 0,
+      "real_model": "openrouter/free",
+      "priority": 2,
+      "weight": 100,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 0,
+      "quota_mode": "free"
     }
   }
 }

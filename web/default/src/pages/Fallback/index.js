@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   Button,
   Card,
@@ -21,6 +21,7 @@ import {
   YAxis,
 } from 'recharts';
 import FallbackConfigPanel from '../../components/FallbackConfigPanel';
+import FallbackRuntimePanel from '../../components/FallbackRuntimePanel';
 import { API, isAdmin, showError, showSuccess } from '../../helpers';
 import { clampScore, sortScoreItems } from './scoreUtils';
 import './Fallback.css';
@@ -668,6 +669,20 @@ const Fallback = () => {
   const [summary, setSummary] = useState(null);
   const [metricSamples, setMetricSamples] = useState(loadMetricSamples);
 
+  const markAllAlertsRead = useCallback(async () => {
+    try {
+      const res = await API.post('/api/fallback/alert/read-all');
+      if (res.data?.success) {
+        setAlertEvents((prev) => prev.map((e) => ({ ...e, read: true })));
+      }
+    } catch (e) {
+      console.error('mark all alerts read failed:', e);
+    }
+  }, []);
+
+  const [searchParams] = useSearchParams();
+  const highlightDeployment = searchParams.get('highlight');
+
   const loadConfigMeta = useCallback(async () => {
     const res = await API.get('/api/fallback/editor/config');
     const { success, message, data } = res.data || {};
@@ -1294,7 +1309,8 @@ const Fallback = () => {
 
   const renderStatusPanel = () => (
     <>
-      <FallbackConfigPanel />
+      <FallbackRuntimePanel />
+      <FallbackConfigPanel highlightDeployment={highlightDeployment} />
       <div className='fallback-content-toolbar'>
         <div>
           <h2>部署状态</h2>
@@ -1875,6 +1891,11 @@ const Fallback = () => {
           <h2>告警历史</h2>
           <span>记录限额、冷却、耗尽和恢复事件。</span>
         </div>
+        <div>
+          <Button size='small' onClick={markAllAlertsRead}>
+            <Icon name='checkmark' /> 全部标为已读
+          </Button>
+        </div>
       </div>
       <div className='fallback-table-wrap'>
         <Table compact celled striped>
@@ -1901,7 +1922,11 @@ const Fallback = () => {
                 <Table.Row key={event.id || `${event.created_at}:${event.deployment_id}`}>
                   <Table.Cell>{formatTime(event.created_at)}</Table.Cell>
                   <Table.Cell>
-                    <strong>{event.deployment_id}</strong>
+                    <a href={`/fallback/status?highlight=${event.deployment_id}`}
+                       className='fallback-deployment-link'
+                       title='查看部署状态'>
+                      <strong>{event.deployment_id}</strong>
+                    </a>
                   </Table.Cell>
                   <Table.Cell>
                     <Label color={getLevelColor(event.level)}>

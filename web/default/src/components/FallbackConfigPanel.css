@@ -511,3 +511,17 @@
   gap: 8px;
   flex-wrap: wrap;
 }
+
+
+/* highlight deployment row from URL ?highlight= */
+.fallback-highlight {
+  outline: 2px solid #fbbd08 !important;
+  outline-offset: 1px;
+  background: #fffbe6 !important;
+  animation: fallback-highlight-pulse 2s ease-in-out 3;
+}
+
+@keyframes fallback-highlight-pulse {
+  0%, 100% { background: #fffbe6; }
+  50% { background: #fff3cd; }
+}

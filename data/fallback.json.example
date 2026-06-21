@@ -1,0 +1,183 @@
+{
+  "enabled": true,
+
+  "--- three-tier gateway ---": [
+    "cct/high  → paid_high pool   付费强模型，质量优先，默认不降级",
+    "cct/low   → cheap+local pool 低成本模型，成本优先，可降级到 free",
+    "cct/free  → free pool         内置免费模型池（含 FreeLLMAPI 占位）",
+    "",
+    "用户请求 cct/high|low|free，CCT API 根据 pool + 能力标签 + 限额 + 健康",
+    "状态选择真实 deployment，转发前把 model 改写为 real_model。"
+  ],
+
+  "--- setup_channels ---": [
+    "1. 在 One API 后台 /channel 创建渠道，记下 channel_id 填到下方 deployments",
+    "   - FreeLLMAPI：type=8(OpenAI compatible) base_url=http://localhost:3000/v1",
+    "   - Google Gemini：type=55  base_url=https://generativelanguage.googleapis.com/v1beta/openai/",
+    "   - OpenRouter：type=24     base_url=https://openrouter.ai/api",
+    "2. POST /api/fallback/config/reload 热加载",
+    "3. 客户端模型名填 cct/free / cct/low / cct/high 即可"
+  ],
+
+  "virtual_models": {
+    "cct/high": {
+      "enabled": true,
+      "description": "高质量付费模型池 — 复杂任务，质量优先",
+      "strategy": "quality_first",
+      "pools": ["paid_high"],
+      "allow_degrade_to_low": false,
+      "allow_degrade_to_free": false
+    },
+    "cct/low": {
+      "enabled": true,
+      "description": "低成本模型池 — 轻量任务，可降级到 free",
+      "strategy": "cost_first",
+      "pools": ["cheap", "local", "free"],
+      "allow_degrade_to_low": false,
+      "allow_degrade_to_free": true
+    },
+    "cct/free": {
+      "enabled": true,
+      "description": "内置免费模型池 — FreeLLMAPI + Gemini + OpenRouter 兜底",
+      "strategy": "free_first",
+      "pools": ["free"],
+      "allow_degrade_to_low": false,
+      "allow_degrade_to_free": false
+    }
+  },
+
+  "deployments": {
+    "--- paid_high pool ---": {
+      "enabled": false, "channel_id": 0, "real_model": "replace-with-paid-model", "pool": "paid_high",
+      "quality_tier": "high", "cost_tier": "paid",
+      "supports_vision": true, "supports_stream": true, "supports_tools": true, "supports_json": true,
+      "context_length": 128000, "priority": 1, "weight": 100, "max_concurrent_requests": 5,
+      "daily_limit_tokens": 0, "quota_mode": "free", "soft_limit_ratio": 0.9, "hard_limit_ratio": 0.98,
+      "rpm_limit": 0, "rpd_limit": 0, "tpm_limit": 0, "tpd_limit": 0
+    },
+
+    "freellmapi-main": {
+      "---": "外部 FreeLLMAPI 接入示例（enabled=false 默认不启用）。如需使用，在 CCT API 后台创建 OpenAI-compatible channel，填入真实 channel_id 和 real_model",
+      "enabled": false,
+      "channel_id": 0,
+      "real_model": "auto",
+      "pool": "free",
+      "quality_tier": "medium",
+      "cost_tier": "free",
+      "supports_vision": true,
+      "supports_stream": true,
+      "supports_tools": true,
+      "supports_json": true,
+      "context_length": 128000,
+      "priority": 1,
+      "weight": 100,
+      "max_concurrent_requests": 10,
+      "daily_limit_tokens": 0,
+      "quota_mode": "free",
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "rpm_limit": 0,
+      "rpd_limit": 0,
+      "tpm_limit": 0,
+      "tpd_limit": 0
+    },
+    "cct/gemini": {
+      "enabled": true,
+      "channel_id": 0,
+      "real_model": "gemini-2.0-flash-exp",
+      "pool": "free",
+      "quality_tier": "medium",
+      "cost_tier": "free",
+      "supports_vision": true,
+      "supports_stream": true,
+      "supports_tools": false,
+      "supports_json": true,
+      "context_length": 1048576,
+      "priority": 2,
+      "weight": 80,
+      "max_concurrent_requests": 10,
+      "daily_limit_tokens": 0,
+      "quota_mode": "free",
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "rpm_limit": 15,
+      "rpd_limit": 1500,
+      "tpm_limit": 0,
+      "tpd_limit": 0
+    },
+    "cct/openrouter": {
+      "enabled": true,
+      "channel_id": 0,
+      "real_model": "openrouter/free",
+      "pool": "free",
+      "quality_tier": "low",
+      "cost_tier": "free",
+      "supports_vision": false,
+      "supports_stream": true,
+      "supports_tools": false,
+      "supports_json": false,
+      "context_length": 32000,
+      "priority": 3,
+      "weight": 50,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 0,
+      "quota_mode": "free",
+      "soft_limit_ratio": 0.9,
+      "hard_limit_ratio": 0.98,
+      "rpm_limit": 20,
+      "rpd_limit": 0,
+      "tpm_limit": 0,
+      "tpd_limit": 0
+    }
+  },
+
+  "free_providers": {
+    "openrouter": {
+      "---": "OpenRouter Free — 填入 https://openrouter.ai/keys 获取的 API key。模型固定为 openrouter/free，会自动创建 channel + deployment",
+      "enabled": false,
+      "keys": ["sk-or-v1-your-key-here"],
+      "limits_override": {
+        "rpm_limit": 10,
+        "rpd_limit": 500,
+        "tpm_limit": 4000,
+        "tpd_limit": 100000
+      }
+    },
+    "groq": {
+      "---": "Groq — 填入 https://console.groq.com/keys 获取的 API key。默认模型 mixtral-8x7b-32768 / llama-3.3-70b-versatile / llama-3.1-8b-instant，路由到第一个",
+      "enabled": false,
+      "keys": ["gsk_your_groq_key"],
+      "models": ["mixtral-8x7b-32768", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"],
+      "default_rpm": 30,
+      "default_tpm": 6000,
+      "limits_override": {
+        "rpm_limit": 20,
+        "rpd_limit": 1000,
+        "tpm_limit": 6000,
+        "tpd_limit": 200000
+      }
+    }
+  },
+
+  "alert": {
+    "enabled": true,
+    "check_interval_seconds": 300,
+    "webhook_url": "",
+    "notify_on_soft_limit": true,
+    "notify_on_hard_limit": true,
+    "notify_on_exhausted": true,
+    "notify_on_recovered": true,
+    "notify_on_all_failed": true
+  },
+
+  "smart_sort": {
+    "enabled": true,
+    "weights": {
+      "base_priority_penalty": 5,
+      "success_rate_bonus": 30,
+      "error_rate_penalty": 50
+    }
+  },
+
+  "blocked_error_codes": ["internal_server_error"]
+}

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/songquanpeng/one-api/fallback"
+	dbmodel "github.com/songquanpeng/one-api/model"
 )
 
 func TestBackupFallbackEditorConfig(t *testing.T) {
@@ -78,52 +79,55 @@ func TestSplitFallbackEditorChannelModels(t *testing.T) {
 	}
 }
 
-func TestBuildFallbackConfigFromEditorPreservesFixedDeployment(t *testing.T) {
+func TestBuildFallbackConfigFromEditorPreservesStrategyAndPools(t *testing.T) {
 	payload := fallbackEditorConfig{
 		Enabled: true,
 	}
 	virtualModels := []fallbackEditorVirtualModel{
 		{
-			Name:            "core/auto",
+			Name:            "cct/free",
 			Enabled:         true,
-			Description:     "core fixed model",
-			RoutingMode:     "fixed",
-			FixedDeployment: "core-primary",
-			FallbackOrder:   []string{"core-primary", "core-backup"},
+			Description:     "free pool virtual model",
+			Strategy:        "free_first",
+			Pools:           []string{"free"},
+			AllowDegradeToLow:  false,
+			AllowDegradeToFree: false,
 		},
 	}
 	deployments := []fallbackEditorDeployment{
-		{ID: "core-primary", Enabled: true, ChannelID: 1, RealModel: "deepseek-v3"},
-		{ID: "core-backup", Enabled: true, ChannelID: 2, RealModel: "deepseek-reasoner"},
+		{ID: "groq-free", Enabled: true, ChannelID: 1, RealModel: "llama-3.1-8b-instant", Pool: "free", CostTier: "free"},
 	}
 
 	cfg := buildFallbackConfigFromEditor(payload, virtualModels, deployments)
 
-	vm := cfg.VirtualModels["core/auto"]
-	if vm.RoutingMode != fallback.RoutingModeFixed {
-		t.Fatalf("expected routing mode fixed, got %s", vm.RoutingMode)
+	vm := cfg.VirtualModels["cct/free"]
+	if vm.Strategy != fallback.StrategyFreeFirst {
+		t.Fatalf("expected strategy free_first, got %s", vm.Strategy)
 	}
-	if vm.FixedDeployment != "core-primary" {
-		t.Fatalf("expected fixed deployment core-primary, got %q", vm.FixedDeployment)
+	if len(vm.Pools) != 1 || vm.Pools[0] != "free" {
+		t.Fatalf("expected pools [free], got %v", vm.Pools)
+	}
+	dep := cfg.Deployments["groq-free"]
+	if dep.Pool != "free" || dep.CostTier != "free" {
+		t.Fatalf("expected deployment pool=free cost_tier=free, got pool=%s cost_tier=%s", dep.Pool, dep.CostTier)
 	}
 }
 
-func TestNormalizeFallbackEditorPayloadRejectsInvalidFixedDeployment(t *testing.T) {
+func TestNormalizeFallbackEditorPayloadRejectsInvalidPoolConfig(t *testing.T) {
 	basePayload := func() fallbackEditorConfig {
 		return fallbackEditorConfig{
 			Enabled: true,
 			VirtualModels: []fallbackEditorVirtualModel{
 				{
-					Name:            "core/auto",
-					Enabled:         true,
-					RoutingMode:     "fixed",
-					FixedDeployment: "core-primary",
-					FallbackOrder:   []string{"core-primary", "core-backup"},
+					Name:     "cct/free",
+					Enabled:  true,
+					Strategy: "free_first",
+					Pools:    []string{"free"},
 				},
 			},
 			Deployments: []fallbackEditorDeployment{
-				{ID: "core-primary", Enabled: true, ChannelID: 1, RealModel: "deepseek-v3"},
-				{ID: "core-backup", Enabled: true, ChannelID: 2, RealModel: "deepseek-reasoner"},
+				{ID: "groq-free", Enabled: true, ChannelID: 1, RealModel: "llama-3.1-8b-instant", Pool: "free"},
+				{ID: "paid-1", Enabled: true, ChannelID: 2, RealModel: "gpt-4", Pool: "paid_high"},
 			},
 		}
 	}
@@ -133,19 +137,19 @@ func TestNormalizeFallbackEditorPayloadRejectsInvalidFixedDeployment(t *testing.
 		edit func(*fallbackEditorConfig)
 	}{
 		{
-			name: "empty fixed deployment",
+			name: "empty pools",
 			edit: func(payload *fallbackEditorConfig) {
-				payload.VirtualModels[0].FixedDeployment = ""
+				payload.VirtualModels[0].Pools = nil
 			},
 		},
 		{
-			name: "fixed deployment outside fallback order",
+			name: "pool with no deployments",
 			edit: func(payload *fallbackEditorConfig) {
-				payload.VirtualModels[0].FixedDeployment = "missing"
+				payload.VirtualModels[0].Pools = []string{"nonexistent"}
 			},
 		},
 		{
-			name: "disabled fixed deployment",
+			name: "pool with only disabled deployments",
 			edit: func(payload *fallbackEditorConfig) {
 				payload.Deployments[0].Enabled = false
 			},
@@ -163,19 +167,18 @@ func TestNormalizeFallbackEditorPayloadRejectsInvalidFixedDeployment(t *testing.
 	}
 }
 
-func TestBuildFallbackEditorConfigIncludesFixedDeployment(t *testing.T) {
+func TestBuildFallbackEditorConfigIncludesStrategyAndPools(t *testing.T) {
 	cfg := &fallback.Config{
 		Enabled: true,
 		VirtualModels: map[string]fallback.VirtualModelConfig{
-			"core/auto": {
-				Enabled:         true,
-				RoutingMode:     fallback.RoutingModeFixed,
-				FixedDeployment: "core-primary",
-				FallbackOrder:   []string{"core-primary"},
+			"cct/free": {
+				Enabled:  true,
+				Strategy: fallback.StrategyFreeFirst,
+				Pools:    []string{"free"},
 			},
 		},
 		Deployments: map[string]fallback.DeploymentConfig{
-			"core-primary": {Enabled: true, ChannelID: 0, RealModel: "deepseek-v3"},
+			"groq-free": {Enabled: true, ChannelID: 0, RealModel: "llama-3.1-8b-instant", Pool: "free", CostTier: "free"},
 		},
 	}
 
@@ -185,10 +188,109 @@ func TestBuildFallbackEditorConfigIncludesFixedDeployment(t *testing.T) {
 		t.Fatalf("expected one virtual model, got %d", len(editorCfg.VirtualModels))
 	}
 	vm := editorCfg.VirtualModels[0]
-	if vm.RoutingMode != fallback.RoutingModeFixed {
-		t.Fatalf("expected routing mode fixed, got %s", vm.RoutingMode)
+	if vm.Strategy != fallback.StrategyFreeFirst {
+		t.Fatalf("expected strategy free_first, got %s", vm.Strategy)
 	}
-	if vm.FixedDeployment != "core-primary" {
-		t.Fatalf("expected fixed deployment core-primary, got %q", vm.FixedDeployment)
+	if len(vm.Pools) != 1 || vm.Pools[0] != "free" {
+		t.Fatalf("expected pools [free], got %v", vm.Pools)
+	}
+}
+
+func TestMaskSecretKey_Empty(t *testing.T) {
+	masked := maskSecretKey("")
+	if masked != "" {
+		t.Fatalf("expected empty, got %q", masked)
+	}
+}
+
+func TestMaskSecretKey_ShortKey(t *testing.T) {
+	masked := maskSecretKey("abc123")
+	if masked != "********" {
+		t.Fatalf("expected 8 asterisks for short key, got %q", masked)
+	}
+}
+
+func TestMaskSecretKey_DoesNotLeakOriginal(t *testing.T) {
+	original := "sk-or-v1-TEST_PLACEHOLDER_NOT_REAL"
+	masked := maskSecretKey(original)
+
+	if masked == original {
+		t.Fatal("masked key must not equal original")
+	}
+	if strings.Contains(masked, original) {
+		t.Fatal("masked key must not contain original")
+	}
+
+	if !strings.HasPrefix(masked, original[:4]) {
+		t.Fatalf("expected masked key to start with %q, got %q", original[:4], masked)
+	}
+	if !strings.HasSuffix(masked, original[len(original)-4:]) {
+		t.Fatalf("expected masked key to end with %q, got %q", original[len(original)-4:], masked)
+	}
+
+	if !strings.Contains(masked, "****") {
+		t.Fatal("masked key must contain **** in the middle")
+	}
+}
+
+func TestMaskSecretKey_Length(t *testing.T) {
+	original := "sk-or-v1-TEST_PLACEHOLDER_NOT_REAL"
+	masked := maskSecretKey(original)
+	if len(masked) != len(original) {
+		t.Fatalf("expected masked length %d, got %d", len(original), len(masked))
+	}
+}
+
+func TestBuildFallbackEditorChannel_NoFullKey(t *testing.T) {
+	channel := &dbmodel.Channel{
+		Id:   1,
+		Name: "test-channel",
+		Type: 1,
+		Key:  "sk-or-v1-TEST_PLACEHOLDER_NOT_REAL",
+	}
+	baseURL := "https://api.example.com"
+	channel.BaseURL = &baseURL
+
+	result := buildFallbackEditorChannel(channel)
+
+	if result.KeyMasked == channel.Key {
+		t.Fatal("buildFallbackEditorChannel must not return full key")
+	}
+	if strings.Contains(result.KeyMasked, channel.Key) {
+		t.Fatal("response must not contain full key")
+	}
+
+	if !result.HasKey {
+		t.Fatal("expected HasKey = true when channel has a key")
+	}
+
+	if result.KeyMasked == "" {
+		t.Fatal("key_masked must not be empty when channel has a key")
+	}
+	if strings.Contains(result.KeyMasked, channel.Key) {
+		t.Fatal("key_masked must not contain full key")
+	}
+	if !strings.Contains(result.KeyMasked, "****") {
+		t.Fatal("key_masked must contain masking asterisks")
+	}
+}
+
+func TestBuildFallbackEditorChannel_NoKey(t *testing.T) {
+	channel := &dbmodel.Channel{
+		Id:   2,
+		Name: "no-key-channel",
+		Type: 1,
+		Key:  "",
+	}
+	baseURL := "https://api.example.com"
+	channel.BaseURL = &baseURL
+
+	result := buildFallbackEditorChannel(channel)
+
+	if result.KeyMasked != "" {
+		t.Fatalf("expected empty key_masked for channel without key, got %q", result.KeyMasked)
+	}
+	if result.HasKey {
+		t.Fatal("expected HasKey = false when channel has no key")
 	}
 }

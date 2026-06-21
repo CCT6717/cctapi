@@ -19,6 +19,7 @@ type AlertHistoryEvent struct {
 	UsedTokens   int64     `json:"used_tokens"`
 	DailyLimit   int64     `json:"daily_limit"`
 	Percentage   float64   `json:"percentage"`
+	Read         bool      `json:"read" gorm:"default:false"`
 }
 
 var alertHistoryStoreOnce sync.Once
@@ -70,4 +71,20 @@ func GetAlertHistory(limit int) ([]AlertHistoryEvent, error) {
 	events := make([]AlertHistoryEvent, 0)
 	err := model.DB.Order("created_at desc, id desc").Limit(limit).Find(&events).Error
 	return events, err
+}
+
+func MarkAllAlertsRead() error {
+	if err := InitAlertHistoryStore(); err != nil {
+		return err
+	}
+	return model.DB.Model(&AlertHistoryEvent{}).Where("`read` = ?", false).Update("`read`", true).Error
+}
+
+func GetUnreadAlertCount() (int64, error) {
+	if err := InitAlertHistoryStore(); err != nil {
+		return 0, err
+	}
+	var count int64
+	err := model.DB.Model(&AlertHistoryEvent{}).Where("`read` = ?", false).Count(&count).Error
+	return count, err
 }

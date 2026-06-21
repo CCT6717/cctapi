@@ -214,20 +214,40 @@ func relayWithFallback(c *gin.Context) {
 		}
 	}
 
-	routingMode := fallback.GetRoutingModeForVirtualModel(virtualModel)
-	if stickyID != "" {
-		// Sticky active: preserve current order, skip weighted round-robin to avoid unwanted switching
-		logger.Infof(ctx, "[fallback] sticky active for %s -> %s, preserving order (skip weighted round-robin)", virtualModel, stickyID)
-	} else if routingMode == fallback.RoutingModeWeighted {
-		deployments = fallback.OrderDeploymentsForRequest(virtualModel, deployments)
-		if len(deployments) > 0 {
-			logger.Infof(ctx, "[fallback] weighted start deployment for %s: %s (weight=%d)",
-				virtualModel, deployments[0].ID, deployments[0].Weight)
-		}
-	} else if len(deployments) > 0 {
-		logger.Infof(ctx, "[fallback] sequential start deployment for %s: %s",
-			virtualModel, deployments[0].ID)
+	// Detect required capabilities (vision/tools/json/stream) and filter deployments.
+	caps := fallback.DetectRequestCapabilities(&parsedRequest)
+	if caps.MaxTokens == 0 && estimatedTokens > 0 {
+		caps.MaxTokens = estimatedTokens
 	}
+	beforeCap := len(deployments)
+	deployments = fallback.FilterByCapability(deployments, caps)
+	if len(deployments) < beforeCap {
+		logger.Infof(ctx, "[fallback] capability filter: %d -> %d deployments (vision=%v tools=%v json=%v stream=%v)",
+			beforeCap, len(deployments), caps.Vision, caps.Tools, caps.JSON, caps.Stream)
+	}
+
+	// Health filter: drop deployments marked invalid or in error state by the
+	// background health checker. healthy/unknown are allowed to route.
+	beforeHealth := len(deployments)
+	deployments = filterHealthyDeployments(deployments)
+	if len(deployments) < beforeHealth {
+		logger.Infof(ctx, "[fallback] health filter: %d -> %d deployments", beforeHealth, len(deployments))
+	}
+
+	// Strategy-aware sort (quality_first / cost_first / free_first).
+	if vm, ok := fallback.GetVirtualModel(virtualModel); ok && len(deployments) > 1 {
+		deployments = fallback.SortByStrategy(deployments, vm.Strategy)
+	}
+
+	if stickyID != "" {
+		logger.Infof(ctx, "[fallback] sticky active for %s -> %s", virtualModel, stickyID)
+	} else if len(deployments) > 0 {
+		logger.Infof(ctx, "[fallback] strategy-based start deployment for %s: %s", virtualModel, deployments[0].ID)
+	}
+
+
+
+
 
 	relayMode := relaymode.GetByPath(c.Request.URL.Path)
 	var lastBizErr *model.ErrorWithStatusCode
@@ -266,41 +286,6 @@ func relayWithFallback(c *gin.Context) {
 			continue
 		}
 
-		// Context length pre-filtering: skip deployment if request exceeds max_context
-		if dep.MaxContext > 0 && estimatedTokens > 0 && estimatedTokens > dep.MaxContext {
-			logger.Infof(ctx, "[fallback] deployment %s max_context=%d < estimated_tokens=%d, skipping",
-				dep.ID, dep.MaxContext, estimatedTokens)
-			lastBizErr = &model.ErrorWithStatusCode{
-				StatusCode: http.StatusRequestEntityTooLarge,
-				Error: model.Error{
-					Message: fmt.Sprintf("request estimated tokens %d exceeds deployment max_context %d", estimatedTokens, dep.MaxContext),
-					Type:    "context_length_exceeded",
-					Param:   "",
-					Code:    "context_length_exceeded",
-				},
-			}
-			prevDeployment = dep.ID
-			prevDurationMs = 0
-			continue
-		}
-
-		// Context length pre-filtering: skip deployment if request is below min_context
-		if dep.MinContext > 0 && estimatedTokens > 0 && estimatedTokens < dep.MinContext {
-			logger.Infof(ctx, "[fallback] deployment %s min_context=%d > estimated_tokens=%d, skipping",
-				dep.ID, dep.MinContext, estimatedTokens)
-			lastBizErr = &model.ErrorWithStatusCode{
-				StatusCode: http.StatusBadRequest,
-				Error: model.Error{
-					Message: fmt.Sprintf("request estimated tokens %d is below deployment min_context %d", estimatedTokens, dep.MinContext),
-					Type:    "context_length_too_small",
-					Param:   "",
-					Code:    "context_length_too_small",
-				},
-			}
-			prevDeployment = dep.ID
-			prevDurationMs = 0
-			continue
-		}
 
 		// Get channel by deployment's channel ID
 		channel, err := dbmodel.GetChannelById(dep.ChannelID, true)
@@ -329,6 +314,25 @@ func relayWithFallback(c *gin.Context) {
 					Message: fmt.Sprintf("channel %d is disabled", dep.ChannelID),
 					Type:    "fallback_channel",
 					Code:    "channel_disabled",
+				},
+			}
+			prevDeployment = dep.ID
+			prevDurationMs = 0
+			continue
+		}
+
+		// Four-dimensional quota pre-check: RPM/RPD/TPM/TPD before sending the request.
+		runtimeState := fallback.GetRuntimeState(dep.ID)
+		if !fallback.PassQuotaCheck(dep, runtimeState, caps.MaxTokens) {
+			logger.Infof(ctx, "[fallback] deployment %s quota pre-check failed (rpm=%d/%d rpd=%d/%d tpm=%d/%d tpd=%d/%d), skipping",
+				dep.ID, runtimeState.MinuteRequests, dep.RPMLimit, runtimeState.DayRequests, dep.RPDLimit,
+				runtimeState.MinuteTokens, dep.TPMLimit, runtimeState.DayTokens, dep.TPDLimit)
+			lastBizErr = &model.ErrorWithStatusCode{
+				StatusCode: http.StatusTooManyRequests,
+				Error: model.Error{
+					Message: fmt.Sprintf("deployment %s reached RPM/RPD/TPM/TPD limit", dep.ID),
+					Type:    "fallback_quota",
+					Code:    "deployment_quota_exceeded",
 				},
 			}
 			prevDeployment = dep.ID
@@ -379,7 +383,8 @@ func relayWithFallback(c *gin.Context) {
 			dep.ChannelID, channel.Name, dep.RealModel)
 
 		// Set fallback context keys in context.Context for postConsumeQuota
-		newCtx := context.WithValue(ctx, ctxkey.FallbackDeploymentID, dep.ID)
+		newCtx := context.WithValue(ctx, ctxkey.FallbackVirtualModel, virtualModel)
+		newCtx = context.WithValue(newCtx, ctxkey.FallbackDeploymentID, dep.ID)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackRealModel, dep.RealModel)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackChannelID, dep.ChannelID)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackDeploymentIndex, i)
@@ -413,6 +418,10 @@ func relayWithFallback(c *gin.Context) {
 			if !relayModeRecordsFallbackUsage(relayMode) {
 				fallback.RecordDeploymentSuccess(dep.ID, fallback.UsageInfo{})
 			}
+			// Record runtime usage for RPM/RPD/TPM/TPD tracking.
+			// Use estimated tokens when upstream usage isn't reported via UsageInfo path.
+			fallback.RecordUsage(dep.ID, effectiveTokenCount(caps.MaxTokens))
+			fallback.RecordSuccess(dep.ID)
 			common.IncFallbackSuccess()
 			logger.Infof(ctx, "[fallback] deployment %s succeeded in %dms", dep.ID, durationMs)
 			return
@@ -431,6 +440,7 @@ func relayWithFallback(c *gin.Context) {
 
 		// Record error state
 		fallback.RecordDeploymentError(dep.ID, relayErr)
+		fallback.RecordFailure(dep.ID, getRelayErrorMessage(bizErr), errClass.Category == fallback.ErrorCategoryRateLimit)
 
 		shouldFallback := errClass.ShouldFallback
 		if shouldFallback {
@@ -648,6 +658,28 @@ func RelayNotFound(c *gin.Context) {
 // Roughly 3.5 characters per token — works well for mixed Chinese/English text.
 // Adds max_tokens / max_completion_tokens from the request to account for expected output.
 // Returns 0 if the request has no messages (e.g. image generation, audio, embedding).
+// effectiveTokenCount returns a non-zero token estimate for runtime usage
+// accounting. Falls back to a small default when estimation produced nothing
+// (e.g. non-text relay modes) so the request still counts toward RPM/RPD.
+func effectiveTokenCount(estimated int) int {
+	if estimated > 0 {
+		return estimated
+	}
+	return 1024
+}
+
+// filterHealthyDeployments drops deployments that the background health checker
+// has marked invalid or in a persistent error state. healthy/unknown pass through.
+func filterHealthyDeployments(deployments []fallback.DeploymentConfig) []fallback.DeploymentConfig {
+	out := make([]fallback.DeploymentConfig, 0, len(deployments))
+	for _, dep := range deployments {
+		if fallback.IsDeploymentHealthy(dep.ID) {
+			out = append(out, dep)
+		}
+	}
+	return out
+}
+
 func estimateTokenCount(req *model.GeneralOpenAIRequest) int {
 	if req == nil || len(req.Messages) == 0 {
 		return 0

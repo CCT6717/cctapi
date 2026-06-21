@@ -32,9 +32,10 @@ type fallbackEditorVirtualModel struct {
 	Name            string   `json:"name"`
 	Enabled         bool     `json:"enabled"`
 	Description     string   `json:"description"`
-	RoutingMode     string   `json:"routing_mode"`
-	FixedDeployment string   `json:"fixed_deployment,omitempty"`
-	FallbackOrder   []string `json:"fallback_order"`
+	Strategy        string   `json:"strategy"`
+	Pools           []string `json:"pools"`
+	AllowDegradeToLow  bool  `json:"allow_degrade_to_low"`
+	AllowDegradeToFree bool `json:"allow_degrade_to_free"`
 }
 
 type fallbackEditorDeployment struct {
@@ -42,6 +43,14 @@ type fallbackEditorDeployment struct {
 	Enabled               bool                  `json:"enabled"`
 	ChannelID             int                   `json:"channel_id"`
 	RealModel             string                `json:"real_model"`
+	Pool                  string                `json:"pool"`
+	QualityTier           string                `json:"quality_tier"`
+	CostTier              string                `json:"cost_tier"`
+	SupportsVision        bool                  `json:"supports_vision"`
+	SupportsStream        bool                  `json:"supports_stream"`
+	SupportsTools         bool                  `json:"supports_tools"`
+	SupportsJSON          bool                  `json:"supports_json"`
+	ContextLength         int                   `json:"context_length"`
 	Priority              int                   `json:"priority"`
 	Weight                int                   `json:"weight"`
 	MaxConcurrentRequests int                   `json:"max_concurrent_requests"`
@@ -49,8 +58,10 @@ type fallbackEditorDeployment struct {
 	QuotaMode             string                `json:"quota_mode"`
 	SoftLimitRatio        float64               `json:"soft_limit_ratio"`
 	HardLimitRatio        float64               `json:"hard_limit_ratio"`
-	MaxContext            int                   `json:"max_context"`
-	MinContext            int                   `json:"min_context"`
+	RPMLimit              int                   `json:"rpm_limit"`
+	RPDLimit              int                   `json:"rpd_limit"`
+	TPMLimit              int                   `json:"tpm_limit"`
+	TPDLimit              int                   `json:"tpd_limit"`
 	Channel               fallbackEditorChannel `json:"channel"`
 }
 
@@ -59,10 +70,24 @@ type fallbackEditorChannel struct {
 	Name      string   `json:"name"`
 	Type      int      `json:"type"`
 	BaseURL   string   `json:"base_url"`
-	Key       string   `json:"key"`
+	KeyMasked string   `json:"key_masked"`
+	HasKey    bool     `json:"has_key"`
 	Models    string   `json:"models"`
 	ModelList []string `json:"model_list"`
 	Status    int      `json:"status"`
+}
+
+// maskSecretKey returns a masked version of the API key for safe display.
+// Only the first 4 and last 4 characters are shown; the rest is replaced with "*".
+// Returns empty string if input is empty.
+func maskSecretKey(key string) string {
+	if key == "" {
+		return ""
+	}
+	if len(key) <= 8 {
+		return "********"
+	}
+	return key[:4] + strings.Repeat("*", len(key)-8) + key[len(key)-4:]
 }
 
 func getFallbackEditorConfig(c *gin.Context) {
@@ -76,8 +101,39 @@ func getFallbackEditorConfig(c *gin.Context) {
 }
 
 func updateFallbackEditorConfig(c *gin.Context) {
+	// Step 1: read raw body and check for old frontend payload (routing_mode / fallback_order).
+	rawBody, err := c.GetRawData()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	var rawPayload map[string]any
+	if err := json.Unmarshal(rawBody, &rawPayload); err == nil {
+		if vms, ok := rawPayload["virtual_models"].([]any); ok {
+			for _, vm := range vms {
+				if vmObj, ok := vm.(map[string]any); ok {
+					if _, has := vmObj["routing_mode"]; has {
+						c.JSON(http.StatusBadRequest, gin.H{
+							"success": false,
+							"message": "旧版编辑器发送的 payload 包含 routing_mode，新版不再支持此字段。请关闭旧编辑器页面后刷新重试，或直接编辑 data/fallback.json。",
+						})
+						return
+					}
+					if _, has := vmObj["fallback_order"]; has {
+						c.JSON(http.StatusBadRequest, gin.H{
+							"success": false,
+							"message": "旧版编辑器发送的 payload 包含 fallback_order，新版不再支持此字段。请关闭旧编辑器页面后刷新重试，或直接编辑 data/fallback.json。",
+						})
+						return
+					}
+				}
+			}
+		}
+	}
+
+	// Step 2: re-bind to struct
 	var payload fallbackEditorConfig
-	if err := c.ShouldBindJSON(&payload); err != nil {
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
@@ -168,13 +224,14 @@ func buildFallbackEditorConfig(cfg *fallback.Config) fallbackEditorConfig {
 	virtualModels := make([]fallbackEditorVirtualModel, 0, len(vmNames))
 	for _, name := range vmNames {
 		vm := cfg.VirtualModels[name]
-		virtualModels = append(virtualModels, fallbackEditorVirtualModel{
+	virtualModels = append(virtualModels, fallbackEditorVirtualModel{
 			Name:            name,
 			Enabled:         vm.Enabled,
 			Description:     vm.Description,
-			RoutingMode:     vm.RoutingMode,
-			FixedDeployment: vm.FixedDeployment,
-			FallbackOrder:   append([]string{}, vm.FallbackOrder...),
+			Strategy:        vm.Strategy,
+			Pools:           append([]string{}, vm.Pools...),
+			AllowDegradeToLow:  vm.AllowDegradeToLow,
+			AllowDegradeToFree: vm.AllowDegradeToFree,
 		})
 	}
 
@@ -200,6 +257,14 @@ func buildFallbackEditorConfig(cfg *fallback.Config) fallbackEditorConfig {
 			Enabled:               dep.Enabled,
 			ChannelID:             dep.ChannelID,
 			RealModel:             dep.RealModel,
+			Pool:                  dep.Pool,
+			QualityTier:           dep.QualityTier,
+			CostTier:              dep.CostTier,
+			SupportsVision:        dep.SupportsVision,
+			SupportsStream:        dep.SupportsStream,
+			SupportsTools:         dep.SupportsTools,
+			SupportsJSON:          dep.SupportsJSON,
+			ContextLength:         dep.ContextLength,
 			Priority:              dep.Priority,
 			Weight:                dep.Weight,
 			MaxConcurrentRequests: dep.MaxConcurrentRequests,
@@ -207,8 +272,10 @@ func buildFallbackEditorConfig(cfg *fallback.Config) fallbackEditorConfig {
 			QuotaMode:             dep.QuotaMode,
 			SoftLimitRatio:        dep.SoftLimitRatio,
 			HardLimitRatio:        dep.HardLimitRatio,
-			MaxContext:            dep.MaxContext,
-			MinContext:            dep.MinContext,
+			RPMLimit:              dep.RPMLimit,
+			RPDLimit:              dep.RPDLimit,
+			TPMLimit:              dep.TPMLimit,
+			TPDLimit:              dep.TPDLimit,
 		}
 		if dep.ChannelID > 0 {
 			if channel, err := dbmodel.GetChannelById(dep.ChannelID, true); err == nil {
@@ -265,7 +332,8 @@ func buildFallbackEditorChannel(channel *dbmodel.Channel) fallbackEditorChannel 
 		Name:      channel.Name,
 		Type:      channel.Type,
 		BaseURL:   baseURL,
-		Key:       channel.Key,
+		KeyMasked: maskSecretKey(channel.Key),
+		HasKey:    channel.Key != "",
 		Models:    channel.Models,
 		ModelList: splitFallbackEditorChannelModels(channel.Models),
 		Status:    channel.Status,
@@ -342,46 +410,40 @@ func normalizeFallbackEditorPayload(payload fallbackEditorConfig) ([]fallbackEdi
 	vmNames := make(map[string]bool)
 	for _, vm := range payload.VirtualModels {
 		vm.Name = strings.TrimSpace(vm.Name)
-		vm.RoutingMode = fallback.NormalizeRoutingMode(vm.RoutingMode)
-		vm.FixedDeployment = strings.TrimSpace(vm.FixedDeployment)
+		vm.Strategy = fallback.NormalizeStrategy(vm.Strategy)
+		if len(vm.Pools) == 0 {
+			vm.Pools = []string{"default"}
+		}
+		cleanPools := make([]string, 0, len(vm.Pools))
+		for _, p := range vm.Pools {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				cleanPools = append(cleanPools, p)
+			}
+		}
+		vm.Pools = cleanPools
 		if vm.Name == "" {
 			return nil, nil, fmt.Errorf("virtual model name is required")
 		}
 		if vmNames[vm.Name] {
 			return nil, nil, fmt.Errorf("duplicate virtual model: %s", vm.Name)
 		}
-		if vm.Enabled && len(vm.FallbackOrder) == 0 {
-			return nil, nil, fmt.Errorf("enabled virtual model %s needs at least one deployment", vm.Name)
+		if vm.Enabled && len(vm.Pools) == 0 {
+			return nil, nil, fmt.Errorf("enabled virtual model %s needs at least one pool", vm.Name)
 		}
-
-		order := make([]string, 0, len(vm.FallbackOrder))
-		for _, id := range vm.FallbackOrder {
-			id = strings.TrimSpace(id)
-			if id == "" {
-				continue
-			}
-			if !deploymentIDs[id] {
-				return nil, nil, fmt.Errorf("virtual model %s references unknown deployment %s", vm.Name, id)
-			}
-			order = append(order, id)
-		}
-		vm.FallbackOrder = order
-		if vm.Enabled && vm.RoutingMode == fallback.RoutingModeFixed {
-			if vm.FixedDeployment == "" {
-				return nil, nil, fmt.Errorf("fixed virtual model %s needs a fixed deployment", vm.Name)
-			}
-			fixedInOrder := false
-			for _, id := range vm.FallbackOrder {
-				if id == vm.FixedDeployment {
-					fixedInOrder = true
-					break
+		// Verify each pool has at least one enabled deployment
+		if vm.Enabled {
+			for _, poolName := range vm.Pools {
+				hasDeployment := false
+				for _, dep := range deployments {
+					if dep.Enabled && dep.Pool == poolName {
+						hasDeployment = true
+						break
+					}
 				}
-			}
-			if !fixedInOrder {
-				return nil, nil, fmt.Errorf("fixed deployment %s must be bound to virtual model %s", vm.FixedDeployment, vm.Name)
-			}
-			if !deploymentEnabled[vm.FixedDeployment] {
-				return nil, nil, fmt.Errorf("fixed deployment %s for virtual model %s must be enabled", vm.FixedDeployment, vm.Name)
+				if !hasDeployment {
+					return nil, nil, fmt.Errorf("virtual model %s pool %s has no enabled deployments", vm.Name, poolName)
+				}
 			}
 		}
 		vmNames[vm.Name] = true
@@ -427,11 +489,12 @@ func buildFallbackConfigFromEditor(payload fallbackEditorConfig, virtualModels [
 
 	for _, vm := range virtualModels {
 		cfg.VirtualModels[vm.Name] = fallback.VirtualModelConfig{
-			Enabled:         vm.Enabled,
-			Description:     vm.Description,
-			RoutingMode:     fallback.NormalizeRoutingMode(vm.RoutingMode),
-			FixedDeployment: vm.FixedDeployment,
-			FallbackOrder:   append([]string{}, vm.FallbackOrder...),
+			Enabled:            vm.Enabled,
+			Description:        vm.Description,
+			Strategy:           fallback.NormalizeStrategy(vm.Strategy),
+			Pools:              append([]string{}, vm.Pools...),
+			AllowDegradeToLow:  vm.AllowDegradeToLow,
+			AllowDegradeToFree: vm.AllowDegradeToFree,
 		}
 	}
 
@@ -440,6 +503,14 @@ func buildFallbackConfigFromEditor(payload fallbackEditorConfig, virtualModels [
 			Enabled:               dep.Enabled,
 			ChannelID:             dep.ChannelID,
 			RealModel:             dep.RealModel,
+			Pool:                  dep.Pool,
+			QualityTier:           dep.QualityTier,
+			CostTier:              dep.CostTier,
+			SupportsVision:        dep.SupportsVision,
+			SupportsStream:        dep.SupportsStream,
+			SupportsTools:         dep.SupportsTools,
+			SupportsJSON:          dep.SupportsJSON,
+			ContextLength:         dep.ContextLength,
 			Priority:              dep.Priority,
 			Weight:                dep.Weight,
 			MaxConcurrentRequests: dep.MaxConcurrentRequests,
@@ -447,8 +518,10 @@ func buildFallbackConfigFromEditor(payload fallbackEditorConfig, virtualModels [
 			QuotaMode:             dep.QuotaMode,
 			SoftLimitRatio:        dep.SoftLimitRatio,
 			HardLimitRatio:        dep.HardLimitRatio,
-			MaxContext:            dep.MaxContext,
-			MinContext:            dep.MinContext,
+			RPMLimit:              dep.RPMLimit,
+			RPDLimit:              dep.RPDLimit,
+			TPMLimit:              dep.TPMLimit,
+			TPDLimit:              dep.TPDLimit,
 		}
 	}
 
@@ -493,10 +566,15 @@ func upsertFallbackEditorChannel(dep fallbackEditorDeployment) (int, error) {
 	}
 
 	if dep.ChannelID <= 0 {
+		// Create new channel
+		rawKey := dep.Channel.KeyMasked
+		if rawKey == "" || strings.Contains(rawKey, "***") {
+			return 0, fmt.Errorf("channel key is required for new deployment %s", dep.ID)
+		}
 		baseURL := dep.Channel.BaseURL
 		channel := dbmodel.Channel{
 			Type:        channelType,
-			Key:         dep.Channel.Key,
+			Key:         rawKey,
 			Status:      channelStatus,
 			Name:        channelName,
 			CreatedTime: helper.GetTimestamp(),
@@ -510,6 +588,7 @@ func upsertFallbackEditorChannel(dep fallbackEditorDeployment) (int, error) {
 		return channel.Id, nil
 	}
 
+	// Update existing channel
 	channel, err := dbmodel.GetChannelById(dep.ChannelID, true)
 	if err != nil {
 		return 0, fmt.Errorf("failed to load channel %d for deployment %s: %w", dep.ChannelID, dep.ID, err)
@@ -538,13 +617,21 @@ func upsertFallbackEditorChannel(dep fallbackEditorDeployment) (int, error) {
 		group = "default"
 	}
 
+	// Determine whether to update the key:
+	// - Empty or masked (contains "***") → preserve existing key
+	// - Non-empty and not masked → it's a new key from the user
+	rawKey := dep.Channel.KeyMasked
+	updateKey := rawKey != "" && !strings.Contains(rawKey, "***")
+
 	updates := map[string]interface{}{
 		"name":     channelName,
 		"type":     channelType,
-		"key":      dep.Channel.Key,
 		"base_url": dep.Channel.BaseURL,
 		"status":   channelStatus,
 		"group":    group,
+	}
+	if updateKey {
+		updates["key"] = rawKey
 	}
 	if err := dbmodel.DB.Model(&dbmodel.Channel{}).Where("id = ?", channel.Id).Select("name", "type", "key", "base_url", "status", "group").Updates(updates).Error; err != nil {
 		return 0, fmt.Errorf("failed to update channel %d for deployment %s: %w", channel.Id, dep.ID, err)

@@ -18,14 +18,11 @@
    │                       └──→ doubao-16   (channel 3)  ──→ 成功
 ```
 
-### 当前配置的虚拟模型
+### 预置的虚拟模型
 
-| 模型 | 用途 | 回退链 |
-|------|------|--------|
-| `high/auto` | 编程 | doubao-code → doubao-18 → doubao-16 |
-| `low/auto` | 聊天 | openrouter-new-free → openrouter-old → openrouter-new |
-| `all/auto` | 全渠道 | doubao 链 → openrouter 链 |
-| `core/go` | 预留 | — |
+| 模型 | 用途 | 路由 | 回退链 |
+|------|------|------|--------|
+| `cct/free` | 免费模型池 | sequential | Google Gemini → OpenRouter 兜底 |
 
 ---
 
@@ -100,29 +97,57 @@ go build -o one-api.exe .
 
 ## 配置
 
-虚拟模型配置存储在 `data/fallback.json`。可通过 `/channel` 页面可视化编辑，或直接改文件后热重载。
+虚拟模型配置存储在 `data/fallback.json`（已加入 `.gitignore`，不会提交到仓库）。
+首次使用请复制模板并填入真实渠道信息：
+
+```bash
+cp data/fallback.json.example data/fallback.json
+```
+
+### 第一步：创建渠道
+
+在 One API 后台 `/channel` 页创建两个渠道：
+
+| 渠道 | 类型 | 地址 | 模型 | Key 获取 |
+|------|------|------|------|---------|
+| Google Gemini | 55 (Gemini OpenAI 兼容) | `https://generativelanguage.googleapis.com/v1beta/openai/` | `gemini-2.0-flash-exp` | [aistudio.google.com](https://aistudio.google.com/) |
+| OpenRouter | 24 | `https://openrouter.ai/api` | `openrouter/free` | [openrouter.ai/keys](https://openrouter.ai/keys) |
+
+记下每个渠道的 ID，填入下方 `fallback.json` 的 `channel_id`。
+
+### 第二步：编辑配置
+
+通过 `/channel` 页面可视化编辑，或直接改 `fallback.json` 后热重载：
 
 ```json
 {
   "enabled": true,
   "virtual_models": {
-    "high/auto": {
+    "cct/free": {
       "enabled": true,
-      "description": "编程用虚拟模型",
-      "routing_mode": "weighted",
-      "fallback_order": ["doubao-code", "doubao-18"]
+      "description": "默认模型池",
+      "routing_mode": "sequential",
+      "fallback_order": ["cct/gemini", "cct/openrouter"]
     }
   },
   "deployments": {
-    "doubao-code": {
-      "channel_id": 1,
-      "real_model": "doubao-1.5-pro-256k",
+    "cct/gemini": {
+      "channel_id": 0,
+      "real_model": "gemini-2.0-flash-exp",
       "priority": 1,
-      "weight": 5,
-      "daily_limit_tokens": 8000000,
-      "soft_limit_ratio": 0.9,
-      "hard_limit_ratio": 0.98,
-      "max_concurrent_requests": 20
+      "weight": 100,
+      "max_concurrent_requests": 10,
+      "daily_limit_tokens": 0,
+      "quota_mode": "free"
+    },
+    "cct/openrouter": {
+      "channel_id": 0,
+      "real_model": "openrouter/free",
+      "priority": 2,
+      "weight": 100,
+      "max_concurrent_requests": 3,
+      "daily_limit_tokens": 0,
+      "quota_mode": "free"
     }
   }
 }

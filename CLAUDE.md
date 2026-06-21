@@ -358,3 +358,41 @@ Do not remove upstream One API / JustSong / MIT attribution.
   - managed models with explicit daily limits switch at the soft threshold before full exhaustion.
   - upstream-limited/free models normally have no local quota and switch only when the upstream actually fails or is cooled down.
 - Top failure model/channel in the runtime panel is currently derived from switch logs. It is approximate. Exact failure ranking would require a backend deployment-attempt event table or a dedicated health aggregation endpoint.
+
+## Security Fix: Fallback Editor Key Masking (2026-06-21)
+
+A security review was performed with the following findings and fixes:
+
+### Audit Result: FAIL -> PASS
+
+After fixes: SECURITY_REVIEW_STATUS: PASS
+
+### Finding 1: OpenRouter API Key in Git History
+
+- A real OpenRouter key was committed in a test report document (.md) and persisted in git history.
+- Fix: Used git filter-repo --replace-text to clean the key from all 1433 commits (main + archive + tags).
+- Action needed: Revoke the old key in OpenRouter dashboard, generate a new one, update data/fallback.json.
+
+### Finding 2: Editor API Returned Full Channel Keys
+
+- router/fallback_config.go:buildFallbackEditorChannel() returned channel.Key unmasked in JSON.
+- Fix: Changed struct field: Key string json:"key" -> KeyMasked string json:"key_masked" + HasKey bool json:"has_key".
+- maskSecretKey(): shows first 4 + **** + last 4, same length as original.
+- upsertFallbackEditorChannel(): incoming key_masked empty or contains *** -> preserve existing key.
+- Frontend (FallbackConfigPanel.js): channel.key -> channel.key_masked.
+
+### Security Tests Added (router/fallback_test.go)
+
+| Test | Assertion |
+|------|-----------|
+| TestMaskSecretKey_Empty | Empty -> empty |
+| TestMaskSecretKey_ShortKey | <=8 -> ******** |
+| TestMaskSecretKey_DoesNotLeakOriginal | No original, first/last 4 correct, has **** |
+| TestMaskSecretKey_Length | Output length = input length |
+| TestBuildFallbackEditorChannel_NoFullKey | No full key, key_masked with ****, has_key=true |
+| TestBuildFallbackEditorChannel_NoKey | Empty key -> key_masked="" has_key=false |
+
+### Git History Note
+
+- History rewritten by git filter-repo. HEAD: 267e5b11 -> f200816.
+- No remote configured; no force push needed.

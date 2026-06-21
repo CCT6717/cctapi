@@ -41,3 +41,8 @@ Thumbs.db
 
 # Keep local-only upstream workflow templates out unless intentionally force-added.
 .github/workflows/
+
+data/fallback.json
+
+data/backups/
+*.exe

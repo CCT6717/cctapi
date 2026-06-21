@@ -66,11 +66,22 @@ func main() {
 		}
 	}
 
+	// Sync free pool channels and deployments (必须在数据库初始化后)
+	if common.IsFallbackEnabled {
+		cfg := fallback.GetConfig()
+		if cfg != nil {
+			if err := fallback.SyncFreePool(cfg); err != nil {
+				logger.SysError("failed to sync free pool: " + err.Error())
+			}
+		}
+	}
+
 	// Initialize alert manager (用量告警)
 	if common.IsFallbackEnabled {
 		fallback.InitAlertManager()
 		fallback.WarmUpStickyState()
 		fallback.StartHistoryCleanup()
+		fallback.StartHealthChecker(loadHealthCheckConfig())
 	}
 
 	var err error
@@ -152,4 +163,25 @@ func main() {
 	if err != nil {
 		logger.FatalLog("failed to start HTTP server: " + err.Error())
 	}
+}
+
+// loadHealthCheckConfig reads health-check settings from environment, with
+// sensible defaults. Env-driven so it works without extending fallback.json.
+func loadHealthCheckConfig() fallback.HealthCheckConfig {
+	cfg := fallback.HealthCheckConfig{
+		Enabled:     os.Getenv("FALLBACK_HEALTH_CHECK_ENABLED") == "true",
+		IntervalSec: 300,
+		TimeoutSec:  10,
+	}
+	if v := os.Getenv("FALLBACK_HEALTH_CHECK_INTERVAL"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.IntervalSec = n
+		}
+	}
+	if v := os.Getenv("FALLBACK_HEALTH_CHECK_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			cfg.TimeoutSec = n
+		}
+	}
+	return cfg
 }

@@ -154,7 +154,7 @@ const makeDeploymentId = (vmName, deployments) => {
   return id;
 };
 
-const FallbackConfigPanel = () => {
+const FallbackConfigPanel = ({ highlightDeployment }) => {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -600,7 +600,7 @@ const FallbackConfigPanel = () => {
       const realModel = String(dep.real_model || '').trim();
       const channelName = String(dep.channel?.name || '').trim();
       const baseUrl = String(dep.channel?.base_url || '').trim();
-      const key = String(dep.channel?.key || '').trim();
+      const key = String(dep.channel?.key_masked || '').trim();
       const weight = Number(dep.weight);
       const priority = Number(dep.priority);
       const dailyLimit = Number(dep.daily_limit_tokens || 0);
@@ -1060,6 +1060,20 @@ const FallbackConfigPanel = () => {
 
   return (
     <>
+    <Message warning className='fallback-config-legacy-banner'>
+      <Icon name='exclamation triangle' />
+      <Message.Content>
+        <Message.Header>已启用新版三层虚拟模型网关</Message.Header>
+        <p>
+          当前配置使用 <code>pools / strategy</code> 新结构，本编辑器仍基于旧版
+          <code> fallback_order / fixed_deployment / routing_mode</code> 字段，可能无法正确保存新版配置。
+        </p>
+        <p>
+          请通过编辑 <code>data/fallback.json</code> 并调用 <code>POST /api/fallback/config/reload</code> 修改配置，
+          或前往「三层网关状态」页面查看运行状态。
+        </p>
+      </Message.Content>
+    </Message>
     <div className='fallback-config-panel'>
       <div className='fallback-config-toolbar'>
         <div>
@@ -1306,7 +1320,7 @@ const FallbackConfigPanel = () => {
                         <div
                           className={`fallback-deployment-panel ${
                             isFixedDeployment ? 'fixed-active' : ''
-                          }`}
+                          } ${highlightDeployment === dep.id ? 'fallback-highlight' : ''}`}
                           key={deploymentKey}
                         >
                           <div className='fallback-deployment-heading'>
@@ -1589,9 +1603,9 @@ const FallbackConfigPanel = () => {
                                   <label>密钥</label>
                                   <Input
                                     type={keyVisible ? 'text' : 'password'}
-                                    value={dep.channel?.key || ''}
+                                    value={dep.channel?.key_masked || ''}
                                     onChange={(_, { value }) =>
-                                      setDeploymentChannel(dep.id, 'key', value)
+                                      setDeploymentChannel(dep.id, 'key_masked', value)
                                     }
                                     action={
                                       <Button

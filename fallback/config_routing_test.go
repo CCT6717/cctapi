@@ -8,20 +8,21 @@ func resetConfigForTest(cfg *Config) {
 	config = cfg
 }
 
-func TestLoadConfigDataDefaultsRoutingModeToWeighted(t *testing.T) {
+func TestLoadConfigDataDefaultsStrategyToQualityFirst(t *testing.T) {
 	cfg, err := loadConfigData([]byte(`{
 		"enabled": true,
 		"virtual_models": {
 			"test/auto": {
 				"enabled": true,
-				"fallback_order": ["primary"]
+				"pools": ["default"]
 			}
 		},
 		"deployments": {
 			"primary": {
 				"enabled": true,
 				"channel_id": 1,
-				"real_model": "real"
+				"real_model": "real",
+				"pool": "default"
 			}
 		}
 	}`))
@@ -29,210 +30,118 @@ func TestLoadConfigDataDefaultsRoutingModeToWeighted(t *testing.T) {
 		t.Fatalf("loadConfigData failed: %v", err)
 	}
 
-	if got := cfg.VirtualModels["test/auto"].RoutingMode; got != RoutingModeWeighted {
-		t.Fatalf("expected default routing mode %s, got %s", RoutingModeWeighted, got)
+	if got := cfg.VirtualModels["test/auto"].Strategy; got != StrategyQualityFirst {
+		t.Fatalf("expected default strategy %s, got %s", StrategyQualityFirst, got)
+	}
+	if len(cfg.VirtualModels["test/auto"].Pools) != 1 || cfg.VirtualModels["test/auto"].Pools[0] != "default" {
+		t.Fatalf("expected pools [default], got %v", cfg.VirtualModels["test/auto"].Pools)
 	}
 }
 
-func TestNormalizeRoutingMode(t *testing.T) {
-	if got := NormalizeRoutingMode(" sequential "); got != RoutingModeSequential {
-		t.Fatalf("expected sequential, got %s", got)
+func TestNormalizeStrategy(t *testing.T) {
+	if got := NormalizeStrategy(" cost_first "); got != StrategyCostFirst {
+		t.Fatalf("expected cost_first, got %s", got)
 	}
-	if got := NormalizeRoutingMode(" fixed "); got != RoutingModeFixed {
-		t.Fatalf("expected fixed, got %s", got)
+	if got := NormalizeStrategy(" free_first "); got != StrategyFreeFirst {
+		t.Fatalf("expected free_first, got %s", got)
 	}
-	if got := NormalizeRoutingMode("bad-value"); got != RoutingModeWeighted {
-		t.Fatalf("expected invalid routing mode to default to weighted, got %s", got)
-	}
-}
-
-func TestLoadConfigDataPreservesFixedDeployment(t *testing.T) {
-	cfg, err := loadConfigData([]byte(`{
-		"enabled": true,
-		"virtual_models": {
-			"test/auto": {
-				"enabled": true,
-				"routing_mode": "fixed",
-				"fixed_deployment": " primary ",
-				"fallback_order": ["primary"]
-			}
-		},
-		"deployments": {
-			"primary": {
-				"enabled": true,
-				"channel_id": 1,
-				"real_model": "real"
-			}
-		}
-	}`))
-	if err != nil {
-		t.Fatalf("loadConfigData failed: %v", err)
-	}
-
-	vm := cfg.VirtualModels["test/auto"]
-	if vm.RoutingMode != RoutingModeFixed {
-		t.Fatalf("expected routing mode %s, got %s", RoutingModeFixed, vm.RoutingMode)
-	}
-	if vm.FixedDeployment != "primary" {
-		t.Fatalf("expected fixed deployment to be trimmed to primary, got %q", vm.FixedDeployment)
+	if got := NormalizeStrategy("bad-value"); got != StrategyQualityFirst {
+		t.Fatalf("expected invalid strategy to default to quality_first, got %s", got)
 	}
 }
 
-func TestGetDeploymentsForVirtualModelSequentialPreservesFallbackOrder(t *testing.T) {
+func TestGetDeploymentsForVirtualModelFiltersByPool(t *testing.T) {
 	t.Cleanup(func() {
 		resetConfigForTest(nil)
 	})
 	resetConfigForTest(&Config{
 		Enabled: true,
 		VirtualModels: map[string]VirtualModelConfig{
-			"test/auto": {
-				Enabled:       true,
-				RoutingMode:   RoutingModeSequential,
-				FallbackOrder: []string{"second", "first", "third"},
+			"cct/free": {
+				Enabled:  true,
+				Strategy: StrategyFreeFirst,
+				Pools:    []string{"free"},
 			},
 		},
 		Deployments: map[string]DeploymentConfig{
-			"first":  {Enabled: true, ChannelID: 1, RealModel: "first", Priority: 1},
-			"second": {Enabled: true, ChannelID: 1, RealModel: "second", Priority: 2},
-			"third":  {Enabled: true, ChannelID: 1, RealModel: "third", Priority: 3},
+			"free-1":  {Enabled: true, ChannelID: 1, RealModel: "free1", Pool: "free", Priority: 1},
+			"paid-1":  {Enabled: true, ChannelID: 2, RealModel: "paid1", Pool: "paid_high", Priority: 1},
+			"free-2":  {Enabled: false, ChannelID: 1, RealModel: "free2", Pool: "free", Priority: 2},
 		},
 	})
 
-	deployments, err := GetDeploymentsForVirtualModel("test/auto")
+	deployments, err := GetDeploymentsForVirtualModel("cct/free")
 	if err != nil {
 		t.Fatalf("GetDeploymentsForVirtualModel failed: %v", err)
 	}
 
-	expected := []string{"second", "first", "third"}
-	for i, deploymentID := range expected {
-		if deployments[i].ID != deploymentID {
-			t.Fatalf("expected index %d to be %s, got %s", i, deploymentID, deployments[i].ID)
-		}
-	}
-}
-
-func TestGetDeploymentsForVirtualModelFixedReturnsOnlyFixedDeployment(t *testing.T) {
-	t.Cleanup(func() {
-		resetConfigForTest(nil)
-	})
-	resetConfigForTest(&Config{
-		Enabled: true,
-		VirtualModels: map[string]VirtualModelConfig{
-			"test/auto": {
-				Enabled:         true,
-				RoutingMode:     RoutingModeFixed,
-				FixedDeployment: "third",
-				FallbackOrder:   []string{"first", "second", "third"},
-			},
-		},
-		Deployments: map[string]DeploymentConfig{
-			"first":  {Enabled: true, ChannelID: 1, RealModel: "first", Priority: 1},
-			"second": {Enabled: true, ChannelID: 1, RealModel: "second", Priority: 2},
-			"third":  {Enabled: true, ChannelID: 1, RealModel: "third", Priority: 3},
-		},
-	})
-
-	deployments, err := GetDeploymentsForVirtualModel("test/auto")
-	if err != nil {
-		t.Fatalf("GetDeploymentsForVirtualModel failed: %v", err)
-	}
 	if len(deployments) != 1 {
-		t.Fatalf("expected one fixed deployment, got %d: %v", len(deployments), deployments)
+		t.Fatalf("expected 1 enabled free deployment, got %d: %v", len(deployments), deployments)
 	}
-	if deployments[0].ID != "third" {
-		t.Fatalf("expected fixed deployment third, got %s", deployments[0].ID)
+	if deployments[0].ID != "free-1" {
+		t.Fatalf("expected free-1, got %s", deployments[0].ID)
 	}
 }
 
-func TestGetDeploymentsForVirtualModelFixedFallsBackToFirstAvailableDeployment(t *testing.T) {
+func TestValidateConfigDataRejectsEmptyPools(t *testing.T) {
 	t.Cleanup(func() {
 		resetConfigForTest(nil)
 	})
-	resetConfigForTest(&Config{
+	cfg := &Config{
 		Enabled: true,
 		VirtualModels: map[string]VirtualModelConfig{
-			"test/auto": {
-				Enabled:         true,
-				RoutingMode:     RoutingModeFixed,
-				FixedDeployment: "missing",
-				FallbackOrder:   []string{"disabled", "first", "second"},
+			"cct/free": {
+				Enabled:  true,
+				Strategy: StrategyFreeFirst,
+				Pools:    []string{},
 			},
 		},
 		Deployments: map[string]DeploymentConfig{
-			"disabled": {Enabled: false, ChannelID: 1, RealModel: "disabled", Priority: 1},
-			"first":    {Enabled: true, ChannelID: 1, RealModel: "first", Priority: 2},
-			"second":   {Enabled: true, ChannelID: 1, RealModel: "second", Priority: 3},
+			"free-1": {Enabled: true, ChannelID: 1, RealModel: "free1", Pool: "free"},
 		},
-	})
-
-	deployments, err := GetDeploymentsForVirtualModel("test/auto")
-	if err != nil {
-		t.Fatalf("GetDeploymentsForVirtualModel failed: %v", err)
 	}
-	if len(deployments) != 1 {
-		t.Fatalf("expected fallback to a single first available deployment, got %d: %v", len(deployments), deployments)
-	}
-	if deployments[0].ID != "first" {
-		t.Fatalf("expected first available deployment first, got %s", deployments[0].ID)
+	if err := validateConfigData(cfg); err == nil {
+		t.Fatalf("expected validateConfigData to reject empty pools")
 	}
 }
 
-func TestValidateConfigDataRejectsInvalidFixedDeployment(t *testing.T) {
-	baseConfig := func() *Config {
-		return &Config{
-			Enabled: true,
-			VirtualModels: map[string]VirtualModelConfig{
-				"test/auto": {
-					Enabled:         true,
-					RoutingMode:     RoutingModeFixed,
-					FixedDeployment: "first",
-					FallbackOrder:   []string{"first", "second"},
-				},
+func TestValidateConfigDataRejectsPoolWithNoDeployments(t *testing.T) {
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+	})
+	cfg := &Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/free": {
+				Enabled:  true,
+				Strategy: StrategyFreeFirst,
+				Pools:    []string{"free"},
 			},
-			Deployments: map[string]DeploymentConfig{
-				"first":  {Enabled: true, ChannelID: 1, RealModel: "first"},
-				"second": {Enabled: true, ChannelID: 1, RealModel: "second"},
-			},
-		}
+		},
+		Deployments: map[string]DeploymentConfig{
+			"paid-1": {Enabled: true, ChannelID: 1, RealModel: "paid1", Pool: "paid_high"},
+		},
 	}
+	if err := validateConfigData(cfg); err == nil {
+		t.Fatalf("expected validateConfigData to reject pool with no deployments")
+	}
+}
 
-	tests := []struct {
+func TestIsCCTVirtualModel(t *testing.T) {
+	cases := []struct {
 		name string
-		edit func(*Config)
+		want bool
 	}{
-		{
-			name: "empty fixed deployment",
-			edit: func(cfg *Config) {
-				vm := cfg.VirtualModels["test/auto"]
-				vm.FixedDeployment = ""
-				cfg.VirtualModels["test/auto"] = vm
-			},
-		},
-		{
-			name: "fixed deployment outside fallback order",
-			edit: func(cfg *Config) {
-				vm := cfg.VirtualModels["test/auto"]
-				vm.FixedDeployment = "missing"
-				cfg.VirtualModels["test/auto"] = vm
-			},
-		},
-		{
-			name: "disabled fixed deployment",
-			edit: func(cfg *Config) {
-				dep := cfg.Deployments["first"]
-				dep.Enabled = false
-				cfg.Deployments["first"] = dep
-			},
-		},
+		{"cct/high", true},
+		{"cct/low", true},
+		{"cct/free", true},
+		{"high/auto", false},
+		{"cct/auto", false},
+		{"gpt-4", false},
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cfg := baseConfig()
-			tt.edit(cfg)
-			if err := validateConfigData(cfg); err == nil {
-				t.Fatalf("expected validateConfigData to reject %s", tt.name)
-			}
-		})
+	for _, c := range cases {
+		if got := IsCCTVirtualModel(c.name); got != c.want {
+			t.Errorf("IsCCTVirtualModel(%q) = %v, want %v", c.name, got, c.want)
+		}
 	}
 }

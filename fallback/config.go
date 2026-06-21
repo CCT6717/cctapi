@@ -11,37 +11,72 @@ import (
 	"github.com/songquanpeng/one-api/common/logger"
 )
 
+type FreeProviderLimits struct {
+	RPMLimit *int `json:"rpm_limit,omitempty"`
+	RPDLimit *int `json:"rpd_limit,omitempty"`
+	TPMLimit *int `json:"tpm_limit,omitempty"`
+	TPDLimit *int `json:"tpd_limit,omitempty"`
+}
+
+type FreeProviderConfig struct {
+	Enabled        bool                `json:"enabled"`
+	Keys           []string            `json:"keys"`
+	Models         []string            `json:"models,omitempty"`
+	DefaultRPM     int                 `json:"default_rpm,omitempty"`
+	DefaultRPD     int                 `json:"default_rpd,omitempty"`
+	DefaultTPM     int                 `json:"default_tpm,omitempty"`
+	DefaultTPD     int                 `json:"default_tpd,omitempty"`
+	LimitsOverride *FreeProviderLimits `json:"limits_override,omitempty"`
+}
+
 type Config struct {
 	Enabled       bool                          `json:"enabled"`
 	VirtualModels map[string]VirtualModelConfig `json:"virtual_models"`
 	Deployments   map[string]DeploymentConfig   `json:"deployments"`
+	FreeProviders map[string]FreeProviderConfig `json:"free_providers,omitempty"`
 	Alert         AlertConfig                   `json:"alert"`
 	SmartSort     SmartSortConfig               `json:"smart_sort"`
 	BlockedErrorCodes []string                  `json:"blocked_error_codes"`
 }
 
 type VirtualModelConfig struct {
-	Enabled         bool     `json:"enabled"`
-	Description     string   `json:"description"`
-	RoutingMode     string   `json:"routing_mode"`
-	FixedDeployment string   `json:"fixed_deployment,omitempty"`
-	FallbackOrder   []string `json:"fallback_order"`
+	Enabled            bool     `json:"enabled"`
+	Description        string   `json:"description,omitempty"`
+	Strategy           string   `json:"strategy"` // quality_first / cost_first / free_first
+	Pools              []string `json:"pools"`
+	AllowDegradeToLow  bool     `json:"allow_degrade_to_low"`
+	AllowDegradeToFree bool     `json:"allow_degrade_to_free"`
+	// Legacy — populated from old-format fallback.json, ignored for new configs.
+	// These get zero-values when JSON doesn't have them, so new configs are clean.
+	RoutingMode      string   `json:"routing_mode,omitempty"`
+	FallbackOrder    []string `json:"fallback_order,omitempty"`
+	FixedDeployment  string   `json:"fixed_deployment,omitempty"`
 }
 
 type DeploymentConfig struct {
-	ID                    string  `json:"-"`
-	Enabled               bool    `json:"enabled"`
-	ChannelID             int     `json:"channel_id"`
-	RealModel             string  `json:"real_model"`
-	Priority              int     `json:"priority"`
-	Weight                int     `json:"weight"`
-	MaxConcurrentRequests int     `json:"max_concurrent_requests"`
-	DailyLimitTokens      int64   `json:"daily_limit_tokens"`
-	QuotaMode             string  `json:"quota_mode"`
+	ID                    string `json:"-"`
+	Enabled               bool   `json:"enabled"`
+	ChannelID             int    `json:"channel_id"`
+	RealModel             string `json:"real_model"`
+	Pool                  string `json:"pool"` // paid_high / cheap / local / free
+	QualityTier           string `json:"quality_tier"` // high / medium / low
+	CostTier              string `json:"cost_tier"`    // free / cheap / paid
+	SupportsVision        bool   `json:"supports_vision"`
+	SupportsStream        bool   `json:"supports_stream"`
+	SupportsTools         bool   `json:"supports_tools"`
+	SupportsJSON          bool   `json:"supports_json"`
+	ContextLength         int    `json:"context_length"`
+	Priority              int    `json:"priority"`
+	Weight                int    `json:"weight"`
+	MaxConcurrentRequests int    `json:"max_concurrent_requests"`
+	DailyLimitTokens      int64  `json:"daily_limit_tokens"`
+	QuotaMode             string `json:"quota_mode"`
 	SoftLimitRatio        float64 `json:"soft_limit_ratio"`
 	HardLimitRatio        float64 `json:"hard_limit_ratio"`
-	MaxContext            int     `json:"max_context"`
-	MinContext            int     `json:"min_context"`
+	RPMLimit              int    `json:"rpm_limit"`
+	RPDLimit              int    `json:"rpd_limit"`
+	TPMLimit              int    `json:"tpm_limit"`
+	TPDLimit              int    `json:"tpd_limit"`
 }
 
 var (
@@ -50,26 +85,28 @@ var (
 )
 
 const (
-	RoutingModeWeighted   = "weighted"
-	RoutingModeSequential = "sequential"
-	RoutingModeFixed      = "fixed"
+	StrategyQualityFirst = "quality_first"
+	StrategyCostFirst    = "cost_first"
+	StrategyFreeFirst    = "free_first"
 )
 
-func normalizeRoutingMode(mode string) string {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case RoutingModeFixed:
-		return RoutingModeFixed
-	case RoutingModeSequential:
-		return RoutingModeSequential
-	case RoutingModeWeighted:
-		return RoutingModeWeighted
+var ValidStrategies = []string{StrategyQualityFirst, StrategyCostFirst, StrategyFreeFirst}
+
+func normalizeStrategy(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case StrategyQualityFirst:
+		return StrategyQualityFirst
+	case StrategyCostFirst:
+		return StrategyCostFirst
+	case StrategyFreeFirst:
+		return StrategyFreeFirst
 	default:
-		return RoutingModeWeighted
+		return StrategyQualityFirst
 	}
 }
 
-func NormalizeRoutingMode(mode string) string {
-	return normalizeRoutingMode(mode)
+func NormalizeStrategy(s string) string {
+	return normalizeStrategy(s)
 }
 
 // loadConfigData parses JSON config data and applies normalization defaults.
@@ -94,13 +131,57 @@ func loadConfigData(data []byte) (*Config, error) {
 	}
 
 	for name, vm := range cfg.VirtualModels {
-		vm.RoutingMode = normalizeRoutingMode(vm.RoutingMode)
-		vm.FixedDeployment = strings.TrimSpace(vm.FixedDeployment)
+		vm.Strategy = normalizeStrategy(vm.Strategy)
+		if len(vm.Pools) == 0 {
+			vm.Pools = []string{"default"}
+		}
+		cfg.VirtualModels[name] = vm
+	}
+
+	// Detect old-format config (routing_mode/fallback_order era).
+	for name, vm := range cfg.VirtualModels {
+		if vm.RoutingMode == "" {
+			continue
+		}
+		logger.SysLogf("[config] legacy VM %q with routing_mode=%s — assigning synthetic pool", name, vm.RoutingMode)
+
+		switch vm.RoutingMode {
+		case "fixed":
+			// fixed_deployment is handled by GetDeploymentsForVirtualModel
+			// (returns just the one deployment). Still assign pool to the
+			// fixed deployment so validateConfigData can verify it.
+			poolName := "_fixed_" + name
+			if dep, ok := cfg.Deployments[vm.FixedDeployment]; ok {
+				dep.Pool = poolName
+				cfg.Deployments[vm.FixedDeployment] = dep
+			}
+			vm.Pools = []string{poolName}
+		default:
+			// weighted / sequential: assign fallback_order deployments to a
+			// VM-specific pool so pool-based filtering works correctly.
+			poolName := "_legacy_" + name
+			for _, depID := range vm.FallbackOrder {
+				if dep, ok := cfg.Deployments[depID]; ok {
+					dep.Pool = poolName
+					cfg.Deployments[depID] = dep
+				}
+			}
+			vm.Pools = []string{poolName}
+		}
 		cfg.VirtualModels[name] = vm
 	}
 
 	for id, dep := range cfg.Deployments {
 		dep.ID = id
+		if dep.Pool == "" {
+			dep.Pool = "default"
+		}
+		if dep.QualityTier == "" {
+			dep.QualityTier = "medium"
+		}
+		if dep.CostTier == "" {
+			dep.CostTier = "paid"
+		}
 		if dep.Weight <= 0 {
 			dep.Weight = 100
 		}
@@ -113,6 +194,14 @@ func loadConfigData(data []byte) (*Config, error) {
 		if dep.HardLimitRatio <= 0 {
 			dep.HardLimitRatio = 1.0
 		}
+
+		// Safety guard: enabled deployment with channel_id <= 0 is a broken config.
+		// Auto-disable with a warning instead of silently routing nowhere.
+		if dep.Enabled && dep.ChannelID <= 0 {
+			logger.SysWarn(fmt.Sprintf("[config] deployment %q has enabled=true but channel_id=%d — disabling it; set a valid channel_id or keep enabled=false", id, dep.ChannelID))
+			dep.Enabled = false
+		}
+
 		cfg.Deployments[id] = dep
 	}
 
@@ -181,22 +270,6 @@ func GetVirtualModel(modelName string) (*VirtualModelConfig, bool) {
 	return &vm, ok
 }
 
-func GetRoutingModeForVirtualModel(modelName string) string {
-	configLock.RLock()
-	defer configLock.RUnlock()
-
-	if config == nil || !config.Enabled {
-		return RoutingModeWeighted
-	}
-
-	vm, ok := config.VirtualModels[modelName]
-	if !ok || !vm.Enabled {
-		return RoutingModeWeighted
-	}
-
-	return normalizeRoutingMode(vm.RoutingMode)
-}
-
 // GetAllVirtualModelNames returns a list of all enabled virtual model names
 func GetAllVirtualModelNames() []string {
 	configLock.RLock()
@@ -241,52 +314,48 @@ func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error)
 		return nil, fmt.Errorf("virtual model not found or disabled: %s", modelName)
 	}
 
-	deployments := make([]DeploymentConfig, 0)
-
-	for _, deploymentID := range vm.FallbackOrder {
-		dep, ok := config.Deployments[deploymentID]
-		if !ok {
-			continue
+	// Legacy fixed mode: return only the fixed_deployment, bypass pool/strategy.
+	if vm.RoutingMode == "fixed" && vm.FixedDeployment != "" {
+		if dep, ok := config.Deployments[vm.FixedDeployment]; ok && dep.Enabled {
+			dep.ID = vm.FixedDeployment
+			configLock.RUnlock()
+			return []DeploymentConfig{dep}, nil
 		}
+		configLock.RUnlock()
+		return nil, fmt.Errorf("legacy fixed deployment %s not found or disabled for VM %s",
+			vm.FixedDeployment, modelName)
+	}
+
+	pools := vm.Pools
+	deployments := make([]DeploymentConfig, 0)
+	for depID, dep := range config.Deployments {
 		if !dep.Enabled {
 			continue
 		}
-		dep.ID = deploymentID
-		deployments = append(deployments, dep)
+		for _, p := range pools {
+			if dep.Pool == p {
+				dep.ID = depID
+				deployments = append(deployments, dep)
+				break
+			}
+		}
 	}
-
-	routingMode := normalizeRoutingMode(vm.RoutingMode)
 	smartSortEnabled := config.SmartSort.Enabled
-	scoreWeights := config.SmartSort.Weights
 	configLock.RUnlock()
 
 	if len(deployments) == 0 {
 		return nil, fmt.Errorf("no enabled deployments found for virtual model: %s", modelName)
 	}
 
-	if routingMode == RoutingModeFixed {
-		if vm.FixedDeployment != "" {
-			for _, dep := range deployments {
-				if dep.ID == vm.FixedDeployment {
-					return []DeploymentConfig{dep}, nil
-				}
-			}
-		}
-		return deployments[:1], nil
-	}
-
-	if routingMode == RoutingModeSequential {
-		return deployments, nil
-	}
-
 	if smartSortEnabled {
-		// Smart sorting: order by dynamic score (highest first)
 		today := todayString()
+		configLock.RLock()
+		weights := config.SmartSort.Weights
+		configLock.RUnlock()
 		sort.SliceStable(deployments, func(i, j int) bool {
-			return getDeploymentScore(deployments[i], today, scoreWeights) > getDeploymentScore(deployments[j], today, scoreWeights)
+			return getDeploymentScore(deployments[i], today, weights) > getDeploymentScore(deployments[j], today, weights)
 		})
 	} else {
-		// Static sorting: order by configured priority (lowest number first)
 		sort.SliceStable(deployments, func(i, j int) bool {
 			return deployments[i].Priority < deployments[j].Priority
 		})
@@ -321,6 +390,10 @@ func GetFirstDeploymentForVirtualModel(modelName string) (*DeploymentConfig, err
 	return &dep, nil
 }
 
+func IsCCTVirtualModel(modelName string) bool {
+	return modelName == "cct/high" || modelName == "cct/low" || modelName == "cct/free"
+}
+
 // validateConfigData checks that a config is semantically valid.
 // It does NOT touch the global config or mutex.
 func validateConfigData(cfg *Config) error {
@@ -341,36 +414,48 @@ func validateConfigData(cfg *Config) error {
 			continue
 		}
 
-		if len(vm.FallbackOrder) == 0 {
-			return fmt.Errorf("virtual model %s has empty fallback_order", modelName)
+		if len(vm.Pools) == 0 {
+			return fmt.Errorf("virtual model %s has empty pools", modelName)
 		}
 
-		fallbackOrder := make(map[string]bool, len(vm.FallbackOrder))
-		for _, deploymentID := range vm.FallbackOrder {
-			dep, ok := cfg.Deployments[deploymentID]
-			if !ok {
-				return fmt.Errorf("virtual model %s references unknown deployment: %s", modelName, deploymentID)
+		// Verify at least one deployment exists for these pools
+		hasDeployment := false
+		for _, dep := range cfg.Deployments {
+			if !dep.Enabled {
+				continue
 			}
-			if dep.Enabled {
-				fallbackOrder[deploymentID] = true
-			} else {
-				fallbackOrder[deploymentID] = false
+			for _, p := range vm.Pools {
+				if dep.Pool == p {
+					hasDeployment = true
+					break
+				}
 			}
-		}
-
-		if normalizeRoutingMode(vm.RoutingMode) == RoutingModeFixed {
-			if vm.FixedDeployment == "" {
-				return fmt.Errorf("fixed virtual model %s has empty fixed_deployment", modelName)
-			}
-			fixedEnabled, ok := fallbackOrder[vm.FixedDeployment]
-			if !ok {
-				return fmt.Errorf("fixed deployment %s must be in fallback_order for virtual model %s", vm.FixedDeployment, modelName)
-			}
-			if !fixedEnabled {
-				return fmt.Errorf("fixed deployment %s for virtual model %s is disabled", vm.FixedDeployment, modelName)
+			if hasDeployment {
+				break
 			}
 		}
+		if !hasDeployment {
+			return fmt.Errorf("virtual model %s has no enabled deployments in pools %v", modelName, vm.Pools)
+		}
+	}
 
+	// Validate free_providers limits_override (reject negative values)
+	for name, fp := range cfg.FreeProviders {
+		if !fp.Enabled {
+			continue
+		}
+		if fp.LimitsOverride != nil {
+			if err := ValidateFreeProviderLimits(fp.LimitsOverride); err != nil {
+				return fmt.Errorf("free_provider %q limits_override: %w", name, err)
+			}
+		}
+	}
+
+	// Reject enabled deployments with invalid channel_id (safety guard)
+	for id, dep := range cfg.Deployments {
+		if dep.Enabled && dep.ChannelID <= 0 {
+			return fmt.Errorf("deployment %q has enabled=true but invalid channel_id=%d", id, dep.ChannelID)
+		}
 	}
 
 	return nil
@@ -397,13 +482,20 @@ func ReloadConfig(path string) error {
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
 
-	// Step 3: Validate the new config before swapping
+	// Step 3: Sync free pool BEFORE validation — auto-deployments must exist
+	// for pool-based virtual models (e.g. cct/free with pools=["free"]) to
+	// pass validateConfigData.
+	if err := SyncFreePool(newCfg); err != nil {
+		logger.SysError(fmt.Sprintf("[config] failed to sync free pool: %v", err))
+	}
+
+	// Step 4: Validate the new config before swapping
 	if err := validateConfigData(newCfg); err != nil {
 		logger.SysError(fmt.Sprintf("[config] validation failed for %s, keeping old config: %v", path, err))
 		return fmt.Errorf("config validation failed: %w", err)
 	}
 
-	// Step 4: Swap under write lock
+	// Step 5: Swap under write lock
 	configLock.Lock()
 	config = newCfg
 	configLock.Unlock()

@@ -57,7 +57,7 @@ func main() {
 		vm, ok := fallback.GetVirtualModel(vmName)
 		if ok {
 			fmt.Printf("✅ Found: %s\n", vm.Description)
-			fmt.Printf("   Fallback order: %v\n", vm.FallbackOrder)
+			fmt.Printf("   Strategy: %s, Pools: %v\n", vm.Strategy, vm.Pools)
 		} else {
 			fmt.Printf("❌ Virtual model '%s' not found\n", vmName)
 			os.Exit(1)
