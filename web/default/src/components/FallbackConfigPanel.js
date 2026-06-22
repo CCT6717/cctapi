@@ -116,8 +116,12 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [selectorState, setSelectorState] = useState({});
   const [healthTesting, setHealthTesting] = useState({});
   const [healthResults, setHealthResults] = useState({});
+  const [showAddVM, setShowAddVM] = useState(false);
+  const [newVMName, setNewVMName] = useState('');
+  const [newVMStrategy, setNewVMStrategy] = useState('weighted');
+  const [newVMPool, setNewVMPool] = useState('');
 
-  const VISIBLE_VMS = ['cct/high', 'cct/low'];
+  const HIDDEN_VMS = ['cct/free'];
   const isFreeDeployment = (id) => String(id || '').startsWith('free:');
 
   const visibleDeploymentIds = useMemo(() => {
@@ -134,7 +138,9 @@ const ModelEditor = ({ highlightDeployment }) => {
 
   const vmArray = useMemo(() => {
     if (!config?.virtual_models) return [];
-    return VISIBLE_VMS.map((name) => {
+    return Object.keys(config.virtual_models)
+      .filter((name) => !HIDDEN_VMS.includes(name))
+      .map((name) => {
       const vm = config.virtual_models[name];
       if (!vm) return null;
       // v2 → v1 projection: derive fallback_order from pools
@@ -448,6 +454,98 @@ const ModelEditor = ({ highlightDeployment }) => {
     }
   }, [config, loadConfig, loadDeploymentStatuses]);
 
+  const handleAddVirtualModel = useCallback(async () => {
+    const name = newVMName.trim();
+    if (!name) {
+      setSaveMessage({ type: 'error', text: '虚拟模型名称不能为空' });
+      return;
+    }
+    if (name.startsWith('cct/')) {
+      // cct/ prefix is reserved for system VMs
+      setSaveMessage({ type: 'error', text: 'cct/ 前缀保留给系统虚拟模型，请用其他名称' });
+      return;
+    }
+    const pool = newVMPool.trim() || 'default';
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const freshRes = await API.get('/api/fallback/gateway/config');
+      const fresh = freshRes.data?.data;
+      if (!fresh) {
+        setSaveMessage({ type: 'error', text: '无法获取最新配置，添加中止' });
+        return;
+      }
+      if (fresh.virtual_models?.[name]) {
+        setSaveMessage({ type: 'error', text: `虚拟模型 ${name} 已存在` });
+        return;
+      }
+      const payload = JSON.parse(JSON.stringify(fresh));
+      if (!payload.virtual_models) payload.virtual_models = {};
+      payload.virtual_models[name] = {
+        enabled: true,
+        strategy: newVMStrategy,
+        pools: [pool],
+        allow_degrade_to_low: false,
+        allow_degrade_to_free: false,
+      };
+      const putRes = await API.put('/api/fallback/gateway/config', payload);
+      const { success, message } = putRes.data || {};
+      if (success) {
+        setSaveMessage({ type: 'success', text: `已添加虚拟模型 ${name}` });
+        setNewVMName('');
+        setNewVMStrategy('weighted');
+        setNewVMPool('');
+        setShowAddVM(false);
+        await loadConfig();
+        await loadDeploymentStatuses();
+      } else {
+        setSaveMessage({ type: 'error', text: message || '添加失败' });
+      }
+    } catch (e) {
+      setSaveMessage({ type: 'error', text: e.message || '添加异常' });
+    } finally {
+      setSaving(false);
+    }
+  }, [newVMName, newVMStrategy, newVMPool, loadConfig, loadDeploymentStatuses]);
+
+  const handleDeleteVirtualModel = useCallback(async (vmName) => {
+    if (!vmName || HIDDEN_VMS.includes(vmName)) return;
+    if (vmName.startsWith('cct/')) {
+      setSaveMessage({ type: 'error', text: '系统虚拟模型不可删除' });
+      return;
+    }
+    if (!window.confirm(`确定要删除虚拟模型 ${vmName} 吗？`)) return;
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const freshRes = await API.get('/api/fallback/gateway/config');
+      const fresh = freshRes.data?.data;
+      if (!fresh) {
+        setSaveMessage({ type: 'error', text: '无法获取最新配置，删除中止' });
+        return;
+      }
+      if (!fresh.virtual_models?.[vmName]) {
+        setSaveMessage({ type: 'error', text: `虚拟模型 ${vmName} 不存在于最新配置中` });
+        return;
+      }
+      const payload = JSON.parse(JSON.stringify(fresh));
+      delete payload.virtual_models[vmName];
+      const putRes = await API.put('/api/fallback/gateway/config', payload);
+      const { success, message } = putRes.data || {};
+      if (success) {
+        setSaveMessage({ type: 'success', text: `已删除虚拟模型 ${vmName}` });
+        await loadConfig();
+        await loadDeploymentStatuses();
+      } else {
+        setSaveMessage({ type: 'error', text: message || '删除失败' });
+      }
+    } catch (e) {
+      setSaveMessage({ type: 'error', text: e.message || '删除异常' });
+    } finally {
+      setSaving(false);
+    }
+  }, [loadConfig, loadDeploymentStatuses]);
+
   useEffect(() => {
     loadConfig().then(() => {
       loadDeploymentStatuses();
@@ -582,6 +680,19 @@ const ModelEditor = ({ highlightDeployment }) => {
                   <Label basic color={vm.enabled ? 'green' : 'grey'}>
                     {vm.enabled ? '启用' : '停用'}
                   </Label>
+                  {!vm.name.startsWith('cct/') && (
+                    <Button
+                      size='mini'
+                      negative
+                      icon
+                      labelPosition='left'
+                      loading={saving}
+                      onClick={() => handleDeleteVirtualModel(vm.name)}
+                    >
+                      <Icon name='trash' />
+                      删除虚拟模型
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -849,6 +960,83 @@ const ModelEditor = ({ highlightDeployment }) => {
             </section>
           );
         })}
+      </div>
+
+      {/* Add Virtual Model */}
+      <div style={{ marginTop: 16 }}>
+        {!showAddVM ? (
+          <Button
+            icon
+            labelPosition='left'
+            onClick={() => setShowAddVM(true)}
+          >
+            <Icon name='plus' />
+            添加虚拟模型
+          </Button>
+        ) : (
+          <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px dashed #d9e0ea' }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 12 }}>
+              <Icon name='plus circle' /> 新建虚拟模型
+            </div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4 }}>名称</label>
+                <Input
+                  size='small'
+                  placeholder='例: my-model'
+                  value={newVMName}
+                  onChange={(_, { value }) => setNewVMName(value)}
+                  style={{ width: 200 }}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4 }}>路由策略</label>
+                <Dropdown
+                  size='small'
+                  selection
+                  value={newVMStrategy}
+                  options={[
+                    { key: 'weighted', text: '按权重', value: 'weighted' },
+                    { key: 'quality_first', text: '质量优先（顺序）', value: 'quality_first' },
+                    { key: 'cost_first', text: '成本优先（顺序）', value: 'cost_first' },
+                    { key: 'fixed', text: '固定模型', value: 'fixed' },
+                  ]}
+                  onChange={(_, { value }) => setNewVMStrategy(value)}
+                />
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4 }}>池名称</label>
+                <Input
+                  size='small'
+                  placeholder='默认: default'
+                  value={newVMPool}
+                  onChange={(_, { value }) => setNewVMPool(value)}
+                  style={{ width: 160 }}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Button
+                  color='blue'
+                  size='small'
+                  icon
+                  labelPosition='left'
+                  loading={saving}
+                  disabled={!newVMName.trim()}
+                  onClick={handleAddVirtualModel}
+                >
+                  <Icon name='check' />
+                  确认添加
+                </Button>
+                <Button
+                  size='small'
+                  onClick={() => { setShowAddVM(false); setNewVMName(''); setNewVMPool(''); }}
+                >
+                  取消
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
