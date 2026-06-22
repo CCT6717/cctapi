@@ -45,8 +45,11 @@ type gatewayV2Deployment struct {
 	RPDLimit       int    `json:"rpd_limit"`
 	TPMLimit       int    `json:"tpm_limit"`
 	TPDLimit       int    `json:"tpd_limit"`
-	Priority       int    `json:"priority"`
-	Weight         int    `json:"weight"`
+	Priority         int     `json:"priority"`
+	Weight           int     `json:"weight"`
+	DailyLimitTokens int64   `json:"daily_limit_tokens"`
+	SoftLimitRatio   float64 `json:"soft_limit_ratio"`
+	HardLimitRatio   float64 `json:"hard_limit_ratio"`
 }
 
 type gatewayV2FreeProvider struct {
@@ -135,24 +138,27 @@ func buildGatewayV2Config(cfg *fallback.Config) gatewayV2Config {
 	deps := make(map[string]gatewayV2Deployment, len(cfg.Deployments))
 	for id, dep := range cfg.Deployments {
 		deps[id] = gatewayV2Deployment{
-			Enabled:        dep.Enabled,
-			ChannelID:      dep.ChannelID,
-			RealModel:      dep.RealModel,
-			Pool:           dep.Pool,
-			QualityTier:    dep.QualityTier,
-			CostTier:       dep.CostTier,
-			QuotaMode:      dep.QuotaMode,
-			SupportsStream: dep.SupportsStream,
-			SupportsVision: dep.SupportsVision,
-			SupportsTools:  dep.SupportsTools,
-			SupportsJSON:   dep.SupportsJSON,
-			ContextLength:  dep.ContextLength,
-			RPMLimit:       dep.RPMLimit,
-			RPDLimit:       dep.RPDLimit,
-			TPMLimit:       dep.TPMLimit,
-			TPDLimit:       dep.TPDLimit,
-			Priority:       dep.Priority,
-			Weight:         dep.Weight,
+			Enabled:         dep.Enabled,
+			ChannelID:       dep.ChannelID,
+			RealModel:       dep.RealModel,
+			Pool:            dep.Pool,
+			QualityTier:     dep.QualityTier,
+			CostTier:        dep.CostTier,
+			QuotaMode:       dep.QuotaMode,
+			SupportsStream:  dep.SupportsStream,
+			SupportsVision:  dep.SupportsVision,
+			SupportsTools:   dep.SupportsTools,
+			SupportsJSON:    dep.SupportsJSON,
+			ContextLength:   dep.ContextLength,
+			RPMLimit:        dep.RPMLimit,
+			RPDLimit:        dep.RPDLimit,
+			TPMLimit:        dep.TPMLimit,
+			TPDLimit:        dep.TPDLimit,
+			Priority:        dep.Priority,
+			Weight:          dep.Weight,
+			DailyLimitTokens: dep.DailyLimitTokens,
+			SoftLimitRatio:   dep.SoftLimitRatio,
+			HardLimitRatio:   dep.HardLimitRatio,
 		}
 	}
 
@@ -262,37 +268,38 @@ func updateGatewayConfig(c *gin.Context) {
 		}
 	}
 
-	// Deployments: replace with payload but preserve hidden fields (soft/hard
-	// limit ratios, max_concurrent_requests, daily_limit_tokens) from the
-	// existing deployment when it already exists.
+	// Deployments: replace with payload but preserve the hidden field
+	// (max_concurrent_requests) from the existing deployment when it already
+	// exists. The remaining fields are taken from the payload as-is.
 	merged.Deployments = make(map[string]fallback.DeploymentConfig, len(payload.Deployments))
 	for id, dep := range payload.Deployments {
 		mergedDep := fallback.DeploymentConfig{
-			Enabled:        dep.Enabled,
-			ChannelID:      dep.ChannelID,
-			RealModel:      dep.RealModel,
-			Pool:           dep.Pool,
-			QualityTier:    dep.QualityTier,
-			CostTier:       dep.CostTier,
-			QuotaMode:      dep.QuotaMode,
-			SupportsStream: dep.SupportsStream,
-			SupportsVision: dep.SupportsVision,
-			SupportsTools:  dep.SupportsTools,
-			SupportsJSON:   dep.SupportsJSON,
-			ContextLength:  dep.ContextLength,
-			RPMLimit:       dep.RPMLimit,
-			RPDLimit:       dep.RPDLimit,
-			TPMLimit:       dep.TPMLimit,
-			TPDLimit:       dep.TPDLimit,
-			Priority:       dep.Priority,
-			Weight:         dep.Weight,
+			Enabled:          dep.Enabled,
+			ChannelID:        dep.ChannelID,
+			RealModel:        dep.RealModel,
+			Pool:             dep.Pool,
+			QualityTier:      dep.QualityTier,
+			CostTier:         dep.CostTier,
+			QuotaMode:        dep.QuotaMode,
+			SupportsStream:   dep.SupportsStream,
+			SupportsVision:   dep.SupportsVision,
+			SupportsTools:    dep.SupportsTools,
+			SupportsJSON:     dep.SupportsJSON,
+			ContextLength:    dep.ContextLength,
+			RPMLimit:         dep.RPMLimit,
+			RPDLimit:         dep.RPDLimit,
+			TPMLimit:         dep.TPMLimit,
+			TPDLimit:         dep.TPDLimit,
+			Priority:         dep.Priority,
+			Weight:           dep.Weight,
+			DailyLimitTokens: dep.DailyLimitTokens,
+			SoftLimitRatio:   dep.SoftLimitRatio,
+			HardLimitRatio:   dep.HardLimitRatio,
 		}
-		// Carry over hidden fields from the existing deployment if present.
+		// Carry over hidden field (max_concurrent_requests) from the existing
+		// deployment if present.
 		if existingDep, ok := current.Deployments[id]; ok {
 			mergedDep.MaxConcurrentRequests = existingDep.MaxConcurrentRequests
-			mergedDep.DailyLimitTokens = existingDep.DailyLimitTokens
-			mergedDep.SoftLimitRatio = existingDep.SoftLimitRatio
-			mergedDep.HardLimitRatio = existingDep.HardLimitRatio
 		}
 		// Apply sane defaults for required numeric fields.
 		if mergedDep.Weight <= 0 {
