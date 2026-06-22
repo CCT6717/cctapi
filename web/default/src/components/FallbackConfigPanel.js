@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
+  Checkbox,
   Divider,
   Header,
   Icon,
+  Input,
   Label,
   Loader,
   Message,
@@ -103,6 +105,9 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [expandedVirtualModels, setExpandedVirtualModels] = useState({});
   const [expandedDeployments, setExpandedDeployments] = useState({});
   const [deploymentStatuses, setDeploymentStatuses] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [draftDeployments, setDraftDeployments] = useState({});
+  const [saveMessage, setSaveMessage] = useState(null);
 
   const VISIBLE_VMS = ['cct/high', 'cct/low'];
   const isFreeDeployment = (id) => String(id || '').startsWith('free:');
@@ -187,6 +192,78 @@ const ModelEditor = ({ highlightDeployment }) => {
     }
   }, []);
 
+  const setDraftField = (depId, field, value) => {
+    setDraftDeployments((prev) => ({
+      ...prev,
+      [depId]: {
+        ...prev[depId],
+        [field]: value,
+      },
+    }));
+  };
+
+  const handleSave = useCallback(async () => {
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      // Step 1: re-fetch fresh config (never use stale snapshot)
+      const freshRes = await API.get('/api/fallback/gateway/config');
+      const fresh = freshRes.data?.data;
+      if (!fresh) {
+        setSaveMessage({ type: 'error', text: '无法获取最新配置，保存中止' });
+        return;
+      }
+
+      // Step 2: deep-clone fresh as payload
+      const payload = JSON.parse(JSON.stringify(fresh));
+
+      // Step 3: overlay draft edits onto non-free, non-separator deployments
+      // Only edit enabled/priority/weight — never touch strategy/pools or
+      // carry-over fields (daily_limit_tokens, soft/hard_limit_ratio, etc.)
+      if (payload.deployments) {
+        Object.keys(payload.deployments).forEach((id) => {
+          // skip separator keys
+          if (isSeparatorKey(id)) return;
+          // skip free deployments — never touch them
+          const dep = payload.deployments[id];
+          if (dep?.pool === 'free' || isFreeDeployment(id)) return;
+          // apply draft edits if any exist for this deployment
+          const draft = draftDeployments[id];
+          if (draft) {
+            if (draft.enabled !== undefined) {
+              dep.enabled = draft.enabled;
+            }
+            if (draft.priority !== undefined) {
+              dep.priority = Number(draft.priority);
+            }
+            if (draft.weight !== undefined) {
+              dep.weight = Number(draft.weight);
+            }
+            payload.deployments[id] = dep;
+          }
+        });
+      }
+
+      // Step 4: PUT the merged payload
+      // virtual_models, free_providers, free deployments all remain as-is from fresh
+      const putRes = await API.put('/api/fallback/gateway/config', payload);
+      const { success, message } = putRes.data || {};
+      if (success) {
+        setSaveMessage({ type: 'success', text: '保存成功' });
+        setDraftDeployments({});
+        // reload to reflect the saved state
+        await loadConfig();
+        await loadDeploymentStatuses();
+      } else {
+        setSaveMessage({ type: 'error', text: message || '保存失败' });
+      }
+    } catch (e) {
+      setSaveMessage({ type: 'error', text: e.message || '保存异常' });
+    } finally {
+      setSaving(false);
+    }
+  }, [draftDeployments, loadConfig, loadDeploymentStatuses]);
+
   useEffect(() => {
     loadConfig().then(() => {
       loadDeploymentStatuses();
@@ -253,12 +330,27 @@ const ModelEditor = ({ highlightDeployment }) => {
           </div>
         </div>
         <div className='fallback-config-actions'>
+          <Button icon labelPosition='left' onClick={handleSave} loading={saving} disabled={!config}>
+            <Icon name='save' />
+            保存
+          </Button>
           <Button icon labelPosition='left' onClick={loadConfig} loading={loading}>
             <Icon name='refresh' />
             刷新
           </Button>
         </div>
       </div>
+
+      {saveMessage && (
+        <Message
+          positive={saveMessage.type === 'success'}
+          negative={saveMessage.type === 'error'}
+          onDismiss={() => setSaveMessage(null)}
+          style={{ marginTop: 12 }}
+        >
+          <p>{saveMessage.text}</p>
+        </Message>
+      )}
 
       <Divider />
 
@@ -359,7 +451,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                                     : '候选'
                                   : isSequentialMode
                                     ? `顺序 #${orderIndex + 1}`
-                                    : `权重 ${dep.weight || 100}`}
+                                    : `权重 ${draftDeployments[dep.id]?.weight ?? dep.weight ?? 100}`}
                               </Label>
                               <Label basic size='mini' color={statusMeta.color}>
                                 {statusMeta.label}
@@ -396,12 +488,56 @@ const ModelEditor = ({ highlightDeployment }) => {
                                     <Table.Cell>{dep.pool || '-'}</Table.Cell>
                                   </Table.Row>
                                   <Table.Row>
+                                    <Table.Cell>启用</Table.Cell>
+                                    <Table.Cell>
+                                      <Checkbox
+                                        toggle
+                                        checked={
+                                          draftDeployments[dep.id]?.enabled !== undefined
+                                            ? draftDeployments[dep.id].enabled
+                                            : dep.enabled !== false
+                                        }
+                                        onChange={(_, { checked }) =>
+                                          setDraftField(dep.id, 'enabled', checked)
+                                        }
+                                      />
+                                    </Table.Cell>
+                                  </Table.Row>
+                                  <Table.Row>
                                     <Table.Cell>优先级</Table.Cell>
-                                    <Table.Cell>{dep.priority || '-'}</Table.Cell>
+                                    <Table.Cell>
+                                      <Input
+                                        type='number'
+                                        size='mini'
+                                        style={{ maxWidth: 100 }}
+                                        value={
+                                          draftDeployments[dep.id]?.priority !== undefined
+                                            ? draftDeployments[dep.id].priority
+                                            : dep.priority ?? 0
+                                        }
+                                        onChange={(_, { value }) =>
+                                          setDraftField(dep.id, 'priority', value)
+                                        }
+                                      />
+                                    </Table.Cell>
                                   </Table.Row>
                                   <Table.Row>
                                     <Table.Cell>权重</Table.Cell>
-                                    <Table.Cell>{dep.weight || '-'}</Table.Cell>
+                                    <Table.Cell>
+                                      <Input
+                                        type='number'
+                                        size='mini'
+                                        style={{ maxWidth: 100 }}
+                                        value={
+                                          draftDeployments[dep.id]?.weight !== undefined
+                                            ? draftDeployments[dep.id].weight
+                                            : dep.weight ?? 100
+                                        }
+                                        onChange={(_, { value }) =>
+                                          setDraftField(dep.id, 'weight', value)
+                                        }
+                                      />
+                                    </Table.Cell>
                                   </Table.Row>
                                 </Table.Body>
                               </Table>
