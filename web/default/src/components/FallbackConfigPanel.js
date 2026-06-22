@@ -295,7 +295,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                   </div>
                   <div className='fallback-virtual-meta'>
                     {modelCount} 个真实模型
-                    {vm.description ? ` - ${vm.description}` : ''}
+                    {' · '}
                     <Label basic size='mini' color={routingMeta.color}>
                       <Icon name={routingMeta.icon} /> {routingMeta.title}
                     </Label>
@@ -310,14 +310,6 @@ const ModelEditor = ({ highlightDeployment }) => {
 
               {vmExpanded && (
                 <div className='fallback-virtual-body'>
-                  <div className='fallback-virtual-header'>
-                    <div style={{ fontSize: 13, color: '#667085', marginBottom: 8 }}>
-                      {routingMeta.detail}
-                      {vm.allow_degrade_to_low && ' · 可降级到低成本模型'}
-                      {vm.allow_degrade_to_free && ' · 可降级到免费模型'}
-                    </div>
-                  </div>
-
                   <div className='fallback-deployment-list'>
                     {(vm.fallback_order || []).map((deploymentId, orderIndex) => {
                       const dep = deploymentsById[deploymentId];
@@ -404,50 +396,12 @@ const ModelEditor = ({ highlightDeployment }) => {
                                     <Table.Cell>{dep.pool || '-'}</Table.Cell>
                                   </Table.Row>
                                   <Table.Row>
-                                    <Table.Cell>质量层级</Table.Cell>
-                                    <Table.Cell>{dep.quality_tier || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>成本层级</Table.Cell>
-                                    <Table.Cell>{dep.cost_tier || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
                                     <Table.Cell>优先级</Table.Cell>
                                     <Table.Cell>{dep.priority || '-'}</Table.Cell>
                                   </Table.Row>
                                   <Table.Row>
                                     <Table.Cell>权重</Table.Cell>
                                     <Table.Cell>{dep.weight || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>上下文长度</Table.Cell>
-                                    <Table.Cell>{dep.context_length || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>RPM 限额</Table.Cell>
-                                    <Table.Cell>{dep.rpm_limit || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>RPD 限额</Table.Cell>
-                                    <Table.Cell>{dep.rpd_limit || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>TPM 限额</Table.Cell>
-                                    <Table.Cell>{dep.tpm_limit || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>TPD 限额</Table.Cell>
-                                    <Table.Cell>{dep.tpd_limit || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>能力</Table.Cell>
-                                    <Table.Cell>
-                                      {dep.supports_vision && <Label size='tiny' color='blue'>Vision</Label>}
-                                      {dep.supports_stream && <Label size='tiny' color='teal'>Stream</Label>}
-                                      {dep.supports_tools && <Label size='tiny' color='purple'>Tools</Label>}
-                                      {dep.supports_json && <Label size='tiny' color='orange'>JSON</Label>}
-                                      {!dep.supports_vision && !dep.supports_stream && !dep.supports_tools && !dep.supports_json && '-'}
-                                    </Table.Cell>
                                   </Table.Row>
                                 </Table.Body>
                               </Table>
