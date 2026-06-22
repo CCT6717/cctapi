@@ -3,6 +3,7 @@ import {
   Button,
   Checkbox,
   Divider,
+  Dropdown,
   Header,
   Icon,
   Input,
@@ -53,6 +54,9 @@ const getDeploymentOwnerNames = (projectedVMs, deploymentId) =>
   (projectedVMs || [])
     .filter((vm) => (vm.fallback_order || []).includes(deploymentId))
     .map((vm) => vm.name || '未命名虚拟模型');
+
+const slugModelName = (name) =>
+  String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 
 const formatStatusTime = (value) => {
   if (!value) return '-';
@@ -108,6 +112,8 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [saving, setSaving] = useState(false);
   const [draftDeployments, setDraftDeployments] = useState({});
   const [saveMessage, setSaveMessage] = useState(null);
+  const [channels, setChannels] = useState([]);
+  const [selectorState, setSelectorState] = useState({});
 
   const VISIBLE_VMS = ['cct/high', 'cct/low'];
   const isFreeDeployment = (id) => String(id || '').startsWith('free:');
@@ -192,6 +198,51 @@ const ModelEditor = ({ highlightDeployment }) => {
     }
   }, []);
 
+  const loadChannels = useCallback(async () => {
+    try {
+      const allChannels = [];
+      let page = 0;
+      let hasMore = true;
+      while (hasMore) {
+        const res = await API.get(`/api/channel/?p=${page}`);
+        const { success, data } = res.data || {};
+        if (!success || !Array.isArray(data) || data.length === 0) {
+          hasMore = false;
+          break;
+        }
+        allChannels.push(...data);
+        if (data.length < 10) {
+          hasMore = false;
+        } else {
+          page++;
+        }
+      }
+      // Parse models from comma-separated string to array
+      const parsed = allChannels.map((ch) => ({
+        id: ch.id,
+        name: ch.name || `渠道 ${ch.id}`,
+        models: (ch.models || '').split(',').map((m) => m.trim()).filter(Boolean),
+      }));
+      setChannels(parsed);
+    } catch (e) {
+      // 静默失败，渠道数据可选
+    }
+  }, []);
+
+  // Existing (channel_id, real_model) pairs in non-free deployments
+  const existingPairs = useMemo(() => {
+    const pairs = new Set();
+    if (!config?.deployments) return pairs;
+    Object.entries(config.deployments).forEach(([id, dep]) => {
+      if (isSeparatorKey(id)) return;
+      if (dep?.pool === 'free' || isFreeDeployment(id)) return;
+      if (dep?.channel_id && dep?.real_model) {
+        pairs.add(`${dep.channel_id}:${dep.real_model}`);
+      }
+    });
+    return pairs;
+  }, [config]);
+
   const setDraftField = (depId, field, value) => {
     setDraftDeployments((prev) => ({
       ...prev,
@@ -264,11 +315,121 @@ const ModelEditor = ({ highlightDeployment }) => {
     }
   }, [draftDeployments, loadConfig, loadDeploymentStatuses]);
 
+  const handleAddDeployment = useCallback(async (channelId, model, pool, vmKey) => {
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const freshRes = await API.get('/api/fallback/gateway/config');
+      const fresh = freshRes.data?.data;
+      if (!fresh) {
+        setSaveMessage({ type: 'error', text: '无法获取最新配置，添加中止' });
+        return;
+      }
+      const payload = JSON.parse(JSON.stringify(fresh));
+      if (!payload.deployments) payload.deployments = {};
+      // Duplicate check: (channel_id, real_model) pair
+      for (const [, dep] of Object.entries(payload.deployments)) {
+        if (dep?.channel_id === channelId && dep?.real_model === model) {
+          setSaveMessage({ type: 'error', text: `该渠道已有模型 ${model}，不可重复添加` });
+          return;
+        }
+      }
+      // Generate unique ID
+      let baseId = `manual-${channelId}-${slugModelName(model)}`;
+      if (baseId.startsWith('free:') || baseId.startsWith('---')) {
+        baseId = `m-${channelId}-${slugModelName(model)}`;
+      }
+      let newId = baseId;
+      let suffix = 1;
+      while (payload.deployments[newId]) {
+        newId = `${baseId}-${suffix}`;
+        suffix++;
+      }
+      payload.deployments[newId] = {
+        enabled: true,
+        channel_id: channelId,
+        real_model: model,
+        pool: pool,
+        priority: 0,
+        weight: 100,
+      };
+      const putRes = await API.put('/api/fallback/gateway/config', payload);
+      const { success, message } = putRes.data || {};
+      if (success) {
+        setSaveMessage({ type: 'success', text: `已添加部署 ${newId}` });
+        setSelectorState((prev) => ({ ...prev, [vmKey]: null }));
+        await loadConfig();
+        await loadDeploymentStatuses();
+      } else {
+        setSaveMessage({ type: 'error', text: message || '添加失败' });
+      }
+    } catch (e) {
+      setSaveMessage({ type: 'error', text: e.message || '添加异常' });
+    } finally {
+      setSaving(false);
+    }
+  }, [loadConfig, loadDeploymentStatuses]);
+
+  const handleDeleteDeployment = useCallback(async (deploymentId) => {
+    if (!deploymentId) return;
+    if (isFreeDeployment(deploymentId)) {
+      setSaveMessage({ type: 'error', text: '免费部署不可在模型编辑器中删除' });
+      return;
+    }
+    // Pool safety check
+    const currentDep = config?.deployments?.[deploymentId];
+    if (currentDep?.pool) {
+      const pool = currentDep.pool;
+      const enabledInPool = Object.entries(config.deployments).filter(
+        ([id, d]) => !isSeparatorKey(id) && !isFreeDeployment(id) && d?.pool === pool && d?.enabled !== false && id !== deploymentId
+      );
+      if (enabledInPool.length === 0) {
+        const warnMsg = `删除后池 "${pool}" 将没有可用部署，相关虚拟模型可能无法路由。\n确定要继续吗？`;
+        if (!window.confirm(warnMsg)) return;
+      }
+    }
+    setSaving(true);
+    setSaveMessage(null);
+    try {
+      const freshRes = await API.get('/api/fallback/gateway/config');
+      const fresh = freshRes.data?.data;
+      if (!fresh) {
+        setSaveMessage({ type: 'error', text: '无法获取最新配置，删除中止' });
+        return;
+      }
+      const payload = JSON.parse(JSON.stringify(fresh));
+      if (!payload.deployments?.[deploymentId]) {
+        setSaveMessage({ type: 'error', text: `部署 ${deploymentId} 不存在于最新配置中` });
+        return;
+      }
+      delete payload.deployments[deploymentId];
+      const putRes = await API.put('/api/fallback/gateway/config', payload);
+      const { success, message } = putRes.data || {};
+      if (success) {
+        setSaveMessage({ type: 'success', text: `已删除部署 ${deploymentId}` });
+        setDraftDeployments((prev) => {
+          const next = { ...prev };
+          delete next[deploymentId];
+          return next;
+        });
+        await loadConfig();
+        await loadDeploymentStatuses();
+      } else {
+        setSaveMessage({ type: 'error', text: message || '删除失败' });
+      }
+    } catch (e) {
+      setSaveMessage({ type: 'error', text: e.message || '删除异常' });
+    } finally {
+      setSaving(false);
+    }
+  }, [config, loadConfig, loadDeploymentStatuses]);
+
   useEffect(() => {
     loadConfig().then(() => {
       loadDeploymentStatuses();
     });
-  }, [loadConfig, loadDeploymentStatuses]);
+    loadChannels();
+  }, [loadConfig, loadDeploymentStatuses, loadChannels]);
 
   const toggleVirtualModel = (vmKey) => {
     setExpandedVirtualModels((prev) => ({
@@ -402,6 +563,91 @@ const ModelEditor = ({ highlightDeployment }) => {
 
               {vmExpanded && (
                 <div className='fallback-virtual-body'>
+                  {/* Model Selector */}
+                  <div style={{ marginBottom: 16, padding: '12px', background: '#f8fafc', borderRadius: 8, border: '1px dashed #d9e0ea' }}>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 8 }}>
+                      <Icon name='plus circle' /> 添加真实模型
+                    </div>
+                    <Dropdown
+                      placeholder='选择渠道和模型...'
+                      fluid
+                      search
+                      selection
+                      value={selectorState[vmKey]?.value || ''}
+                      options={(() => {
+                        const opts = [];
+                        let lastChannelId = null;
+                        channels.forEach((ch) => {
+                          // Channel group header
+                          opts.push({
+                            key: `header-${ch.id}`,
+                            text: `${ch.name} (${ch.id})`,
+                            value: `__header_${ch.id}__`,
+                            disabled: true,
+                            className: 'fallback-channel-header',
+                            content: (
+                              <div style={{ fontWeight: 700, color: '#172033', padding: '4px 0', fontSize: 13 }}>
+                                {ch.name} <span style={{ color: '#98a2b3', fontWeight: 400 }}>#{ch.id}</span>
+                              </div>
+                            ),
+                          });
+                          ch.models.forEach((model) => {
+                            const pairKey = `${ch.id}:${model}`;
+                            const exists = existingPairs.has(pairKey);
+                            opts.push({
+                              key: pairKey,
+                              text: `#${ch.id} ${model}${exists ? ' (已添加)' : ''}`,
+                              value: pairKey,
+                              disabled: exists,
+                              description: exists ? '已存在' : '',
+                            });
+                          });
+                        });
+                        return opts;
+                      })()}
+                      onChange={(_, { value }) => {
+                        if (!value || String(value).startsWith('__header_')) return;
+                        const [channelIdStr, ...modelParts] = String(value).split(':');
+                        const channelId = Number(channelIdStr);
+                        const model = modelParts.join(':');
+                        setSelectorState((prev) => ({
+                          ...prev,
+                          [vmKey]: { value, channelId, model, pool: vm.pools?.[0] || 'default' },
+                        }));
+                      }}
+                    />
+
+                    {/* Preview card */}
+                    {selectorState[vmKey] && (() => {
+                      const sel = selectorState[vmKey];
+                      return (
+                        <div style={{ marginTop: 10, padding: '10px 12px', background: '#fff', border: '1px solid #d9e0ea', borderRadius: 6, fontSize: 13 }}>
+                          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <span><strong>渠道:</strong> <span style={{ color: '#98a2b3' }}>#{sel.channelId}</span></span>
+                            <span><strong>模型:</strong> {sel.model}</span>
+                            <Button
+                              size='mini'
+                              color='blue'
+                              icon
+                              labelPosition='left'
+                              loading={saving}
+                              disabled={!selectorState[vmKey]}
+                              onClick={() => {
+                                const s = selectorState[vmKey];
+                                if (!s) return;
+                                handleAddDeployment(s.channelId, s.model, s.pool, vmKey);
+                              }}
+                              style={{ marginLeft: 'auto' }}
+                            >
+                              <Icon name='plus' />
+                              添加
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+
                   <div className='fallback-deployment-list'>
                     {(vm.fallback_order || []).map((deploymentId, orderIndex) => {
                       const dep = deploymentsById[deploymentId];
@@ -476,16 +722,8 @@ const ModelEditor = ({ highlightDeployment }) => {
                               <Table compact celled size='small'>
                                 <Table.Body>
                                   <Table.Row>
-                                    <Table.Cell width={3}>部署 ID</Table.Cell>
-                                    <Table.Cell><code>{dep.id}</code></Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
                                     <Table.Cell>渠道 ID</Table.Cell>
                                     <Table.Cell>{dep.channel_id || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>池</Table.Cell>
-                                    <Table.Cell>{dep.pool || '-'}</Table.Cell>
                                   </Table.Row>
                                   <Table.Row>
                                     <Table.Cell>启用</Table.Cell>
@@ -537,6 +775,22 @@ const ModelEditor = ({ highlightDeployment }) => {
                                           setDraftField(dep.id, 'weight', value)
                                         }
                                       />
+                                    </Table.Cell>
+                                  </Table.Row>
+                                  <Table.Row>
+                                    <Table.Cell>操作</Table.Cell>
+                                    <Table.Cell>
+                                      <Button
+                                        size='mini'
+                                        negative
+                                        icon
+                                        labelPosition='left'
+                                        loading={saving}
+                                        onClick={() => handleDeleteDeployment(dep.id)}
+                                      >
+                                        <Icon name='trash' />
+                                        删除此部署
+                                      </Button>
                                     </Table.Cell>
                                   </Table.Row>
                                 </Table.Body>
