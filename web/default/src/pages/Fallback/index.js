@@ -21,7 +21,7 @@ import {
   YAxis,
 } from 'recharts';
 import FallbackRuntimePanel from '../../components/FallbackRuntimePanel';
-import FallbackGatewayEditor from '../../components/fallback-gateway/FallbackGatewayEditor';
+import ModelEditor from '../../components/FallbackConfigPanel';
 import FreeModelPool from '../../components/fallback-gateway/FreeModelPool';
 import { API, isAdmin, showError, showSuccess } from '../../helpers';
 import { clampScore, sortScoreItems } from './scoreUtils';
@@ -2055,7 +2055,7 @@ const Fallback = () => {
       case 'free-pool':
         return <FreeModelPool />;
       case 'gateway':
-        return <FallbackGatewayEditor />;
+        return <ModelEditor />;
       case 'metrics':
         return renderMetricsPanel();
       case 'scores':
@@ -2223,3 +2223,93 @@ const Fallback = () => {
 };
 
 export default Fallback;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
