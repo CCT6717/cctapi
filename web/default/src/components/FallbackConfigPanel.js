@@ -114,6 +114,8 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [saveMessage, setSaveMessage] = useState(null);
   const [channels, setChannels] = useState([]);
   const [selectorState, setSelectorState] = useState({});
+  const [healthTesting, setHealthTesting] = useState({});
+  const [healthResults, setHealthResults] = useState({});
 
   const VISIBLE_VMS = ['cct/high', 'cct/low'];
   const isFreeDeployment = (id) => String(id || '').startsWith('free:');
@@ -197,6 +199,28 @@ const ModelEditor = ({ highlightDeployment }) => {
       // 静默失败，状态数据可选
     }
   }, []);
+
+  const handleHealthCheck = useCallback(async (deploymentId) => {
+    setHealthTesting((prev) => ({ ...prev, [deploymentId]: true }));
+    setHealthResults((prev) => ({ ...prev, [deploymentId]: null }));
+    try {
+      const res = await API.post(`/api/fallback/deployments/${deploymentId}/health-check`);
+      const { success, data, message } = res.data || {};
+      const healthStatus = data?.health || (success ? 'healthy' : 'error');
+      setHealthResults((prev) => ({
+        ...prev,
+        [deploymentId]: { ok: success !== false, text: message || healthStatus },
+      }));
+      await loadDeploymentStatuses();
+    } catch (e) {
+      setHealthResults((prev) => ({
+        ...prev,
+        [deploymentId]: { ok: false, text: e.message || '请求失败' },
+      }));
+    } finally {
+      setHealthTesting((prev) => ({ ...prev, [deploymentId]: false }));
+    }
+  }, [loadDeploymentStatuses]);
 
   const loadChannels = useCallback(async () => {
     try {
@@ -780,17 +804,36 @@ const ModelEditor = ({ highlightDeployment }) => {
                                   <Table.Row>
                                     <Table.Cell>操作</Table.Cell>
                                     <Table.Cell>
-                                      <Button
-                                        size='mini'
-                                        negative
-                                        icon
-                                        labelPosition='left'
-                                        loading={saving}
-                                        onClick={() => handleDeleteDeployment(dep.id)}
-                                      >
-                                        <Icon name='trash' />
-                                        删除此部署
-                                      </Button>
+                                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                                        <Button
+                                          size='mini'
+                                          icon
+                                          labelPosition='left'
+                                          loading={healthTesting[dep.id]}
+                                          disabled={healthTesting[dep.id] || saving}
+                                          onClick={() => handleHealthCheck(dep.id)}
+                                        >
+                                          <Icon name='heartbeat' />
+                                          连通性测试
+                                        </Button>
+                                        {healthResults[dep.id] && (
+                                          <Label basic size='mini' color={healthResults[dep.id].ok ? 'green' : 'red'}>
+                                            <Icon name={healthResults[dep.id].ok ? 'check' : 'times'} />
+                                            {healthResults[dep.id].text}
+                                          </Label>
+                                        )}
+                                        <Button
+                                          size='mini'
+                                          negative
+                                          icon
+                                          labelPosition='left'
+                                          loading={saving}
+                                          onClick={() => handleDeleteDeployment(dep.id)}
+                                        >
+                                          <Icon name='trash' />
+                                          删除此部署
+                                        </Button>
+                                      </div>
                                     </Table.Cell>
                                   </Table.Row>
                                 </Table.Body>
