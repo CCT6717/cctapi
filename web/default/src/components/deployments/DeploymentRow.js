@@ -95,6 +95,7 @@ const DeploymentRow = ({
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
           <Button
+            type='button'
             size='mini'
             loading={healthTesting}
             disabled={healthTesting || saving}
@@ -109,6 +110,7 @@ const DeploymentRow = ({
           )}
           {hasChannelChanges && (
             <Button
+              type='button'
               size='mini'
               color='blue'
               loading={saving}
@@ -119,6 +121,7 @@ const DeploymentRow = ({
             </Button>
           )}
           <Button
+            type='button'
             size='mini'
             negative
             disabled={saving}
