@@ -203,12 +203,20 @@ fallback/health.go                Health checker (free deployments now ping norm
 fallback/alert.go                 Alert manager
 fallback/quota.go                 Runtime quota state, RPM/RPD/TPM/TPD enforcement
 router/fallback.go                Fallback admin API and built-in HTML fallback pages
+router/fallback_gateway.go        Manual-config API (getManualConfig, updateManualConfig, buildManualConfig)
 controller/relay.go               Main fallback relay loop
 common/metrics.go                 Prometheus text metrics
 web/default/src/pages/Fallback/   Default-theme fallback panel
 web/default/src/components/FallbackConfigPanel.js
+web/default/src/components/fallback-gateway/gatewayConfigApi.js  API wrapper for manual-config
 web/default/src/components/fallback-gateway/FreeProvidersEditor.js
 web/default/src/components/fallback-gateway/FreeModelPool.js
+web/default/src/components/deployments/DeploymentRow.js
+web/default/src/components/gateway-status/GatewayStatus.jsx
+web/default/src/components/hooks/useGatewayConfig.js
+web/default/src/components/hooks/useFallbackSave.js
+web/default/src/pages/Fallback/panels/KpiCards.js
+web/default/src/pages/Fallback/panels/StatusPanel.js
 web/default/src/components/Footer.js
 scripts/fallback-smoke.ps1        Real client smoke test script
 ```
@@ -404,3 +412,18 @@ After fixes: SECURITY_REVIEW_STATUS: PASS
 
 - History rewritten by git filter-repo. HEAD: 267e5b11 -> f200816.
 - No remote configured; no force push needed.
+
+## Manual Config API (2026-06-24)
+
+`GET/PUT /api/fallback/manual-config` isolates free pool data from the editor UI.
+
+- `buildManualConfig()` in `router/fallback_gateway.go` filters out free pool deployments, cct/free VM, and separator entries.
+- `updateManualConfig()` merges non-free data, preserves free pool and cct/free. After merge, it removes deployments and VMs that are missing from the payload (user deleted them) but keeps free deployments and separator keys.
+- Frontend hooks `useGatewayConfig` and `useFallbackSave` use `getManualConfig`/`saveManualConfig` from `gatewayConfigApi.js`.
+- Free channels filtered by name (`[CCT Auto]`, `free`) in the frontend dropdown.
+
+## Delete Button Gotchas
+
+1. Semantic UI `<Button>` defaults to `type='submit'` — always add `type='button'` to prevent form submission.
+2. `window.confirm` causes browser scroll — save `window.scrollY` before confirm, restore after.
+3. Shared-pool deletion warning: if a deployment's pool is used by multiple VMs, warn the user that all VMs will be affected before deleting.
