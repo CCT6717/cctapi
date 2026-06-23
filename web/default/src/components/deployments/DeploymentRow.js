@@ -4,6 +4,7 @@ import { Button, Checkbox, Icon, Input, Label } from 'semantic-ui-react';
 const DeploymentRow = ({
   dep,
   channelName,
+  channelData,
   orderIndex,
   expanded,
   highlighted,
@@ -187,7 +188,7 @@ const DeploymentRow = ({
               <Input
                 size='mini'
                 fluid
-                value={editBaseUrl !== null ? editBaseUrl : dep.base_url || ''}
+                value={editBaseUrl !== null ? editBaseUrl : dep.base_url || channelData?.base_url || ''}
                 placeholder='https://api.example.com/v1'
                 onChange={(_, { value }) => setEditBaseUrl(value)}
               />
@@ -197,7 +198,7 @@ const DeploymentRow = ({
               <Input
                 size='mini'
                 fluid
-                value={editKey !== null ? editKey : dep.key || ''}
+                value={editKey !== null ? editKey : dep.key || channelData?.key || ''}
                 placeholder='sk-...'
                 onChange={(_, { value }) => setEditKey(value)}
               />
