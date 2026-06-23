@@ -227,6 +227,9 @@ func buildManualConfig(cfg *fallback.Config) gatewayV2Config {
 
 	deps := make(map[string]gatewayV2Deployment, len(cfg.Deployments))
 	for id, dep := range cfg.Deployments {
+		if strings.HasPrefix(id, "---") {
+			continue
+		}
 		if !isManualDeployment(id, dep.Pool) {
 			continue
 		}
@@ -366,6 +369,9 @@ func updateManualConfig(c *gin.Context) {
 		merged.Deployments = make(map[string]fallback.DeploymentConfig)
 	}
 	for id, dep := range payload.Deployments {
+		if strings.HasPrefix(id, "---") {
+			continue
+		}
 		if !isManualDeployment(id, dep.Pool) {
 			continue
 		}
