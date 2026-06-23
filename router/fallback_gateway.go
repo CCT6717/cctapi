@@ -364,6 +364,21 @@ func updateManualConfig(c *gin.Context) {
 		}
 	}
 
+	// Remove virtual models that are missing from the payload (user deleted them).
+	// Keep cct/free (preserved by frontend).
+	vmInPayload := make(map[string]bool)
+	for name := range payload.VirtualModels {
+		vmInPayload[name] = true
+	}
+	for name := range merged.VirtualModels {
+		if name == "cct/free" {
+			continue
+		}
+		if !vmInPayload[name] {
+			delete(merged.VirtualModels, name)
+		}
+	}
+
 	// Deployments: merge non-free, preserve free pool deployments
 	if merged.Deployments == nil {
 		merged.Deployments = make(map[string]fallback.DeploymentConfig)
@@ -411,6 +426,26 @@ func updateManualConfig(c *gin.Context) {
 			mergedDep.HardLimitRatio = 1.0
 		}
 		merged.Deployments[id] = mergedDep
+	}
+
+	// Remove manual deployments that are missing from the payload (user deleted them).
+	// Keep free deployments (preserved by frontend) and separator keys.
+	manualInPayload := make(map[string]bool)
+	for id := range payload.Deployments {
+		if !strings.HasPrefix(id, "---") {
+			manualInPayload[id] = true
+		}
+	}
+	for id, dep := range merged.Deployments {
+		if strings.HasPrefix(id, "---") {
+			continue
+		}
+		if !isManualDeployment(id, dep.Pool) {
+			continue // free deployment, keep
+		}
+		if !manualInPayload[id] {
+			delete(merged.Deployments, id)
+		}
 	}
 
 	// Free providers: merge keys carefully
