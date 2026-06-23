@@ -10,7 +10,7 @@ import {
   getScoreDeltaMeta,
   getScoreSeriesPoints,
 } from '../utils/fallbackHelpers';
-import { clampScore } from '../scoreUtils';
+import { clampScore } from '../utils/scoreUtils';
 
 const ScoresPanel = ({
   scoreTrend,

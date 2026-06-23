@@ -29,7 +29,7 @@ import {
   FAILURE_RATE_WARNING_THRESHOLD,
   METRIC_SAMPLE_RETENTION_MS,
 } from '../utils/fallbackHelpers';
-import { clampScore, sortScoreItems as sortScoreItemsFn } from '../scoreUtils';
+import { clampScore, sortScoreItems as sortScoreItemsFn } from '../utils/scoreUtils';
 
 export const useFallbackPage = () => {
   const { panel } = useParams();
