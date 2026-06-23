@@ -64,6 +64,14 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		ContextLength:  32768,
 		SupportsStream: true,
 	},
+	"kilo": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.kilo.ai/api/gateway/v1",
+		DefaultModels:  []string{}, // 由 fetchModels 动态拉取
+		DefaultRPM:     10,
+		ContextLength:  256000,
+		SupportsStream: true,
+	},
 }
 
 const autoChannelPrefix = "[CCT Auto] "
@@ -90,6 +98,7 @@ var knownFreeProviders = map[string]struct{}{
 	"openrouter": {},
 	"groq":       {},
 	"freellmapi": {},
+	"kilo":       {},
 }
 
 // isAutoDeploymentSuffix validates the suffix portion of an auto-generated
@@ -524,6 +533,7 @@ type openRouterCreditsResponse struct {
 //   - openrouter: GET /v1/models,过滤 :free 后缀,去重排序
 //   - groq: 直接返静态 groq.ModelList,不网络拉
 //   - freellmapi: 占位 URL,返 meta.DefaultModels(当前空)+ warn,不拉
+//   - kilo: GET /models,过滤 isFree:true,去重排序
 //
 // 失败返 error,调用方降级到静态默认。不在持有任何锁时调用。
 func fetchModels(providerName, key string) ([]string, error) {
@@ -536,6 +546,8 @@ func fetchModels(providerName, key string) ([]string, error) {
 		return BuiltinFreeProviders["freellmapi"].DefaultModels, nil
 	case "openrouter":
 		return fetchOpenRouterModels(key)
+	case "kilo":
+		return fetchKiloModels()
 	default:
 		return nil, fmt.Errorf("fetchModels: unsupported provider %q", providerName)
 	}
@@ -586,56 +598,144 @@ func parseFreeModels(body []byte) ([]string, error) {
 	return free, nil
 }
 
-// syncOpenRouterModels 是缺口2 的同步入口:遍历 cfg.FreeProviders 中
-// Enabled && len(Keys)>0 的 openrouter 条目,对每个 key 调 fetchModels,
-// 成功则更新对应 channel 的 Models 字段 + deployment 的 RealModel;
-// 失败 log warn 保静态默认 ["openrouter/free"],不动 channel。
+// Kilo API 响应结构
+type kiloModelsResponse struct {
+	Data []struct {
+		ID     string `json:"id"`
+		IsFree bool   `json:"isFree"`
+	} `json:"data"`
+}
+
+// fetchKiloModels 调用 Kilo /models 端点,过滤 isFree:true,去重排序。
+// Kilo 是 keyless 供应商，无需 API key。
+func fetchKiloModels() ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://api.kilo.ai/api/gateway/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("kilo /models request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("kilo /models status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read kilo models body: %w", err)
+	}
+	return parseKiloFreeModels(body)
+}
+
+// parseKiloFreeModels 解析 Kilo /models 响应体,过滤 isFree:true,去重排序。
+func parseKiloFreeModels(body []byte) ([]string, error) {
+	var respData kiloModelsResponse
+	if err := json.Unmarshal(body, &respData); err != nil {
+		return nil, fmt.Errorf("parse kilo models json: %w", err)
+	}
+	seen := make(map[string]struct{}, len(respData.Data))
+	var free []string
+	for _, m := range respData.Data {
+		if m.IsFree {
+			if _, ok := seen[m.ID]; !ok {
+				seen[m.ID] = struct{}{}
+				free = append(free, m.ID)
+			}
+		}
+	}
+	sort.Strings(free)
+	return free, nil
+}
+
+// syncAllProviderModels 是通用的模型同步入口:遍历 cfg.FreeProviders 中
+// 所有 Enabled 条目,对每个供应商的每个 key 调 fetchModels,
+// 成功则更新对应 channel 的 Models 字段;
+// 失败 log warn 保静态默认,不动 channel。
 // 仅操作传入的 cfg(调用方负责锁),不在持有 configLock 时调 HTTP。
-func syncOpenRouterModels(cfg *Config) {
+// keyless 供应商（如 kilo）用空 key,fetchModels 会处理。
+func syncAllProviderModels(cfg *Config) {
 	if cfg == nil || cfg.FreeProviders == nil {
 		return
 	}
-	fp, ok := cfg.FreeProviders["openrouter"]
-	if !ok || !fp.Enabled || len(fp.Keys) == 0 {
-		return
-	}
-	for _, key := range fp.Keys {
-		key = strings.TrimSpace(key)
-		if key == "" {
+	for providerName, fp := range cfg.FreeProviders {
+		if !fp.Enabled {
 			continue
 		}
-		keyHash := SafeKeyHash(key)
-		depID := deploymentID("openrouter", keyHash)
-		models, err := fetchModels("openrouter", key)
-		if err != nil {
-			logger.SysWarn(fmt.Sprintf("[free-pool] openrouter model fetch failed for %s: %v (keeping static default)", depID, err))
+		// keyless 供应商:用空 key 调一次 fetchModels
+		if len(fp.Keys) == 0 {
+			models, err := fetchModels(providerName, "")
+			if err != nil {
+				logger.SysWarn(fmt.Sprintf("[free-pool] %s model fetch failed: %v (keeping static default)", providerName, err))
+				continue
+			}
+			if len(models) == 0 {
+				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models (keeping static default)", providerName))
+				continue
+			}
+			// keyless 供应商只有一个 channel,用空 key 的 hash
+			keyHash := SafeKeyHash("")
+			name := channelName(providerName, keyHash)
+			var ch model.Channel
+			if err := model.DB.Where("name = ?", name).First(&ch).Error; err != nil {
+				logger.SysWarn(fmt.Sprintf("[free-pool] %s channel %s not found in DB: %v", providerName, name, err))
+				continue
+			}
+			newModels := strings.Join(models, ",")
+			if ch.Models == newModels {
+				continue // 无变化,跳过
+			}
+			if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
+				logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
+				continue
+			}
+			ch.Models = newModels
+			_ = ch.UpdateAbilities()
+			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
 			continue
 		}
-		if len(models) == 0 {
-			logger.SysWarn(fmt.Sprintf("[free-pool] openrouter returned no free models for %s (keeping static default)", depID))
-			continue
+		// 有 key 的供应商:遍历每个 key
+		for _, key := range fp.Keys {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			keyHash := SafeKeyHash(key)
+			depID := deploymentID(providerName, keyHash)
+			models, err := fetchModels(providerName, key)
+			if err != nil {
+				logger.SysWarn(fmt.Sprintf("[free-pool] %s model fetch failed for %s: %v (keeping static default)", providerName, depID, err))
+				continue
+			}
+			if len(models) == 0 {
+				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models for %s (keeping static default)", providerName, depID))
+				continue
+			}
+			// ponytail: 不更新 cfg.Deployments[depID].RealModel — GetConfig() 返的是快照副本，
+			// 写了也丢。路由靠 DB channel.Models（下面更新），deployment.RealModel 由
+			// SyncFreePool/ReloadConfig 从静态 config 设置，这里是动态补充。
+			// 更新 channel Models 字段(照抄 SyncFreePool L255-263 更新模式)
+			name := channelName(providerName, keyHash)
+			var ch model.Channel
+			if err := model.DB.Where("name = ?", name).First(&ch).Error; err != nil {
+				logger.SysWarn(fmt.Sprintf("[free-pool] %s channel %s not found in DB: %v", providerName, name, err))
+				continue
+			}
+			newModels := strings.Join(models, ",")
+			if ch.Models == newModels {
+				continue // 无变化,跳过
+			}
+			if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
+				logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
+				continue
+			}
+			ch.Models = newModels
+			_ = ch.UpdateAbilities()
+			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
 		}
-		// ponytail: 不更新 cfg.Deployments[depID].RealModel — GetConfig() 返的是快照副本，
-		// 写了也丢。路由靠 DB channel.Models（下面更新），deployment.RealModel 由
-		// SyncFreePool/ReloadConfig 从静态 config 设置，这里是动态补充。
-		// 更新 channel Models 字段(照抄 SyncFreePool L255-263 更新模式)
-		name := channelName("openrouter", keyHash)
-		var ch model.Channel
-		if err := model.DB.Where("name = ?", name).First(&ch).Error; err != nil {
-			logger.SysWarn(fmt.Sprintf("[free-pool] openrouter channel %s not found in DB: %v", name, err))
-			continue
-		}
-		newModels := strings.Join(models, ",")
-		if ch.Models == newModels {
-			continue // 无变化,跳过
-		}
-		if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
-			logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
-			continue
-		}
-		ch.Models = newModels
-		_ = ch.UpdateAbilities()
-		logger.SysLog(fmt.Sprintf("[free-pool] openrouter %s models synced: %d free models", name, len(models)))
 	}
 }
 
@@ -745,13 +845,13 @@ func StartFreeSync(stopCh chan struct{}) {
 
 func runFreeSyncModels() {
 	// warm-up 一次,再进 6h ticker
-	syncOpenRouterModels(GetConfig())
+	syncAllProviderModels(GetConfig())
 	ticker := time.NewTicker(6 * time.Hour)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			syncOpenRouterModels(GetConfig())
+			syncAllProviderModels(GetConfig())
 		case <-freeSyncStopSignal():
 			return
 		}

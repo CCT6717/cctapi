@@ -669,3 +669,75 @@ func TestParseCreditsBalance_ZeroUsage(t *testing.T) {
 		t.Errorf("balance = %v, want 5.0", balance)
 	}
 }
+
+func TestParseKiloFreeModels_FilterIsFree(t *testing.T) {
+	// 模拟 Kilo /models 响应
+	body := []byte(`{"data":[
+		{"id":"kilo-auto/free","isFree":true,"name":"Auto Free"},
+		{"id":"stepfun/step-3.7-flash:free","isFree":true,"name":"Step 3.7 Flash"},
+		{"id":"nvidia/nemotron-3-ultra-550b-a55b:free","isFree":true,"name":"Nemotron 3 Ultra"},
+		{"id":"openai/gpt-4","isFree":false,"name":"GPT-4"},
+		{"id":"anthropic/claude-3","isFree":false,"name":"Claude 3"},
+		{"id":"kilo-auto/free","isFree":true,"name":"Auto Free (duplicate)"}
+	]}`)
+	free, err := parseKiloFreeModels(body)
+	if err != nil {
+		t.Fatalf("parseKiloFreeModels error: %v", err)
+	}
+	// 应过滤 isFree:true，去重，排序
+	want := []string{
+		"kilo-auto/free",
+		"nvidia/nemotron-3-ultra-550b-a55b:free",
+		"stepfun/step-3.7-flash:free",
+	}
+	if len(free) != len(want) {
+		t.Fatalf("len(free) = %d, want %d; got %v", len(free), len(want), free)
+	}
+	for i, m := range free {
+		if m != want[i] {
+			t.Errorf("free[%d] = %q, want %q", i, m, want[i])
+		}
+	}
+}
+
+func TestParseKiloFreeModels_EmptyAndNoFree(t *testing.T) {
+	// 无 isFree:true 模型 → 空切片
+	free, err := parseKiloFreeModels([]byte(`{"data":[{"id":"gpt-4","isFree":false}]}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(free) != 0 {
+		t.Errorf("expected 0 free models, got %v", free)
+	}
+	// 空 data → 空切片
+	free, err = parseKiloFreeModels([]byte(`{"data":[]}`))
+	if err != nil {
+		t.Fatalf("unexpected error on empty: %v", err)
+	}
+	if len(free) != 0 {
+		t.Errorf("expected 0 free models on empty, got %v", free)
+	}
+}
+
+func TestBuiltinFreeProviderRegistry_Kilo(t *testing.T) {
+	meta, ok := BuiltinFreeProviders["kilo"]
+	if !ok {
+		t.Fatal("expected kilo in BuiltinFreeProviders")
+	}
+	if meta.ChannelType != channeltype.OpenAICompatible {
+		t.Errorf("expected channel type %d, got %d", channeltype.OpenAICompatible, meta.ChannelType)
+	}
+	if meta.DefaultBaseURL != "https://api.kilo.ai/api/gateway/v1" {
+		t.Errorf("unexpected base URL: %s", meta.DefaultBaseURL)
+	}
+	// Kilo 是动态拉取,DefaultModels 应为空
+	if len(meta.DefaultModels) != 0 {
+		t.Errorf("expected empty DefaultModels for dynamic provider, got %v", meta.DefaultModels)
+	}
+	if meta.DefaultRPM <= 0 {
+		t.Errorf("expected DefaultRPM > 0, got %d", meta.DefaultRPM)
+	}
+	if meta.ContextLength != 256000 {
+		t.Errorf("expected ContextLength 256000, got %d", meta.ContextLength)
+	}
+}

@@ -191,6 +191,7 @@ Important additions over upstream One API:
 - Alert history and fallback switch logs.
 - Frontend and backend validation before saving fallback config, including fixed-route target checks.
 - Smoke test script for real client testing.
+- **Free Pool (cct/free)**: Automatic free LLM provider aggregation. Currently supports OpenRouter Free (dynamic `:free` models), Groq (static list), and Kilo (keyless, dynamic `isFree:true` models). Sync timer runs every 6h for models, 15m for OpenRouter credits. Configuration in `data/fallback.json` under `free_providers`.
 
 ## Important Files
 
