@@ -106,6 +106,12 @@ const ModelEditor = ({ highlightDeployment }) => {
     return map;
   }, [deploymentArray]);
 
+  const channelNameMap = useMemo(() => {
+    const map = {};
+    (channels || []).forEach((ch) => { map[ch.id] = ch.name; });
+    return map;
+  }, [channels]);
+
   const handleHealthCheck = useCallback(async (deploymentId) => {
     setHealthTesting((prev) => ({ ...prev, [deploymentId]: true }));
     setHealthResults((prev) => ({ ...prev, [deploymentId]: null }));
@@ -717,6 +723,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                         <DeploymentRow
                           key={deploymentKey}
                           dep={dep}
+                          channelName={channelNameMap[dep.channel_id] || ''}
                           orderIndex={orderIndex}
                           expanded={depExpanded}
                           highlighted={highlightDeployment === deploymentId}

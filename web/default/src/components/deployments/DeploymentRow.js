@@ -3,6 +3,7 @@ import { Button, Checkbox, Icon, Input, Label } from 'semantic-ui-react';
 
 const DeploymentRow = ({
   dep,
+  channelName,
   orderIndex,
   expanded,
   highlighted,
@@ -51,7 +52,7 @@ const DeploymentRow = ({
           onClick={onToggle}
         />
         <div className='fallback-deployment-name'>
-          {dep.real_model || '未命名真实模型'}
+          {channelName ? `${channelName} / ${dep.real_model || '未命名真实模型'}` : (dep.real_model || '未命名真实模型')}
           <Label basic size='mini' color='teal'>
             {`顺序 #${orderIndex + 1}`}
           </Label>
