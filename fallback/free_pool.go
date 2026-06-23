@@ -1,17 +1,23 @@
 package fallback
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
+	"github.com/songquanpeng/one-api/relay/adaptor/groq"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 )
 
@@ -50,6 +56,14 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		SupportsTools:  true,
 		SupportsJSON:   true,
 	},
+	"freellmapi": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://TODO.freellmapi/v1", // TODO: 真实端点未上线,占位;上线后替换
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
 }
 
 const autoChannelPrefix = "[CCT Auto] "
@@ -75,6 +89,7 @@ func SafeKeyHash(key string) string {
 var knownFreeProviders = map[string]struct{}{
 	"openrouter": {},
 	"groq":       {},
+	"freellmapi": {},
 }
 
 // isAutoDeploymentSuffix validates the suffix portion of an auto-generated
@@ -482,4 +497,289 @@ func DryRunCleanStale() (*StaleCleanupReport, error) {
 	})
 
 	return report, nil
+}
+
+// ===== 缺口2: 模型动态获取 + 缺口4: OpenRouter 配额同步 =====
+//
+// 两个外部拉取操作(fetchModels / queryOpenRouterCredits)共用同一套 HTTP 模式:
+// client.ImpatientHTTPClient(5s 超时) + Bearer key + json.Unmarshal。
+// 定时器入口 StartFreeSync 照抄 health.go 的 StartHealthChecker 守卫模式。
+
+// openRouterModelsResponse 是 OpenRouter GET /v1/models 的响应结构。
+type openRouterModelsResponse struct {
+	Data []struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+// openRouterCreditsResponse 是 OpenRouter GET /v1/credits 的响应结构。
+type openRouterCreditsResponse struct {
+	Data struct {
+		TotalCredits float64 `json:"total_credits"`
+		TotalUsage   float64 `json:"total_usage"`
+	} `json:"data"`
+}
+
+// fetchModels 拉取指定 provider 的可用模型列表。
+//   - openrouter: GET /v1/models,过滤 :free 后缀,去重排序
+//   - groq: 直接返静态 groq.ModelList,不网络拉
+//   - freellmapi: 占位 URL,返 meta.DefaultModels(当前空)+ warn,不拉
+//
+// 失败返 error,调用方降级到静态默认。不在持有任何锁时调用。
+func fetchModels(providerName, key string) ([]string, error) {
+	switch providerName {
+	case "groq":
+		return groq.ModelList, nil
+	case "freellmapi":
+		// ponytail: 占位端点未上线,不拉,返空让调用方用静态默认
+		logger.SysWarn("[free-pool] freellmapi endpoint not live yet, skipping model fetch")
+		return BuiltinFreeProviders["freellmapi"].DefaultModels, nil
+	case "openrouter":
+		return fetchOpenRouterModels(key)
+	default:
+		return nil, fmt.Errorf("fetchModels: unsupported provider %q", providerName)
+	}
+}
+
+func fetchOpenRouterModels(key string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://openrouter.ai/api/v1/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("openrouter /v1/models request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("openrouter /v1/models status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read models body: %w", err)
+	}
+	return parseFreeModels(body)
+}
+
+// parseFreeModels 解析 OpenRouter /v1/models 响应体,过滤 :free 后缀,去重排序。
+// 抽成纯函数便于单测(不需打真实 HTTP)。
+func parseFreeModels(body []byte) ([]string, error) {
+	var respData openRouterModelsResponse
+	if err := json.Unmarshal(body, &respData); err != nil {
+		return nil, fmt.Errorf("parse models json: %w", err)
+	}
+	seen := make(map[string]struct{}, len(respData.Data))
+	var free []string
+	for _, m := range respData.Data {
+		if strings.HasSuffix(m.ID, ":free") {
+			if _, ok := seen[m.ID]; !ok {
+				seen[m.ID] = struct{}{}
+				free = append(free, m.ID)
+			}
+		}
+	}
+	sort.Strings(free)
+	return free, nil
+}
+
+// syncOpenRouterModels 是缺口2 的同步入口:遍历 cfg.FreeProviders 中
+// Enabled && len(Keys)>0 的 openrouter 条目,对每个 key 调 fetchModels,
+// 成功则更新对应 channel 的 Models 字段 + deployment 的 RealModel;
+// 失败 log warn 保静态默认 ["openrouter/free"],不动 channel。
+// 仅操作传入的 cfg(调用方负责锁),不在持有 configLock 时调 HTTP。
+func syncOpenRouterModels(cfg *Config) {
+	if cfg == nil || cfg.FreeProviders == nil {
+		return
+	}
+	fp, ok := cfg.FreeProviders["openrouter"]
+	if !ok || !fp.Enabled || len(fp.Keys) == 0 {
+		return
+	}
+	for _, key := range fp.Keys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		keyHash := SafeKeyHash(key)
+		depID := deploymentID("openrouter", keyHash)
+		models, err := fetchModels("openrouter", key)
+		if err != nil {
+			logger.SysWarn(fmt.Sprintf("[free-pool] openrouter model fetch failed for %s: %v (keeping static default)", depID, err))
+			continue
+		}
+		if len(models) == 0 {
+			logger.SysWarn(fmt.Sprintf("[free-pool] openrouter returned no free models for %s (keeping static default)", depID))
+			continue
+		}
+		// ponytail: 不更新 cfg.Deployments[depID].RealModel — GetConfig() 返的是快照副本，
+		// 写了也丢。路由靠 DB channel.Models（下面更新），deployment.RealModel 由
+		// SyncFreePool/ReloadConfig 从静态 config 设置，这里是动态补充。
+		// 更新 channel Models 字段(照抄 SyncFreePool L255-263 更新模式)
+		name := channelName("openrouter", keyHash)
+		var ch model.Channel
+		if err := model.DB.Where("name = ?", name).First(&ch).Error; err != nil {
+			logger.SysWarn(fmt.Sprintf("[free-pool] openrouter channel %s not found in DB: %v", name, err))
+			continue
+		}
+		newModels := strings.Join(models, ",")
+		if ch.Models == newModels {
+			continue // 无变化,跳过
+		}
+		if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
+			logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
+			continue
+		}
+		ch.Models = newModels
+		_ = ch.UpdateAbilities()
+		logger.SysLog(fmt.Sprintf("[free-pool] openrouter %s models synced: %d free models", name, len(models)))
+	}
+}
+
+// queryOpenRouterCredits 拉 OpenRouter /v1/credits,返余额(美元)= total_credits - total_usage。
+func queryOpenRouterCredits(key string) (float64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://openrouter.ai/api/v1/credits", nil)
+	if err != nil {
+		return 0, err
+	}
+	req.Header.Set("Authorization", "Bearer "+key)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("openrouter /v1/credits request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("openrouter /v1/credits status %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, fmt.Errorf("read credits body: %w", err)
+	}
+	return parseCreditsBalance(body)
+}
+
+// parseCreditsBalance 解析 OpenRouter /v1/credits 响应体,返余额=total_credits-total_usage。
+// 抽成纯函数便于单测。
+func parseCreditsBalance(body []byte) (float64, error) {
+	var respData openRouterCreditsResponse
+	if err := json.Unmarshal(body, &respData); err != nil {
+		return 0, fmt.Errorf("parse credits json: %w", err)
+	}
+	return respData.Data.TotalCredits - respData.Data.TotalUsage, nil
+}
+
+// syncOpenRouterCredits 是缺口4 的同步入口:遍历 openrouter,每 key 调
+// queryOpenRouterCredits,算 tokens = balance * 1e6 / 7.5(OpenRouter 定价
+// $7.5/1M tokens 的粗估),调 UpdateDeploymentDailyLimit 落到内存 config。
+// 返更新数。不在持有 configLock 时调 HTTP —— 先拿 cfg 快照裸调 HTTP,
+// 再 UpdateDeploymentDailyLimit(自己拿写锁)。
+func syncOpenRouterCredits(cfg *Config) int {
+	if cfg == nil || cfg.FreeProviders == nil {
+		return 0
+	}
+	fp, ok := cfg.FreeProviders["openrouter"]
+	if !ok || !fp.Enabled || len(fp.Keys) == 0 {
+		return 0
+	}
+	updated := 0
+	for _, key := range fp.Keys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		depID := deploymentID("openrouter", SafeKeyHash(key))
+		balance, err := queryOpenRouterCredits(key)
+		if err != nil {
+			logger.SysWarn(fmt.Sprintf("[free-pool] openrouter credits query failed for %s: %v", depID, err))
+			continue
+		}
+		if balance <= 0 {
+			continue
+		}
+		// ponytail: $7.5/1M tokens 的粗估换算;真实定价按模型不同,
+		// 但 free 模型实际不扣费,这里只是给 DailyLimitTokens 一个合理量级
+		tokens := int64(balance * 1_000_000 / 7.5)
+		if tokens <= 0 {
+			continue
+		}
+		UpdateDeploymentDailyLimit(depID, tokens)
+		updated++
+	}
+	if updated > 0 {
+		logger.SysLog(fmt.Sprintf("[free-pool] soft-synced %d free deployment(s) from OpenRouter /v1/credits", updated))
+	}
+	return updated
+}
+
+// freeSyncRunning / freeSyncStopCh 守卫 StartFreeSync,照抄 health.go 的
+// globalHealth 模式,防重复启动 + 支持优雅停止。
+var (
+	freeSyncRunning bool
+	freeSyncStopCh  chan struct{}
+	freeSyncMu      sync.Mutex
+)
+
+// StartFreeSync 启动两个后台 goroutine:fetch 模型(6h)和同步配额(15m)。
+// 启动后立即各 warm-up 一次。stopCh 非 nil 时监听退出,nil 则跟随进程生命周期。
+// 由 main.go 在 StartHealthChecker 旁调一次。
+func StartFreeSync(stopCh chan struct{}) {
+	freeSyncMu.Lock()
+	if freeSyncRunning {
+		freeSyncMu.Unlock()
+		return
+	}
+	freeSyncRunning = true
+	freeSyncStopCh = stopCh
+	freeSyncMu.Unlock()
+
+	go runFreeSyncModels()
+	go runFreeSyncCredits()
+	logger.SysLog("[free-pool] free sync started: models 6h, credits 15m")
+}
+
+func runFreeSyncModels() {
+	// warm-up 一次,再进 6h ticker
+	syncOpenRouterModels(GetConfig())
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			syncOpenRouterModels(GetConfig())
+		case <-freeSyncStopSignal():
+			return
+		}
+	}
+}
+
+func runFreeSyncCredits() {
+	// warm-up 一次,再进 15m ticker
+	syncOpenRouterCredits(GetConfig())
+	ticker := time.NewTicker(15 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ticker.C:
+			syncOpenRouterCredits(GetConfig())
+		case <-freeSyncStopSignal():
+			return
+		}
+	}
+}
+
+// freeSyncStopSignal 返回一个停止信号 channel。stopCh 为 nil 时
+// 返 nil(select 对 nil channel 永久阻塞,即不主动停,跟随进程)。
+func freeSyncStopSignal() <-chan struct{} {
+	freeSyncMu.Lock()
+	defer freeSyncMu.Unlock()
+	if freeSyncStopCh == nil {
+		return nil
+	}
+	return freeSyncStopCh
 }

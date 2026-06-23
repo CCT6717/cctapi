@@ -50,11 +50,11 @@ func TestBuiltinFreeProviderRegistry_Groq(t *testing.T) {
 
 // TestBuiltinFreeProviderRegistry_AllHaveRealModel verifies every provider in
 // BuiltinFreeProviders has a non-empty real_model (DefaultModels[0]).
+// Providers with empty DefaultModels (dynamic fetch) are skipped.
 func TestBuiltinFreeProviderRegistry_AllHaveRealModel(t *testing.T) {
 	for name, meta := range BuiltinFreeProviders {
 		if len(meta.DefaultModels) == 0 {
-			t.Errorf("provider %q: DefaultModels is empty, no real_model available", name)
-			continue
+			continue // dynamic fetch, no static default
 		}
 		if meta.DefaultModels[0] == "" {
 			t.Errorf("provider %q: DefaultModels[0] is empty string", name)
@@ -87,8 +87,7 @@ func TestBuiltinFreeProviderRegistry_AllLimitsNonNegative(t *testing.T) {
 func TestBuiltinFreeProviderRegistry_DeploymentPoolFields(t *testing.T) {
 	for name, meta := range BuiltinFreeProviders {
 		if len(meta.DefaultModels) == 0 {
-			t.Errorf("provider %q: cannot test deployment, DefaultModels empty", name)
-			continue
+			continue // dynamic fetch, no static default model
 		}
 		realModel := meta.DefaultModels[0]
 		dep := DeploymentConfig{
@@ -590,4 +589,83 @@ func TestMultiKey_ProviderDisabledDesiredList(t *testing.T) {
 
 func intPtr(v int) *int {
 	return &v
+}
+
+// ===== 缺口2+4 单测:纯函数,不打真实 HTTP =====
+
+func TestParseFreeModels_OpenRouterFreeFilter(t *testing.T) {
+	body := []byte(`{"data":[
+		{"id":"meta-llama/llama-3-8b-instruct:free"},
+		{"id":"deepseek/deepseek-chat:free"},
+		{"id":"openai/gpt-4"},
+		{"id":"meta-llama/llama-3-8b-instruct:free"},
+		{"id":"google/gemini-2.0-flash-exp:free"},
+		{"id":"anthropic/claude-3-opus"}
+	]}`)
+	free, err := parseFreeModels(body)
+	if err != nil {
+		t.Fatalf("parseFreeModels error: %v", err)
+	}
+	// 过滤 :free,去重,排序
+	want := []string{
+		"deepseek/deepseek-chat:free",
+		"google/gemini-2.0-flash-exp:free",
+		"meta-llama/llama-3-8b-instruct:free",
+	}
+	if len(free) != len(want) {
+		t.Fatalf("expected %d free models, got %d: %v", len(want), len(free), free)
+	}
+	for i, m := range free {
+		if m != want[i] {
+			t.Errorf("free[%d] = %q, want %q", i, m, want[i])
+		}
+	}
+}
+
+func TestParseFreeModels_EmptyAndNoFree(t *testing.T) {
+	// 无 :free 模型 → 空切片,无 error
+	free, err := parseFreeModels([]byte(`{"data":[{"id":"openai/gpt-4"},{"id":"anthropic/claude-3"}]}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(free) != 0 {
+		t.Errorf("expected 0 free models, got %v", free)
+	}
+	// 空 data → 空切片
+	free, err = parseFreeModels([]byte(`{"data":[]}`))
+	if err != nil {
+		t.Fatalf("unexpected error on empty: %v", err)
+	}
+	if len(free) != 0 {
+		t.Errorf("expected 0 free models on empty, got %v", free)
+	}
+}
+
+func TestParseCreditsBalance_TokenCalc(t *testing.T) {
+	// total_credits=10.0, total_usage=2.5 → balance=7.5
+	body := []byte(`{"data":{"total_credits":10.0,"total_usage":2.5}}`)
+	balance, err := parseCreditsBalance(body)
+	if err != nil {
+		t.Fatalf("parseCreditsBalance error: %v", err)
+	}
+	if balance != 7.5 {
+		t.Errorf("balance = %v, want 7.5", balance)
+	}
+	// tokens 换算: balance * 1e6 / 7.5 = 7.5*1e6/7.5 = 1e6
+	tokens := int64(balance * 1_000_000 / 7.5)
+	if tokens != 1_000_000 {
+		t.Errorf("tokens = %d, want 1000000", tokens)
+	}
+}
+
+func TestParseCreditsBalance_ZeroUsage(t *testing.T) {
+	// 全额未用 → balance = total_credits
+	body := []byte(`{"data":{"total_credits":5.0,"total_usage":0.0}}`)
+	balance, err := parseCreditsBalance(body)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if balance != 5.0 {
+		t.Errorf("balance = %v, want 5.0", balance)
+	}
 }

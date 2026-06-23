@@ -4,6 +4,7 @@ import { Checkbox, Form, Icon, Input, Label, Message, Table } from 'semantic-ui-
 const PROVIDER_DISPLAY = {
   openrouter: { title: 'OpenRouter', color: 'purple', icon: 'cloud' },
   groq: { title: 'Groq', color: 'orange', icon: 'lightning' },
+  freellmapi: { title: 'FreeLLMAPI', color: 'teal', icon: 'gift' },
 };
 
 const FreeProvidersEditor = ({ freeProviders, onChange }) => {

@@ -240,6 +240,22 @@ func GetConfig() *Config {
 	return config
 }
 
+// UpdateDeploymentDailyLimit updates a single deployment's DailyLimitTokens
+// in the in-memory config under a write lock. Used by soft quota sync
+// (syncFreeQuota) to reflect upstream real balance without writing
+// fallback.json — on next ReloadConfig the value reverts to the file value.
+func UpdateDeploymentDailyLimit(deploymentID string, limit int64) {
+	configLock.Lock()
+	defer configLock.Unlock()
+	if config == nil || config.Deployments == nil {
+		return
+	}
+	if dep, ok := config.Deployments[deploymentID]; ok {
+		dep.DailyLimitTokens = limit
+		config.Deployments[deploymentID] = dep
+	}
+}
+
 func IsEnabled() bool {
 	configLock.RLock()
 	defer configLock.RUnlock()

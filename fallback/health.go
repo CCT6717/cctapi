@@ -129,14 +129,10 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 		return
 	}
 
-	// Skip health ping for free deployments — they have tight RPM/RPD and
-	// pings would consume real quota. Leave as HealthUnknown (allowed to route).
-	if dep.QuotaMode == "free" {
-		logger.SysLogf("[health][debug] skip ping for free deployment %s", deploymentID)
-		setHealthStatus(deploymentID, HealthUnknown)
-		return
-	}
-
+	// Free deployments now go through the same ping path (max_tokens=1 in
+	// pingDeployment keeps per-ping cost ~1 token). Previously skipped to
+	// avoid quota consumption, but that left free deployments without any
+	// active probing — failures were only discovered by real requests.
 	statusCode, err := pingDeployment(channel, dep, timeout)
 	if err != nil {
 		logger.SysError(fmt.Sprintf("[health] ping %s failed: %v", deploymentID, err))

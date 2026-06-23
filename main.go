@@ -136,6 +136,12 @@ func main() {
 	openai.InitTokenEncoders()
 	client.Init()
 
+	// Start free pool sync (models 6h + credits 15m). Must be after client.Init()
+	// — syncOpenRouterCredits/fetchModels depend on client.ImpatientHTTPClient.
+	if common.IsFallbackEnabled {
+		fallback.StartFreeSync(nil) // ponytail: nil stopCh, 跟随进程生命周期, 与 model.SyncOptions 同模式
+	}
+
 	// Initialize i18n
 	if err := i18n.Init(); err != nil {
 		logger.FatalLog("failed to initialize i18n: " + err.Error())
