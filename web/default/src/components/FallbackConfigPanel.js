@@ -1,19 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Button,
-  Checkbox,
   Divider,
   Dropdown,
   Header,
   Icon,
-  Input,
   Label,
   Loader,
   Message,
-  Modal,
-  Table,
 } from 'semantic-ui-react';
 import { API } from '../helpers';
+import { buildSavePayload } from './utils/savePipeline';
+import BaseUrlModal from './modals/BaseUrlModal';
+import KeyModal from './modals/KeyModal';
+import AddVirtualModelPanel from './modals/AddVirtualModelPanel';
+import DeploymentRow from './deployments/DeploymentRow';
+import { useGatewayConfig, computeInitialMode } from './hooks/useGatewayConfig';
+import { useDeploymentStatuses } from './hooks/useDeploymentStatuses';
+import { useChannels } from './hooks/useChannels';
 import './FallbackConfigPanel.css';
 
 const isSeparatorKey = (id) => String(id || '').startsWith('---');
@@ -71,17 +75,19 @@ const getDeploymentStatusMeta = (status) => {
 };
 
 const ModelEditor = ({ highlightDeployment }) => {
-  const [config, setConfig] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  // Gateway config + deployment modes (modes initialised from config)
+  const { config, loading, error, loadConfig, deploymentMode, setDeploymentMode } = useGatewayConfig();
+  // Runtime statuses (optional, silent fail)
+  const { deploymentStatuses, loadDeploymentStatuses } = useDeploymentStatuses();
+  // Channels for the model selector (optional, silent fail)
+  const { channels, loadChannels } = useChannels();
+
   const [expandedVirtualModels, setExpandedVirtualModels] = useState({});
   const [expandedDeployments, setExpandedDeployments] = useState({});
-  const [deploymentStatuses, setDeploymentStatuses] = useState({});
   const [saving, setSaving] = useState(false);
   const [draftDeployments, setDraftDeployments] = useState({});
   const [draftRoutingVm, setDraftRoutingVm] = useState({}); // { [vmKey]: strategy }
   const [saveMessage, setSaveMessage] = useState(null);
-  const [channels, setChannels] = useState([]);
   const [selectorState, setSelectorState] = useState({});
   const [healthTesting, setHealthTesting] = useState({});
   const [healthResults, setHealthResults] = useState({});
@@ -144,36 +150,6 @@ const ModelEditor = ({ highlightDeployment }) => {
     return map;
   }, [deploymentArray]);
 
-  const loadConfig = useCallback(async () => {
-    setLoading(true);
-    setError('');
-    try {
-      const res = await API.get('/api/fallback/gateway/config');
-      const { success, data, message } = res.data || {};
-      if (success && data) {
-        setConfig(data);
-      } else {
-        setError(message || '加载网关配置失败');
-      }
-    } catch (e) {
-      setError(e.message || '加载网关配置失败');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const loadDeploymentStatuses = useCallback(async () => {
-    try {
-      const res = await API.get('/api/fallback/deployments/runtime-status');
-      const { success, data } = res.data || {};
-      if (success && data) {
-        setDeploymentStatuses(data);
-      }
-    } catch (e) {
-      // 静默失败，状态数据可选
-    }
-  }, []);
-
   const handleHealthCheck = useCallback(async (deploymentId) => {
     setHealthTesting((prev) => ({ ...prev, [deploymentId]: true }));
     setHealthResults((prev) => ({ ...prev, [deploymentId]: null }));
@@ -195,37 +171,6 @@ const ModelEditor = ({ highlightDeployment }) => {
       setHealthTesting((prev) => ({ ...prev, [deploymentId]: false }));
     }
   }, [loadDeploymentStatuses]);
-
-  const loadChannels = useCallback(async () => {
-    try {
-      const allChannels = [];
-      let page = 0;
-      let hasMore = true;
-      while (hasMore) {
-        const res = await API.get(`/api/channel/?p=${page}`);
-        const { success, data } = res.data || {};
-        if (!success || !Array.isArray(data) || data.length === 0) {
-          hasMore = false;
-          break;
-        }
-        allChannels.push(...data);
-        if (data.length < 10) {
-          hasMore = false;
-        } else {
-          page++;
-        }
-      }
-      // Parse models from comma-separated string to array
-      const parsed = allChannels.map((ch) => ({
-        id: ch.id,
-        name: ch.name || `渠道 ${ch.id}`,
-        models: (ch.models || '').split(',').map((m) => m.trim()).filter(Boolean),
-      }));
-      setChannels(parsed);
-    } catch (e) {
-      // 静默失败，渠道数据可选
-    }
-  }, []);
 
   // Existing (channel_id, real_model) pairs in non-free deployments
   const existingPairs = useMemo(() => {
@@ -251,15 +196,62 @@ const ModelEditor = ({ highlightDeployment }) => {
     }));
   };
 
+  // { depId: vmKey } — which VM "owns" each deployment
+  const deploymentOwnerVm = useMemo(() => {
+    const map = {};
+    if (config?.virtual_models) {
+      Object.entries(config.virtual_models).forEach(([vmKey, vm]) => {
+        (vm.pools || []).forEach((pool) => {
+          if (config.deployments) {
+            Object.entries(config.deployments).forEach(([depId, dep]) => {
+              if (dep.pool === pool) map[depId] = vmKey;
+            });
+          }
+        });
+      });
+    }
+    return map;
+  }, [config]);
+
   const handleRoutingModeChange = useCallback((vmKey, strategy) => {
     setDraftRoutingVm((prev) => ({ ...prev, [vmKey]: strategy }));
   }, []);
+
+  const handleModeChange = useCallback((depId, mode, vmKey) => {
+    setDeploymentMode((prev) => {
+      const next = { ...prev, [depId]: mode };
+      if (mode === 'fixed') {
+        // un-fix other deployments in the same VM (only one fixed per VM)
+        Object.keys(next).forEach((id) => {
+          if (id !== depId && next[id] === 'fixed' && deploymentOwnerVm[id] === vmKey) {
+            next[id] = 'error';
+          }
+        });
+      }
+      return next;
+    });
+    if (mode === 'quota') {
+      setDraftDeployments((prev) => {
+        const cur = prev[depId];
+        if (!cur || cur.daily_limit_tokens === undefined || cur.daily_limit_tokens <= 0) {
+          return { ...prev, [depId]: { ...cur, daily_limit_tokens: 100000 } };
+        }
+        return prev;
+      });
+    }
+    if (mode === 'error') {
+      setDraftDeployments((prev) => ({
+        ...prev,
+        [depId]: { ...(prev[depId] || {}), daily_limit_tokens: 0 },
+      }));
+    }
+  }, [deploymentOwnerVm, setDeploymentMode, setDraftDeployments]);
 
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaveMessage(null);
     try {
-      // Step 1: re-fetch fresh config (never use stale snapshot)
+      // Step 1: re-fetch fresh config
       const freshRes = await API.get('/api/fallback/gateway/config');
       const fresh = freshRes.data?.data;
       if (!fresh) {
@@ -267,74 +259,16 @@ const ModelEditor = ({ highlightDeployment }) => {
         return;
       }
 
-      // Step 2: deep-clone fresh as payload
-      const payload = JSON.parse(JSON.stringify(fresh));
+      // Steps 2-3.5: build payload from fresh config + all draft state
+      const payload = buildSavePayload(fresh, { draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm });
 
-      // Step 3: overlay draft edits onto non-free, non-separator deployments
-      // Edit user-editable UI fields: enabled / priority / weight, and the
-      // 4 quota fields (quota_mode + 3 limits). Never touch strategy/pools
-      // or other carry-over fields.
-      if (payload.deployments) {
-        Object.keys(payload.deployments).forEach((id) => {
-          // skip separator keys
-          if (isSeparatorKey(id)) return;
-          // skip free deployments — never touch them
-          const dep = payload.deployments[id];
-          if (dep?.pool === 'free' || isFreeDeployment(id)) return;
-          // apply draft edits if any exist for this deployment
-          const draft = draftDeployments[id];
-          if (draft) {
-            if (draft.enabled !== undefined) {
-              dep.enabled = draft.enabled;
-            }
-            if (draft.priority !== undefined) {
-              dep.priority = Number(draft.priority);
-            }
-            if (draft.weight !== undefined) {
-              dep.weight = Number(draft.weight);
-            }
-            if (draft.quota_mode !== undefined) {
-              dep.quota_mode = draft.quota_mode;
-            }
-            if (draft.daily_limit_tokens !== undefined) {
-              dep.daily_limit_tokens = Number(draft.daily_limit_tokens) || 0;
-            }
-            if (draft.soft_limit_ratio !== undefined) {
-              // ponytail: Number.isFinite keeps 0 honest; || folds 0 to 0 too, but
-              // isFinite also filters NaN/empty. Backend if<=0 restores default 0.95.
-              const n = Number(draft.soft_limit_ratio);
-              dep.soft_limit_ratio = Number.isFinite(n) ? n : 0;
-            }
-            if (draft.hard_limit_ratio !== undefined) {
-              const n = Number(draft.hard_limit_ratio);
-              dep.hard_limit_ratio = Number.isFinite(n) ? n : 0;
-            }
-            payload.deployments[id] = dep;
-          }
-        });
-      }
-
-      // Step 3.5: overlay routing strategy for VMs with a draft change
-      // strategy is the source of truth (backend v2 contract)
-      if (payload.virtual_models) {
-        Object.keys(draftRoutingVm).forEach((vmKey) => {
-          if (!payload.virtual_models[vmKey]) return;
-          const target = draftRoutingVm[vmKey];
-          if (target) {
-            payload.virtual_models[vmKey].strategy = target;
-          }
-        });
-      }
-
-      // Step 4: PUT the merged payload
-      // virtual_models, free_providers, free deployments all remain as-is from fresh
+      // Step 4: PUT
       const putRes = await API.put('/api/fallback/gateway/config', payload);
       const { success, message } = putRes.data || {};
       if (success) {
         setSaveMessage({ type: 'success', text: '保存成功' });
         setDraftDeployments({});
         setDraftRoutingVm({});
-        // reload to reflect the saved state
         await loadConfig();
         await loadDeploymentStatuses();
       } else {
@@ -345,7 +279,7 @@ const ModelEditor = ({ highlightDeployment }) => {
     } finally {
       setSaving(false);
     }
-  }, [draftDeployments, draftRoutingVm, loadConfig, loadDeploymentStatuses]);
+  }, [draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm, loadConfig, loadDeploymentStatuses]);
 
   const handleAddDeployment = useCallback(async (channelId, model, pool, vmKey) => {
     setSaving(true);
@@ -766,6 +700,9 @@ const ModelEditor = ({ highlightDeployment }) => {
                       ]}
                       onChange={(_, { value }) => handleRoutingModeChange(vmKey, value)}
                     />
+                    {vm.fallback_order?.some((depId) => (deploymentMode[depId] || computeInitialMode(config, depId)) === 'fixed') && (
+                      <Label basic size='mini' color='blue' style={{ marginLeft: 6 }}>固定模式</Label>
+                    )}
                   </div>
                 </div>
                 <div className='fallback-virtual-summary-actions'>
@@ -803,7 +740,6 @@ const ModelEditor = ({ highlightDeployment }) => {
                       value={selectorState[vmKey]?.value || ''}
                       options={(() => {
                         const opts = [];
-                        let lastChannelId = null;
                         channels.forEach((ch) => {
                           // Channel group header
                           opts.push({
@@ -884,294 +820,34 @@ const ModelEditor = ({ highlightDeployment }) => {
                       const depExpanded = !!expandedDeployments[deploymentKey];
                       const deploymentStatus = deploymentStatuses[deploymentId];
                       const statusMeta = getDeploymentStatusMeta(deploymentStatus);
-                      const ownerNames = getDeploymentOwnerNames(
-                        vmArray,
-                        deploymentId
-                      );
+                      const ownerNames = getDeploymentOwnerNames(vmArray, deploymentId);
                       const ownerText = ownerNames.join(' / ');
+                      const currentMode = deploymentMode[dep.id] || computeInitialMode(config, dep.id);
 
                       return (
-                        <div
-                          className={`fallback-deployment-panel ${highlightDeployment === deploymentId ? 'fallback-highlight' : ''}`}
+                        <DeploymentRow
                           key={deploymentKey}
-                        >
-                          <div className='fallback-deployment-heading'>
-                            <Button
-                              type='button'
-                              basic
-                              circular
-                              className='fallback-collapse-button'
-                              icon={depExpanded ? 'angle down' : 'angle right'}
-                              onClick={() => toggleDeployment(deploymentKey)}
-                            />
-                            <div className='fallback-deployment-name'>
-                              {dep.real_model || '未命名真实模型'}
-                              <Label
-                                basic
-                                size='mini'
-                                color='teal'
-                              >
-                                {`顺序 #${orderIndex + 1}`}
-                              </Label>
-                              <Label basic size='mini' color={statusMeta.color}>
-                                {statusMeta.label}
-                              </Label>
-                              <Label basic size='mini' color={dep.quota_mode === 'free' ? 'blue' : 'teal'}>
-                                {dep.quota_mode === 'free' ? '用完即换' : '限额 ' + (dep.daily_limit_tokens || 0).toLocaleString()}
-                              </Label>
-                              {ownerNames.length > 1 && (
-                                <Label basic size='mini' color='orange' title={`共享部署：${ownerText}`}>
-                                  共享 {ownerNames.length}
-                                </Label>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className='fallback-state-note'>
-                            {statusMeta.detail}
-                          </div>
-
-                          {depExpanded && (
-                            <div className='fallback-deployment-details'>
-                              <Table compact celled size='small'>
-                                <Table.Body>
-                                  <Table.Row>
-                                    <Table.Cell>渠道 ID</Table.Cell>
-                                    <Table.Cell>{dep.channel_id || '-'}</Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>启用</Table.Cell>
-                                    <Table.Cell>
-                                      <Checkbox
-                                        toggle
-                                        checked={
-                                          draftDeployments[dep.id]?.enabled !== undefined
-                                            ? draftDeployments[dep.id].enabled
-                                            : dep.enabled !== false
-                                        }
-                                        onChange={(_, { checked }) =>
-                                          setDraftField(dep.id, 'enabled', checked)
-                                        }
-                                      />
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>优先级</Table.Cell>
-                                    <Table.Cell>
-                                      <Input
-                                        type='number'
-                                        size='mini'
-                                        style={{ maxWidth: 100 }}
-                                        value={
-                                          draftDeployments[dep.id]?.priority !== undefined
-                                            ? draftDeployments[dep.id].priority
-                                            : dep.priority ?? 0
-                                        }
-                                        onChange={(_, { value }) =>
-                                          setDraftField(dep.id, 'priority', value)
-                                        }
-                                      />
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>权重</Table.Cell>
-                                    <Table.Cell>
-                                      <Input
-                                        type='number'
-                                        size='mini'
-                                        style={{ maxWidth: 100 }}
-                                        value={
-                                          draftDeployments[dep.id]?.weight !== undefined
-                                            ? draftDeployments[dep.id].weight
-                                            : dep.weight ?? 100
-                                        }
-                                        onChange={(_, { value }) =>
-                                          setDraftField(dep.id, 'weight', value)
-                                        }
-                                      />
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>配额模式</Table.Cell>
-                                    <Table.Cell>
-                                      <Dropdown
-                                        selection
-                                        compact
-                                        options={[
-                                          { key: 'paid', value: 'paid', text: '限额管理' },
-                                          { key: 'free', value: 'free', text: '用完即换' },
-                                        ]}
-                                        value={draftDeployments[dep.id]?.quota_mode ?? dep.quota_mode ?? 'paid'}
-                                        onChange={(_, { value }) => setDraftField(dep.id, 'quota_mode', value)}
-                                      />
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>每日 Token 限额</Table.Cell>
-                                    <Table.Cell>
-                                      <Input
-                                        type='number'
-                                        size='mini'
-                                        style={{ maxWidth: 140 }}
-                                        disabled={(() => {
-                                          const mode = draftDeployments[dep.id]?.quota_mode ?? dep.quota_mode ?? 'paid';
-                                          return mode === 'free';
-                                        })()}
-                                        placeholder='0 = 无限制'
-                                        value={draftDeployments[dep.id]?.daily_limit_tokens ?? dep.daily_limit_tokens ?? 0}
-                                        onChange={(_, { value }) => setDraftField(dep.id, 'daily_limit_tokens', value)}
-                                      />
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>软限比例</Table.Cell>
-                                    <Table.Cell>
-                                      <Input
-                                        type='number'
-                                        size='mini'
-                                        step='0.01'
-                                        min='0'
-                                        max='1'
-                                        style={{ maxWidth: 100 }}
-                                        disabled={(() => {
-                                          const mode = draftDeployments[dep.id]?.quota_mode ?? dep.quota_mode ?? 'paid';
-                                          return mode === 'free';
-                                        })()}
-                                        placeholder='默认 0.95'
-                                        value={draftDeployments[dep.id]?.soft_limit_ratio ?? dep.soft_limit_ratio ?? 0.95}
-                                        onChange={(_, { value }) => setDraftField(dep.id, 'soft_limit_ratio', value)}
-                                      />
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>硬限比例</Table.Cell>
-                                    <Table.Cell>
-                                      <Input
-                                        type='number'
-                                        size='mini'
-                                        step='0.01'
-                                        min='0'
-                                        max='1'
-                                        style={{ maxWidth: 100 }}
-                                        disabled={(() => {
-                                          const mode = draftDeployments[dep.id]?.quota_mode ?? dep.quota_mode ?? 'paid';
-                                          return mode === 'free';
-                                        })()}
-                                        placeholder='默认 1.0'
-                                        value={draftDeployments[dep.id]?.hard_limit_ratio ?? dep.hard_limit_ratio ?? 1.0}
-                                        onChange={(_, { value }) => setDraftField(dep.id, 'hard_limit_ratio', value)}
-                                      />
-                                    </Table.Cell>
-                                  </Table.Row>
-                                  <Table.Row>
-                                    <Table.Cell>操作</Table.Cell>
-                                    <Table.Cell>
-                                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                                        <Button
-                                          size='mini'
-                                          icon
-                                          labelPosition='left'
-                                          loading={healthTesting[dep.id]}
-                                          disabled={healthTesting[dep.id] || saving}
-                                          onClick={() => handleHealthCheck(dep.id)}
-                                        >
-                                          <Icon name='heartbeat' />
-                                          连通性测试
-                                        </Button>
-                                        {healthResults[dep.id] && (
-                                          <Label basic size='mini' color={healthResults[dep.id].ok ? 'green' : 'red'}>
-                                            <Icon name={healthResults[dep.id].ok ? 'check' : 'times'} />
-                                            {healthResults[dep.id].text}
-                                          </Label>
-                                        )}
-                                        <Button
-                                          size='mini'
-                                          color='blue'
-                                          icon
-                                          labelPosition='left'
-                                          disabled={!dep.channel_id || saving}
-                                          onClick={() => openBaseUrlEditor(dep.channel_id)}
-                                          title={!dep.channel_id ? '该部署未绑定渠道' : '编辑该渠道的 base_url'}
-                                        >
-                                          <Icon name='linkify' />
-                                          编辑 base_url
-                                        </Button>
-                                        <Button
-                                          size='mini'
-                                          icon
-                                          labelPosition='left'
-                                          disabled={!dep.channel_id || saving}
-                                          onClick={() => openKeyEditor(dep.channel_id)}
-                                          title={!dep.channel_id ? '该部署未绑定渠道' : '用新值覆盖该渠道的 key (原值不可查)'}
-                                        >
-                                          <Icon name='key' />
-                                          编辑 key
-                                        </Button>
-                                        <Button
-                                          size='mini'
-                                          negative
-                                          icon
-                                          labelPosition='left'
-                                          loading={saving}
-                                          onClick={() => handleDeleteDeployment(dep.id)}
-                                        >
-                                          <Icon name='trash' />
-                                          删除此部署
-                                        </Button>
-                                      </div>
-                                    </Table.Cell>
-                                  </Table.Row>
-                                </Table.Body>
-                              </Table>
-
-                              {/* D3-b: 错误触发 fallback 规则（只读静态参考） */}
-                              <details style={{ marginTop: 12 }}>
-                                <summary style={{ cursor: 'pointer', fontSize: 13, color: '#475569', fontWeight: 600 }}>
-                                  <Icon name='info circle' /> 错误触发 fallback 规则（只读参考）
-                                </summary>
-                                <Table compact celled size='small' style={{ marginTop: 8 }}>
-                                  <Table.Header>
-                                    <Table.Row>
-                                      <Table.HeaderCell>错误类型</Table.HeaderCell>
-                                      <Table.HeaderCell>触发切换</Table.HeaderCell>
-                                      <Table.HeaderCell>部署状态</Table.HeaderCell>
-                                    </Table.Row>
-                                  </Table.Header>
-                                  <Table.Body>
-                                    <Table.Row>
-                                      <Table.Cell>429 限速</Table.Cell>
-                                      <Table.Cell><Label basic size='mini' color='green'>✓ 切换</Label></Table.Cell>
-                                      <Table.Cell>冷却 60s~300s</Table.Cell>
-                                    </Table.Row>
-                                    <Table.Row>
-                                      <Table.Cell>5xx 服务错误</Table.Cell>
-                                      <Table.Cell><Label basic size='mini' color='green'>✓ 切换</Label></Table.Cell>
-                                      <Table.Cell>冷却 60s~300s</Table.Cell>
-                                    </Table.Row>
-                                    <Table.Row>
-                                      <Table.Cell>402 配额用尽</Table.Cell>
-                                      <Table.Cell><Label basic size='mini' color='green'>✓ 切换</Label></Table.Cell>
-                                      <Table.Cell>标记耗尽到当日末</Table.Cell>
-                                    </Table.Row>
-                                    <Table.Row>
-                                      <Table.Cell>401/403/404</Table.Cell>
-                                      <Table.Cell><Label basic size='mini' color='green'>✓ 切换</Label></Table.Cell>
-                                      <Table.Cell>标记冷却 60s</Table.Cell>
-                                    </Table.Row>
-                                    <Table.Row>
-                                      <Table.Cell>400 参数错误</Table.Cell>
-                                      <Table.Cell><Label basic size='mini' color='grey'>✗ 不切换</Label></Table.Cell>
-                                      <Table.Cell>直接返回错误</Table.Cell>
-                                    </Table.Row>
-                                  </Table.Body>
-                                </Table>
-                                <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 6, fontStyle: 'italic' }}>
-                                  注：流式响应已开始写入则不可切换（避免客户端收到半截响应）
-                                </div>
-                              </details>
-                            </div>
-                          )}
-                        </div>
+                          dep={dep}
+                          orderIndex={orderIndex}
+                          expanded={depExpanded}
+                          highlighted={highlightDeployment === deploymentId}
+                          statusMeta={statusMeta}
+                          ownerNames={ownerNames}
+                          ownerText={ownerText}
+                          vmKey={vmKey}
+                          draftDeployments={draftDeployments}
+                          currentMode={currentMode}
+                          healthTesting={!!healthTesting[dep.id]}
+                          healthResult={healthResults[dep.id] || null}
+                          saving={saving}
+                          onToggle={() => toggleDeployment(deploymentKey)}
+                          onDraftField={(field, value) => setDraftField(dep.id, field, value)}
+                          onModeChange={(mode) => handleModeChange(dep.id, mode, vmKey)}
+                          onHealthCheck={() => handleHealthCheck(dep.id)}
+                          onEditBaseUrl={() => openBaseUrlEditor(dep.channel_id)}
+                          onEditKey={() => openKeyEditor(dep.channel_id)}
+                          onDelete={() => handleDeleteDeployment(dep.id)}
+                        />
                       );
                     })}
                   </div>
@@ -1184,196 +860,36 @@ const ModelEditor = ({ highlightDeployment }) => {
 
       {/* Add Virtual Model */}
       <div style={{ marginTop: 16 }}>
-        {!showAddVM ? (
-          <Button
-            icon
-            labelPosition='left'
-            onClick={() => setShowAddVM(true)}
-          >
-            <Icon name='plus' />
-            添加虚拟模型
-          </Button>
-        ) : (
-          <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, border: '1px dashed #d9e0ea' }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 12 }}>
-              <Icon name='plus circle' /> 新建虚拟模型
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4 }}>名称</label>
-                <Input
-                  size='small'
-                  placeholder='例: my-model'
-                  value={newVMName}
-                  onChange={(_, { value }) => setNewVMName(value)}
-                  style={{ width: 200 }}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4 }}>路由策略</label>
-                <Dropdown
-                  size='small'
-                  selection
-                  value={newVMStrategy}
-                  options={[
-                    { key: 'quality_first', text: '质量优先', value: 'quality_first' },
-                    { key: 'cost_first', text: '成本优先', value: 'cost_first' },
-                    { key: 'free_first', text: '免费优先', value: 'free_first' },
-                  ]}
-                  onChange={(_, { value }) => setNewVMStrategy(value)}
-                />
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 12, color: '#64748b', marginBottom: 4 }}>池名称</label>
-                <Input
-                  size='small'
-                  placeholder='默认: default'
-                  value={newVMPool}
-                  onChange={(_, { value }) => setNewVMPool(value)}
-                  style={{ width: 160 }}
-                />
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Button
-                  color='blue'
-                  size='small'
-                  icon
-                  labelPosition='left'
-                  loading={saving}
-                  disabled={!newVMName.trim()}
-                  onClick={handleAddVirtualModel}
-                >
-                  <Icon name='check' />
-                  确认添加
-                </Button>
-                <Button
-                  size='small'
-                  onClick={() => { setShowAddVM(false); setNewVMName(''); setNewVMPool(''); }}
-                >
-                  取消
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
+        <AddVirtualModelPanel
+          collapsed={!showAddVM}
+          onExpand={() => setShowAddVM(true)}
+          name={newVMName}
+          strategy={newVMStrategy}
+          pool={newVMPool}
+          onNameChange={setNewVMName}
+          onStrategyChange={setNewVMStrategy}
+          onPoolChange={setNewVMPool}
+          onCancel={() => { setShowAddVM(false); setNewVMName(''); setNewVMPool(''); }}
+          onSubmit={handleAddVirtualModel}
+          saving={saving}
+        />
       </div>
 
       {/* Edit base_url Modal */}
-      <Modal
-        open={!!baseUrlModal}
-        onClose={() => !baseUrlModal?.saving && setBaseUrlModal(null)}
-        size='small'
-        closeOnEscape={!baseUrlModal?.saving}
-        closeOnDimmerClick={!baseUrlModal?.saving}
-      >
-        <Modal.Header>
-          编辑 base_url {baseUrlModal?.channelId ? `(渠道 #${baseUrlModal.channelId})` : ''}
-        </Modal.Header>
-        <Modal.Content>
-          <Modal.Description>
-            <p style={{ marginBottom: 12, color: '#475569' }}>
-              修改该渠道的 <code>base_url</code>，保存后立即生效。
-              <br />
-              <span style={{ color: '#94a3b8', fontSize: 12 }}>
-                末尾斜杠会被自动去除（统一格式）。
-              </span>
-            </p>
-            <Input
-              fluid
-              placeholder='https://api.example.com/v1'
-              value={baseUrlModal?.baseUrl || ''}
-              onChange={(_, { value }) =>
-                setBaseUrlModal((prev) => (prev ? { ...prev, baseUrl: value, error: '' } : prev))
-              }
-              disabled={baseUrlModal?.saving}
-            />
-            {baseUrlModal?.error && (
-              <Message negative size='small' style={{ marginTop: 12 }}>
-                <p>{baseUrlModal.error}</p>
-              </Message>
-            )}
-          </Modal.Description>
-        </Modal.Content>
-        <Modal.Actions>
-          <Button
-            onClick={() => setBaseUrlModal(null)}
-            disabled={baseUrlModal?.saving}
-          >
-            取消
-          </Button>
-          <Button
-            color='blue'
-            loading={baseUrlModal?.saving}
-            disabled={baseUrlModal?.saving}
-            onClick={saveBaseUrl}
-          >
-            <Icon name='check' />
-            保存
-          </Button>
-        </Modal.Actions>
-      </Modal>
+      <BaseUrlModal
+        state={baseUrlModal}
+        onChange={(partial) => setBaseUrlModal((prev) => (prev ? { ...prev, ...partial } : prev))}
+        onClose={() => setBaseUrlModal(null)}
+        onSave={saveBaseUrl}
+      />
 
       {/* Edit key Modal */}
-      <Modal
-        open={!!keyModal}
-        onClose={() => !keyModal?.saving && setKeyModal(null)}
-        size='tiny'
-        closeOnEscape={!keyModal?.saving}
-        closeOnDimmerClick={!keyModal?.saving}
-      >
-        <Modal.Header>
-          编辑渠道 key {keyModal?.channelId ? `(渠道 #${keyModal.channelId})` : ''}
-        </Modal.Header>
-        <Modal.Content>
-          <Modal.Description>
-            <p style={{ marginBottom: 12, color: '#475569' }}>
-              GET 接口不返回原 key，只能用新值覆盖。
-            </p>
-            <Input
-              fluid
-              type={keyModal?.showPlain ? 'text' : 'password'}
-              placeholder='输入新 key'
-              value={keyModal?.newKey || ''}
-              onChange={(_, { value }) =>
-                setKeyModal((prev) => (prev ? { ...prev, newKey: value, error: '' } : prev))
-              }
-              disabled={keyModal?.saving}
-            />
-            <div style={{ marginTop: 10 }}>
-              <Checkbox
-                label='显示明文'
-                checked={!!keyModal?.showPlain}
-                disabled={keyModal?.saving}
-                onChange={(_, { checked }) =>
-                  setKeyModal((prev) => (prev ? { ...prev, showPlain: checked } : prev))
-                }
-              />
-            </div>
-            {keyModal?.error && (
-              <Message negative size='small' style={{ marginTop: 12 }}>
-                <p>{keyModal.error}</p>
-              </Message>
-            )}
-          </Modal.Description>
-        </Modal.Content>
-        <Modal.Actions>
-          <Button
-            onClick={() => setKeyModal(null)}
-            disabled={keyModal?.saving}
-          >
-            取消
-          </Button>
-          <Button
-            color='blue'
-            loading={keyModal?.saving}
-            disabled={keyModal?.saving || !keyModal?.newKey}
-            onClick={saveKey}
-          >
-            <Icon name='check' />
-            保存
-          </Button>
-        </Modal.Actions>
-      </Modal>
+      <KeyModal
+        state={keyModal}
+        onChange={(partial) => setKeyModal((prev) => (prev ? { ...prev, ...partial } : prev))}
+        onClose={() => setKeyModal(null)}
+        onSave={saveKey}
+      />
     </div>
   );
 };
