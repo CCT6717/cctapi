@@ -597,19 +597,6 @@ const ModelEditor = ({ highlightDeployment }) => {
                           options={(() => {
                             const opts = [];
                             manualChannels.forEach((ch) => {
-                              opts.push({
-                                key: `header-${ch.id}`,
-                                value: `__header_${ch.id}__`,
-                                disabled: true,
-                                className: 'fallback-channel-header',
-                                content: (
-                                  <div className='fallback-channel-header-content'>
-                                    <Icon name='server' />
-                                    <span>{ch.name}</span>
-                                    <small>#{ch.id}</small>
-                                  </div>
-                                ),
-                              });
                               ch.models.forEach((model) => {
                                 const pairKey = `${ch.id}:${model}`;
                                 const exists = existingPairs.has(pairKey);

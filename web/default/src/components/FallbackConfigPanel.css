@@ -384,9 +384,9 @@
 
 .fallback-deployment-heading {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  gap: 14px;
+  gap: 10px;
 }
 
 .fallback-deployment-name {
@@ -402,6 +402,29 @@
 .fallback-deployment-name .ui.label {
   flex: 0 0 auto;
   font-weight: 600;
+}
+
+.fallback-deploy-mode-btns {
+  display: inline-flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.fallback-deploy-mode-btns .ui.button {
+  min-height: 30px !important;
+  height: 30px !important;
+  padding: 0 14px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  line-height: 1 !important;
+  border-radius: 8px !important;
+}
+
+.fallback-deploy-mode-btns .ui.button.active-mode {
+  background: #7c3aed !important;
+  color: #fff !important;
+  border-color: #7c3aed !important;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3) !important;
 }
 
 .fallback-state-note {

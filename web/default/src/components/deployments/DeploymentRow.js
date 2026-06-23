@@ -58,56 +58,72 @@ const DeploymentRow = ({
           <Label basic size='mini' color={statusMeta.color}>
             {statusMeta.label}
           </Label>
-          <Label basic size='mini' color={dep.daily_limit_tokens > 0 ? 'teal' : 'blue'}>
-            {dep.daily_limit_tokens > 0 ? '限额 ' + (dep.daily_limit_tokens || 0).toLocaleString() : '触发模式'}
-          </Label>
           {ownerNames.length > 1 && (
             <Label basic size='mini' color='orange' title={`共享部署：${ownerText}`}>
               共享 {ownerNames.length}
             </Label>
           )}
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+
+        {/* 模式按钮 - 直接在标题行，无需展开 */}
+        <div className='fallback-deploy-mode-btns'>
           <Button
             size='mini'
-            icon
-            labelPosition='left'
+            className={currentMode === 'fixed' ? 'active-mode' : ''}
+            basic={currentMode !== 'fixed'}
+            onClick={() => onModeChange('fixed')}
+          >
+            固定
+          </Button>
+          <Button
+            size='mini'
+            className={currentMode === 'quota' ? 'active-mode' : ''}
+            basic={currentMode !== 'quota'}
+            onClick={() => onModeChange('quota')}
+          >
+            限额
+          </Button>
+          <Button
+            size='mini'
+            className={currentMode === 'error' ? 'active-mode' : ''}
+            basic={currentMode !== 'error'}
+            onClick={() => onModeChange('error')}
+          >
+            触发
+          </Button>
+        </div>
+
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6, alignItems: 'center', flexShrink: 0 }}>
+          <Button
+            size='mini'
             loading={healthTesting}
             disabled={healthTesting || saving}
             onClick={onHealthCheck}
           >
-            <Icon name='heartbeat' />
             测试
           </Button>
           {healthResult && (
             <Label basic size='mini' color={healthResult.ok ? 'green' : 'red'}>
               <Icon name={healthResult.ok ? 'check' : 'times'} />
-              {healthResult.text}
             </Label>
           )}
           {hasChannelChanges && (
             <Button
               size='mini'
               color='blue'
-              icon
-              labelPosition='left'
               loading={saving}
               disabled={saving || !dep.channel_id}
               onClick={handleSave}
             >
-              <Icon name='save' />
               保存
             </Button>
           )}
           <Button
             size='mini'
             negative
-            icon
-            labelPosition='left'
             disabled={saving}
             onClick={onDelete}
           >
-            <Icon name='trash' />
             删除
           </Button>
           <Checkbox
@@ -124,34 +140,6 @@ const DeploymentRow = ({
 
       {expanded && (
         <div className='fallback-deployment-details'>
-          {/* 部署模式按钮 */}
-          <div className='fallback-edit-mode-row'>
-            <Button
-              size='mini'
-              color={currentMode === 'fixed' ? 'purple' : undefined}
-              basic={currentMode !== 'fixed'}
-              onClick={() => onModeChange('fixed')}
-            >
-              固定模式
-            </Button>
-            <Button
-              size='mini'
-              color={currentMode === 'quota' ? 'orange' : undefined}
-              basic={currentMode !== 'quota'}
-              onClick={() => onModeChange('quota')}
-            >
-              限额模式
-            </Button>
-            <Button
-              size='mini'
-              color={currentMode === 'error' ? 'green' : undefined}
-              basic={currentMode !== 'error'}
-              onClick={() => onModeChange('error')}
-            >
-              触发模式
-            </Button>
-          </div>
-
           {/* 第一行：4 个数值字段 */}
           <div className='fallback-edit-grid-4'>
             <div className='fallback-edit-field'>
