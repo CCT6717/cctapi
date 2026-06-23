@@ -83,7 +83,7 @@ type gatewayV2FreeProviderInput struct {
 
 // legacyGatewayFields lists JSON keys that belong to the legacy (v1) config
 // format and must be rejected by the v2 endpoint.
-var legacyGatewayFields = []string{"routing_mode", "fallback_order", "fixed_deployment"}
+var legacyGatewayFields = []string{"routing_mode", "fixed_deployment"}
 
 // containsLegacyFields recursively inspects a decoded JSON value and returns
 // true if any object at any depth contains a legacy v1 key.
