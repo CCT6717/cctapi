@@ -11,44 +11,10 @@ import {
   Loader,
   Message,
   Modal,
-  Radio,
   Table,
 } from 'semantic-ui-react';
 import { API } from '../helpers';
 import './FallbackConfigPanel.css';
-
-const ROUTING_MODE_WEIGHTED = 'weighted';
-const ROUTING_MODE_SEQUENTIAL = 'sequential';
-const ROUTING_MODE_FIXED = 'fixed';
-const ROUTING_MODE_META = {
-  [ROUTING_MODE_WEIGHTED]: {
-    title: '按权重',
-    detail: '健康 deployment 按 weight 比例分流，适合主力和备用同时消耗',
-    icon: 'random',
-    color: 'blue',
-  },
-  [ROUTING_MODE_SEQUENTIAL]: {
-    title: '按顺序',
-    detail: '严格按列表顺序尝试，前一个不可用或额度到线后再切下一个',
-    icon: 'sort amount down',
-    color: 'teal',
-  },
-  [ROUTING_MODE_FIXED]: {
-    title: '固定模型',
-    detail: '始终路由到指定真实模型，适合手动锁定主力部署',
-    icon: 'bullseye',
-    color: 'purple',
-  },
-};
-
-const STRATEGY_TO_ROUTING_MODE = {
-  quality_first: ROUTING_MODE_SEQUENTIAL,
-  cost_first: ROUTING_MODE_SEQUENTIAL,
-  free_first: ROUTING_MODE_SEQUENTIAL,
-  weighted: ROUTING_MODE_WEIGHTED,
-  sequential: ROUTING_MODE_SEQUENTIAL,
-  fixed: ROUTING_MODE_FIXED,
-};
 
 const isSeparatorKey = (id) => String(id || '').startsWith('---');
 
@@ -113,7 +79,7 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [deploymentStatuses, setDeploymentStatuses] = useState({});
   const [saving, setSaving] = useState(false);
   const [draftDeployments, setDraftDeployments] = useState({});
-  const [draftFixedVm, setDraftFixedVm] = useState({});
+  const [draftRoutingVm, setDraftRoutingVm] = useState({}); // { [vmKey]: strategy }
   const [saveMessage, setSaveMessage] = useState(null);
   const [channels, setChannels] = useState([]);
   const [selectorState, setSelectorState] = useState({});
@@ -121,7 +87,7 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [healthResults, setHealthResults] = useState({});
   const [showAddVM, setShowAddVM] = useState(false);
   const [newVMName, setNewVMName] = useState('');
-  const [newVMStrategy, setNewVMStrategy] = useState('weighted');
+  const [newVMStrategy, setNewVMStrategy] = useState('quality_first');
   const [newVMPool, setNewVMPool] = useState('');
   const [baseUrlModal, setBaseUrlModal] = useState(null); // { channelId, baseUrl, saving, error }
   const [keyModal, setKeyModal] = useState(null); // { channelId, newKey, showPlain, saving, error }
@@ -154,13 +120,10 @@ const ModelEditor = ({ highlightDeployment }) => {
         const dep = config.deployments[id];
         return dep && pools.includes(dep.pool);
       });
-      // v2 → v1 projection: map strategy to routing_mode
-      const routingMode = STRATEGY_TO_ROUTING_MODE[vm.strategy] || vm.routing_mode || ROUTING_MODE_WEIGHTED;
       return {
         name,
         ...vm,
         fallback_order: fallbackOrder,
-        routing_mode: routingMode,
       };
     }).filter(Boolean);
   }, [config, visibleDeploymentIds]);
@@ -288,6 +251,10 @@ const ModelEditor = ({ highlightDeployment }) => {
     }));
   };
 
+  const handleRoutingModeChange = useCallback((vmKey, strategy) => {
+    setDraftRoutingVm((prev) => ({ ...prev, [vmKey]: strategy }));
+  }, []);
+
   const handleSave = useCallback(async () => {
     setSaving(true);
     setSaveMessage(null);
@@ -333,33 +300,28 @@ const ModelEditor = ({ highlightDeployment }) => {
               dep.daily_limit_tokens = Number(draft.daily_limit_tokens) || 0;
             }
             if (draft.soft_limit_ratio !== undefined) {
-              dep.soft_limit_ratio = Number(draft.soft_limit_ratio) || 0;
+              // ponytail: Number.isFinite keeps 0 honest; || folds 0 to 0 too, but
+              // isFinite also filters NaN/empty. Backend if<=0 restores default 0.95.
+              const n = Number(draft.soft_limit_ratio);
+              dep.soft_limit_ratio = Number.isFinite(n) ? n : 0;
             }
             if (draft.hard_limit_ratio !== undefined) {
-              dep.hard_limit_ratio = Number(draft.hard_limit_ratio) || 0;
+              const n = Number(draft.hard_limit_ratio);
+              dep.hard_limit_ratio = Number.isFinite(n) ? n : 0;
             }
             payload.deployments[id] = dep;
           }
         });
       }
 
-      // Step 3.5: overlay fixed-deployment targets for VMs in fixed mode
-      // - If VM is in fixed routing_mode and draftFixedVm has a value, set fixed_deployment
-      // - If VM was previously fixed but routing_mode changed, clear fixed_deployment
-      // - If draftFixedVm[vmKey] is null/undefined, skip (no change)
+      // Step 3.5: overlay routing strategy for VMs with a draft change
+      // strategy is the source of truth (backend v2 contract)
       if (payload.virtual_models) {
-        Object.keys(draftFixedVm).forEach((vmKey) => {
+        Object.keys(draftRoutingVm).forEach((vmKey) => {
           if (!payload.virtual_models[vmKey]) return;
-          const vmEntry = payload.virtual_models[vmKey];
-          const routingMode = STRATEGY_TO_ROUTING_MODE[vmEntry.strategy] || vmEntry.routing_mode || ROUTING_MODE_WEIGHTED;
-          if (routingMode === ROUTING_MODE_FIXED) {
-            const target = draftFixedVm[vmKey];
-            if (target) {
-              vmEntry.fixed_deployment = target;
-            }
-          } else {
-            // routing_mode no longer fixed — clear any stale pointer
-            vmEntry.fixed_deployment = '';
+          const target = draftRoutingVm[vmKey];
+          if (target) {
+            payload.virtual_models[vmKey].strategy = target;
           }
         });
       }
@@ -371,7 +333,7 @@ const ModelEditor = ({ highlightDeployment }) => {
       if (success) {
         setSaveMessage({ type: 'success', text: '保存成功' });
         setDraftDeployments({});
-        setDraftFixedVm({});
+        setDraftRoutingVm({});
         // reload to reflect the saved state
         await loadConfig();
         await loadDeploymentStatuses();
@@ -383,7 +345,7 @@ const ModelEditor = ({ highlightDeployment }) => {
     } finally {
       setSaving(false);
     }
-  }, [draftDeployments, draftFixedVm, loadConfig, loadDeploymentStatuses]);
+  }, [draftDeployments, draftRoutingVm, loadConfig, loadDeploymentStatuses]);
 
   const handleAddDeployment = useCallback(async (channelId, model, pool, vmKey) => {
     setSaving(true);
@@ -482,19 +444,6 @@ const ModelEditor = ({ highlightDeployment }) => {
           delete next[deploymentId];
           return next;
         });
-        // Edge case: if a VM has this deployment as its fixed target (in draft),
-        // clear that pointer so we don't save a reference to a deleted deployment.
-        setDraftFixedVm((prev) => {
-          const next = { ...prev };
-          let changed = false;
-          Object.keys(next).forEach((vmKey) => {
-            if (next[vmKey] === deploymentId) {
-              delete next[vmKey];
-              changed = true;
-            }
-          });
-          return changed ? next : prev;
-        });
         await loadConfig();
         await loadDeploymentStatuses();
       } else {
@@ -546,7 +495,7 @@ const ModelEditor = ({ highlightDeployment }) => {
       if (success) {
         setSaveMessage({ type: 'success', text: `已添加虚拟模型 ${name}` });
         setNewVMName('');
-        setNewVMStrategy('weighted');
+        setNewVMStrategy('quality_first');
         setNewVMPool('');
         setShowAddVM(false);
         await loadConfig();
@@ -778,10 +727,6 @@ const ModelEditor = ({ highlightDeployment }) => {
           const vmKey = vm.name;
           const vmExpanded = !!expandedVirtualModels[vmKey];
           const modelCount = (vm.fallback_order || []).length;
-          const routingMode = vm.routing_mode || ROUTING_MODE_WEIGHTED;
-          const isSequentialMode = routingMode === ROUTING_MODE_SEQUENTIAL;
-          const isFixedMode = routingMode === ROUTING_MODE_FIXED;
-          const routingMeta = ROUTING_MODE_META[routingMode] || ROUTING_MODE_META[ROUTING_MODE_WEIGHTED];
 
           return (
             <section className='fallback-virtual-panel' key={vmKey}>
@@ -807,9 +752,20 @@ const ModelEditor = ({ highlightDeployment }) => {
                   <div className='fallback-virtual-meta'>
                     {modelCount} 个真实模型
                     {' · '}
-                    <Label basic size='mini' color={routingMeta.color}>
-                      <Icon name={routingMeta.icon} /> {routingMeta.title}
-                    </Label>
+                    <Dropdown
+                      inline
+                      labeled
+                      selection
+                      size='mini'
+                      style={{ minWidth: 140 }}
+                      value={draftRoutingVm[vmKey] ?? vm.strategy ?? 'quality_first'}
+                      options={[
+                        { key: 'quality_first', text: '质量优先', value: 'quality_first' },
+                        { key: 'cost_first', text: '成本优先', value: 'cost_first' },
+                        { key: 'free_first', text: '免费优先', value: 'free_first' },
+                      ]}
+                      onChange={(_, { value }) => handleRoutingModeChange(vmKey, value)}
+                    />
                   </div>
                 </div>
                 <div className='fallback-virtual-summary-actions'>
@@ -928,11 +884,6 @@ const ModelEditor = ({ highlightDeployment }) => {
                       const depExpanded = !!expandedDeployments[deploymentKey];
                       const deploymentStatus = deploymentStatuses[deploymentId];
                       const statusMeta = getDeploymentStatusMeta(deploymentStatus);
-                      // pending draft override (if user picked a different dep this session)
-                      const draftFixedTarget = draftFixedVm[vmKey];
-                      const effectiveFixedTarget =
-                        draftFixedTarget !== undefined ? draftFixedTarget : vm.fixed_deployment;
-                      const isFixedDeployment = isFixedMode && effectiveFixedTarget === deploymentId;
                       const ownerNames = getDeploymentOwnerNames(
                         vmArray,
                         deploymentId
@@ -941,7 +892,7 @@ const ModelEditor = ({ highlightDeployment }) => {
 
                       return (
                         <div
-                          className={`fallback-deployment-panel ${isFixedDeployment ? 'fixed-active' : ''} ${highlightDeployment === deploymentId ? 'fallback-highlight' : ''}`}
+                          className={`fallback-deployment-panel ${highlightDeployment === deploymentId ? 'fallback-highlight' : ''}`}
                           key={deploymentKey}
                         >
                           <div className='fallback-deployment-heading'>
@@ -953,39 +904,14 @@ const ModelEditor = ({ highlightDeployment }) => {
                               icon={depExpanded ? 'angle down' : 'angle right'}
                               onClick={() => toggleDeployment(deploymentKey)}
                             />
-                            {isFixedMode && (
-                              <Radio
-                                name={`fixed-target-${vmKey}`}
-                                checked={isFixedDeployment}
-                                onChange={() =>
-                                  setDraftFixedVm((prev) => ({
-                                    ...prev,
-                                    [vmKey]: dep.id,
-                                  }))
-                                }
-                                style={{ marginRight: 8 }}
-                              />
-                            )}
                             <div className='fallback-deployment-name'>
                               {dep.real_model || '未命名真实模型'}
                               <Label
                                 basic
                                 size='mini'
-                                color={
-                                  isFixedMode
-                                    ? 'purple'
-                                    : isSequentialMode
-                                      ? 'teal'
-                                      : 'blue'
-                                }
+                                color='teal'
                               >
-                                {isFixedMode
-                                  ? isFixedDeployment
-                                    ? '固定目标'
-                                    : '候选'
-                                  : isSequentialMode
-                                    ? `顺序 #${orderIndex + 1}`
-                                    : `权重 ${draftDeployments[dep.id]?.weight ?? dep.weight ?? 100}`}
+                                {`顺序 #${orderIndex + 1}`}
                               </Label>
                               <Label basic size='mini' color={statusMeta.color}>
                                 {statusMeta.label}
@@ -1290,10 +1216,9 @@ const ModelEditor = ({ highlightDeployment }) => {
                   selection
                   value={newVMStrategy}
                   options={[
-                    { key: 'weighted', text: '按权重', value: 'weighted' },
-                    { key: 'quality_first', text: '质量优先（顺序）', value: 'quality_first' },
-                    { key: 'cost_first', text: '成本优先（顺序）', value: 'cost_first' },
-                    { key: 'fixed', text: '固定模型', value: 'fixed' },
+                    { key: 'quality_first', text: '质量优先', value: 'quality_first' },
+                    { key: 'cost_first', text: '成本优先', value: 'cost_first' },
+                    { key: 'free_first', text: '免费优先', value: 'free_first' },
                   ]}
                   onChange={(_, { value }) => setNewVMStrategy(value)}
                 />
