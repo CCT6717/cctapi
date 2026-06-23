@@ -519,6 +519,19 @@ const ModelEditor = ({ highlightDeployment }) => {
                   <Label basic color={vm.enabled ? 'green' : 'grey'}>
                     {vm.enabled ? '启用' : '停用'}
                   </Label>
+                  <Button
+                    size='small'
+                    basic
+                    color='blue'
+                    className='fallback-btn-test-all'
+                    disabled={saving}
+                    onClick={() => {
+                      (vm.fallback_order || []).forEach((id) => handleHealthCheck(id));
+                    }}
+                  >
+                    <Icon name='heartbeat' />
+                    测试全部
+                  </Button>
                   {!vm.name.startsWith('cct/') && (
                     <Button
                       size='mini'
@@ -671,9 +684,6 @@ const ModelEditor = ({ highlightDeployment }) => {
                           onDraftField={(field, value) => setDraftField(dep.id, field, value)}
                           onModeChange={(mode) => handleModeChange(dep.id, mode, vmKey)}
                           onHealthCheck={() => handleHealthCheck(dep.id)}
-                          onTestAll={() => {
-                            (vm.fallback_order || []).forEach((id) => handleHealthCheck(id));
-                          }}
                           onDelete={() => handleDeleteDeployment(dep.id)}
                         />
                       );
