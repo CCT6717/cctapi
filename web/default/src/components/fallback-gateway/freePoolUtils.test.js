@@ -1,6 +1,6 @@
 import {
   isAutoFreeDeploymentId,
-  isFreeDeployment,
+  isAutoFreeDeployment,
   providerFromDeploymentId,
 } from './freePoolUtils';
 
@@ -12,10 +12,10 @@ describe('freePoolUtils', () => {
     expect(isAutoFreeDeploymentId('paid_high-model')).toBe(false);
   });
 
-  it('按 pool=free 或自动部署 ID 判断免费部署', () => {
-    expect(isFreeDeployment('manual-id', { pool: 'free' })).toBe(true);
-    expect(isFreeDeployment('free:openrouter-a1b2c3d4', { pool: 'cheap' })).toBe(true);
-    expect(isFreeDeployment('normal-dep', { pool: 'cheap' })).toBe(false);
+  it('按 pool=free 或自动部署 ID 判断自动免费部署', () => {
+    expect(isAutoFreeDeployment('manual-id', { pool: 'free' })).toBe(true);
+    expect(isAutoFreeDeployment('free:openrouter-a1b2c3d4', { pool: 'cheap' })).toBe(true);
+    expect(isAutoFreeDeployment('normal-dep', { pool: 'cheap' })).toBe(false);
   });
 
   it('从自动部署 ID 提取供应商', () => {

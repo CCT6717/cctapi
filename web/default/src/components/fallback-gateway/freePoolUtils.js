@@ -8,5 +8,8 @@ export const providerFromDeploymentId = (id) => {
   return match ? match[1].toLowerCase() : '-';
 };
 
-export const isFreeDeployment = (id, dep) =>
+// 注意：这是"自动免费池体系"专用判定——只认 free:openrouter-x / free:groq-x
+// 这种 recognized provider 的 id。跟 deploymentMeta.js 的通用 isFreeDeployment
+// 是不同概念：后者接受任何 free:* 前缀和 pool==='free'。别混用。
+export const isAutoFreeDeployment = (id, dep) =>
   dep?.pool === 'free' || isAutoFreeDeploymentId(id);

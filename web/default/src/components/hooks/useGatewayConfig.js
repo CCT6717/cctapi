@@ -1,21 +1,6 @@
 import { useCallback, useState } from 'react';
 import { API } from '../../helpers';
-
-const isSeparatorKey = (id) => String(id || '').startsWith('---');
-
-/**
- * computeInitialMode derives a deployment's mode from its raw config.
- * - daily_limit_tokens > 0  → 'quota'
- * - pool starts with _fixed_ → 'fixed'
- * - otherwise                 → 'error'
- */
-export const computeInitialMode = (data, depId) => {
-  const dep = data?.deployments?.[depId];
-  if (!dep) return 'error';
-  if (dep.daily_limit_tokens > 0) return 'quota';
-  if (dep.pool && dep.pool.startsWith('_fixed_')) return 'fixed';
-  return 'error';
-};
+import { isSeparatorKey, computeInitialMode } from '../utils/deploymentMeta';
 
 /**
  * useGatewayConfig — owns the gateway config fetch + the deploymentMode

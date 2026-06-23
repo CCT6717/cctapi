@@ -15,64 +15,18 @@ import BaseUrlModal from './modals/BaseUrlModal';
 import KeyModal from './modals/KeyModal';
 import AddVirtualModelPanel from './modals/AddVirtualModelPanel';
 import DeploymentRow from './deployments/DeploymentRow';
-import { useGatewayConfig, computeInitialMode } from './hooks/useGatewayConfig';
+import { useGatewayConfig } from './hooks/useGatewayConfig';
 import { useDeploymentStatuses } from './hooks/useDeploymentStatuses';
 import { useChannels } from './hooks/useChannels';
+import {
+  isSeparatorKey,
+  isFreeDeployment,
+  slugModelName,
+  computeInitialMode,
+  getDeploymentStatusMeta,
+  getDeploymentOwnerNames,
+} from './utils/deploymentMeta';
 import './FallbackConfigPanel.css';
-
-const isSeparatorKey = (id) => String(id || '').startsWith('---');
-
-const getDeploymentOwnerNames = (projectedVMs, deploymentId) =>
-  (projectedVMs || [])
-    .filter((vm) => (vm.fallback_order || []).includes(deploymentId))
-    .map((vm) => vm.name || '未命名虚拟模型');
-
-const slugModelName = (name) =>
-  String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
-
-const formatStatusTime = (value) => {
-  if (!value) return '-';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleString('zh-CN', { hour12: false });
-};
-
-const getDeploymentStatusMeta = (status) => {
-  const alertType = status?.alert_type || '';
-  if (alertType === 'cooldown') {
-    return {
-      label: '冷却中',
-      color: 'orange',
-      detail: `冷却至 ${formatStatusTime(status.cooldown_until)}`,
-    };
-  }
-  if (alertType === 'exhausted') {
-    return {
-      label: '已耗尽',
-      color: 'red',
-      detail: `耗尽至 ${formatStatusTime(status.exhausted_until)}`,
-    };
-  }
-  if (alertType === 'hard_limit') {
-    return {
-      label: '硬限额',
-      color: 'red',
-      detail: `用量 ${status?.usage_percent || '-'}`,
-    };
-  }
-  if (alertType === 'soft_limit') {
-    return {
-      label: '软限额',
-      color: 'yellow',
-      detail: `用量 ${status?.usage_percent || '-'}`,
-    };
-  }
-  return {
-    label: '可用',
-    color: 'green',
-    detail: status ? `用量 ${status.usage_percent || '-'}` : '暂无状态数据',
-  };
-};
 
 const ModelEditor = ({ highlightDeployment }) => {
   // Gateway config + deployment modes (modes initialised from config)
@@ -99,7 +53,6 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [keyModal, setKeyModal] = useState(null); // { channelId, newKey, showPlain, saving, error }
 
   const HIDDEN_VMS = ['cct/free'];
-  const isFreeDeployment = (id) => String(id || '').startsWith('free:');
 
   const visibleDeploymentIds = useMemo(() => {
     if (!config?.deployments) return [];
@@ -107,7 +60,7 @@ const ModelEditor = ({ highlightDeployment }) => {
       (id) => {
         if (isSeparatorKey(id)) return false;
         const dep = config.deployments[id];
-        if (dep?.pool === 'free' || isFreeDeployment(id)) return false;
+        if (isFreeDeployment(id, dep)) return false;
         return true;
       }
     );
@@ -178,7 +131,7 @@ const ModelEditor = ({ highlightDeployment }) => {
     if (!config?.deployments) return pairs;
     Object.entries(config.deployments).forEach(([id, dep]) => {
       if (isSeparatorKey(id)) return;
-      if (dep?.pool === 'free' || isFreeDeployment(id)) return;
+      if (isFreeDeployment(id, dep)) return;
       if (dep?.channel_id && dep?.real_model) {
         pairs.add(`${dep.channel_id}:${dep.real_model}`);
       }
@@ -338,16 +291,16 @@ const ModelEditor = ({ highlightDeployment }) => {
 
   const handleDeleteDeployment = useCallback(async (deploymentId) => {
     if (!deploymentId) return;
-    if (isFreeDeployment(deploymentId)) {
+    const currentDep = config?.deployments?.[deploymentId];
+    if (isFreeDeployment(deploymentId, currentDep)) {
       setSaveMessage({ type: 'error', text: '免费部署不可在模型编辑器中删除' });
       return;
     }
     // Pool safety check
-    const currentDep = config?.deployments?.[deploymentId];
     if (currentDep?.pool) {
       const pool = currentDep.pool;
       const enabledInPool = Object.entries(config.deployments).filter(
-        ([id, d]) => !isSeparatorKey(id) && !isFreeDeployment(id) && d?.pool === pool && d?.enabled !== false && id !== deploymentId
+        ([id, d]) => !isSeparatorKey(id) && !isFreeDeployment(id, d) && d?.pool === pool && d?.enabled !== false && id !== deploymentId
       );
       if (enabledInPool.length === 0) {
         const warnMsg = `删除后池 "${pool}" 将没有可用部署，相关虚拟模型可能无法路由。\n确定要继续吗？`;

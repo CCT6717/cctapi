@@ -1,9 +1,4 @@
-const isSeparatorKey = (id) => String(id || '').startsWith('---');
-
-const isFreeDeployment = (id) => String(id || '').startsWith('free:');
-
-const slugModelName = (name) =>
-  String(name || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+import { isSeparatorKey, isFreeDeployment, slugModelName } from './deploymentMeta';
 
 /**
  * applyDraftEdits overlays user-editable draft fields onto payload deployments.
@@ -15,7 +10,7 @@ function applyDraftEdits(payload, draftDeployments) {
   Object.keys(payload.deployments).forEach((id) => {
     if (isSeparatorKey(id)) return;
     const dep = payload.deployments[id];
-    if (dep?.pool === 'free' || isFreeDeployment(id)) return;
+    if (isFreeDeployment(id, dep)) return;
     const draft = draftDeployments[id];
     if (!draft) return;
 

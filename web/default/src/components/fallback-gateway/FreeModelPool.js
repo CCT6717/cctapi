@@ -11,7 +11,7 @@ import {
 } from './gatewayConfigApi';
 import FreeProvidersEditor from './FreeProvidersEditor';
 import {
-  isFreeDeployment,
+  isAutoFreeDeployment,
   providerFromDeploymentId,
 } from './freePoolUtils';
 
@@ -143,7 +143,7 @@ const FreeModelPool = () => {
   const freeDeployments = useMemo(() => {
     const deployments = config?.deployments || {};
     return Object.keys(deployments)
-      .filter((id) => isFreeDeployment(id, deployments[id]))
+      .filter((id) => isAutoFreeDeployment(id, deployments[id]))
       .sort()
       .map((id) => {
         const runtime = runtimeRows.find((row) => row.deployment_id === id) || {};
