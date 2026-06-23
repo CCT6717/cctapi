@@ -1,5 +1,5 @@
 import React from 'react';
-import { Button, Checkbox, Icon, Input, Label, Table } from 'semantic-ui-react';
+import { Button, Checkbox, Dropdown, Icon, Input, Label, Table } from 'semantic-ui-react';
 import ErrorRulesReference from './ErrorRulesReference';
 
 /**
@@ -219,40 +219,36 @@ const DeploymentRow = ({
                         {healthResult.text}
                       </Label>
                     )}
-                    <Button
+                    <Dropdown
+                      text='更多'
+                      icon='dropdown'
+                      button
+                      basic
                       size='mini'
-                      color='blue'
-                      icon
-                      labelPosition='left'
-                      disabled={!dep.channel_id || saving}
-                      onClick={onEditBaseUrl}
-                      title={!dep.channel_id ? '该部署未绑定渠道' : '编辑该渠道的 base_url'}
+                      disabled={saving}
                     >
-                      <Icon name='linkify' />
-                      编辑 base_url
-                    </Button>
-                    <Button
-                      size='mini'
-                      icon
-                      labelPosition='left'
-                      disabled={!dep.channel_id || saving}
-                      onClick={onEditKey}
-                      title={!dep.channel_id ? '该部署未绑定渠道' : '用新值覆盖该渠道的 key (原值不可查)'}
-                    >
-                      <Icon name='key' />
-                      编辑 key
-                    </Button>
-                    <Button
-                      size='mini'
-                      negative
-                      icon
-                      labelPosition='left'
-                      loading={saving}
-                      onClick={onDelete}
-                    >
-                      <Icon name='trash' />
-                      删除此部署
-                    </Button>
+                      <Dropdown.Menu>
+                        <Dropdown.Item
+                          icon='linkify'
+                          text='编辑 base_url'
+                          disabled={!dep.channel_id}
+                          onClick={onEditBaseUrl}
+                        />
+                        <Dropdown.Item
+                          icon='key'
+                          text='编辑 key'
+                          disabled={!dep.channel_id}
+                          onClick={onEditKey}
+                        />
+                        <Dropdown.Divider />
+                        <Dropdown.Item
+                          icon='trash'
+                          text='删除此部署'
+                          onClick={onDelete}
+                          className='fallback-dropdown-danger'
+                        />
+                      </Dropdown.Menu>
+                    </Dropdown>
                   </div>
                 </Table.Cell>
               </Table.Row>

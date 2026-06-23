@@ -82,12 +82,12 @@
 }
 
 .gw-quota.critical small {
-  color: #ef4444;
+  color: var(--fb-danger);
   font-weight: 600;
 }
 
 .gw-quota.warning small {
-  color: #f97316;
+  color: var(--fb-warning);
 }
 
 .gw-quota-unchecked {
@@ -108,6 +108,11 @@
   border-radius: 50%;
   display: inline-block;
 }
+
+.gw-health-dot.green { background: var(--fb-success); }
+.gw-health-dot.yellow { background: var(--fb-warning); }
+.gw-health-dot.red { background: var(--fb-danger); }
+.gw-health-dot.gray { background: #94a3b8; }
 
 .gw-last-error {
   max-width: 220px;

@@ -13,6 +13,14 @@ const HEALTH_COLOR = {
   unknown: '#94a3b8',
 };
 
+const HEALTH_CLASS = {
+  healthy: 'green',
+  rate_limited: 'yellow',
+  invalid: 'red',
+  error: 'red',
+  unknown: 'gray',
+};
+
 const HEALTH_TEXT = {
   healthy: '健康',
   rate_limited: '限流',
@@ -196,14 +204,8 @@ const RuntimeStatusPanel = ({ onReload }) => {
                     <Table.Cell><strong>{row.deployment_id}</strong></Table.Cell>
                     <Table.Cell><code>{row.pool || '-'}</code></Table.Cell>
                     <Table.Cell>
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                        <span style={{
-                          display: 'inline-block',
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          background: HEALTH_COLOR[health] || '#94a3b8',
-                        }} />
+                      <span className='gw-health'>
+                        <span className={`gw-health-dot ${HEALTH_CLASS[health] || 'gray'}`} />
                         {HEALTH_TEXT[health] || health}
                       </span>
                     </Table.Cell>

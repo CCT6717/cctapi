@@ -1,0 +1,385 @@
+/* ============================================================
+   GatewayStatus — 卡片式三层网关状态面板
+   作用域：.gw-status 根节点，不污染全局
+   ============================================================ */
+
+.gw-status {
+  --gw-primary: var(--fb-primary, #3b82f6);
+  --gw-accent: var(--fb-purple, #8b5cf6);
+  --gw-success: #22c55e;
+  --gw-warning: #f59e0b;
+  --gw-danger: #ef4444;
+  --gw-card: var(--fb-surface, #fff);
+  --gw-soft: var(--fb-primary-light, rgba(59, 130, 246, 0.08));
+  --gw-soft-2: var(--fb-border-light, #eef2f6);
+  --gw-border: var(--fb-border, #e3e8ef);
+  --gw-t1: var(--fb-text, #172033);
+  --gw-t2: var(--fb-text-secondary, #53627a);
+  --gw-t3: var(--fb-text-muted, #8a9bb5);
+  color: var(--gw-t1);
+  font-family: var(--fb-font-sans, ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif);
+}
+
+.gw-panel {
+  background: var(--gw-card);
+  border: 0.5px solid var(--gw-border);
+  border-radius: 18px;
+  padding: 18px;
+}
+
+.gw-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.gw-panel-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.gw-refresh {
+  height: 30px;
+  width: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0.5px solid var(--gw-border);
+  border-radius: 10px;
+  background: var(--gw-card);
+  color: var(--gw-t2);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gw-refresh:hover {
+  background: var(--gw-soft-2);
+  color: var(--gw-t1);
+}
+
+.gw-hint {
+  font-size: 12px;
+  color: var(--gw-t2);
+  line-height: 1.55;
+  background: var(--gw-soft-2);
+  border-left: 3px solid var(--gw-primary);
+  border-radius: 0 10px 10px 0;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.gw-code {
+  font-family: var(--fb-font-mono, ui-monospace, Menlo, monospace);
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 5px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+
+.gw-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ---- 虚拟模型行 ---- */
+.gw-row {
+  border: 0.5px solid var(--gw-border);
+  border-radius: 12px;
+  background: var(--gw-soft);
+  padding: 12px 14px;
+  transition: border-color 0.15s ease;
+}
+
+.gw-row:hover {
+  border-color: var(--gw-t3);
+}
+
+.gw-row-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.gw-chev {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--gw-t3);
+  transition: transform 0.15s ease;
+}
+
+.gw-chev.open {
+  transform: rotate(90deg);
+}
+
+.gw-name {
+  font-size: 14px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.gw-meta {
+  font-size: 12px;
+  color: var(--gw-t2);
+  margin-top: 3px;
+}
+
+.gw-spacer {
+  flex: 1;
+}
+
+/* ---- 标签 / 徽章 ---- */
+.gw-tag {
+  height: 19px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 500;
+  border: 0.5px solid var(--gw-border);
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--gw-t2);
+}
+
+.gw-tag.q {
+  color: var(--gw-accent);
+  background: color-mix(in srgb, var(--gw-accent) 14%, transparent);
+  border-color: color-mix(in srgb, var(--gw-accent) 35%, transparent);
+}
+
+.gw-badge {
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 0 9px;
+  font-size: 10px;
+  font-weight: 600;
+  flex-shrink: 0;
+  color: var(--gw-success);
+  background: color-mix(in srgb, var(--gw-success) 16%, transparent);
+  border: 0.5px solid color-mix(in srgb, var(--gw-success) 40%, transparent);
+}
+
+.gw-badge.off {
+  color: var(--gw-danger);
+  background: color-mix(in srgb, var(--gw-danger) 12%, transparent);
+  border-color: color-mix(in srgb, var(--gw-danger) 35%, transparent);
+}
+
+.gw-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ---- Pool / 降级 Pills ---- */
+.gw-pools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: 28px;
+}
+
+.gw-pill {
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  padding: 0 8px;
+  font-size: 10px;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--gw-t2);
+}
+
+.gw-pill.on {
+  color: var(--gw-success);
+  background: color-mix(in srgb, var(--gw-success) 14%, transparent);
+}
+
+.gw-pill.off {
+  color: var(--gw-danger);
+  background: color-mix(in srgb, var(--gw-danger) 12%, transparent);
+}
+
+/* ---- Deployment 子卡片 ---- */
+.gw-dep {
+  margin-top: 12px;
+  margin-left: 28px;
+}
+
+.gw-dep-card {
+  border: 0.5px solid var(--gw-border);
+  border-radius: 10px;
+  background: var(--gw-card);
+  padding: 12px 14px;
+  transition: border-color 0.15s ease;
+}
+
+.gw-dep-card:hover {
+  border-color: var(--gw-t3);
+}
+
+.gw-dep-card + .gw-dep-card {
+  margin-top: 8px;
+}
+
+.gw-dep-name {
+  font-size: 13px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ---- 四维配额格子 ---- */
+.gw-quota-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.gw-qbox {
+  background: var(--gw-soft-2);
+  border: 0.5px solid transparent;
+  border-radius: 8px;
+  padding: 8px 10px;
+  transition: all 0.15s ease;
+}
+
+.gw-qbox.warning {
+  background: color-mix(in srgb, var(--gw-warning) 10%, transparent);
+  border-color: color-mix(in srgb, var(--gw-warning) 30%, transparent);
+}
+
+.gw-qbox.critical {
+  background: color-mix(in srgb, var(--gw-danger) 10%, transparent);
+  border-color: color-mix(in srgb, var(--gw-danger) 30%, transparent);
+}
+
+.gw-qlabel {
+  font-size: 10px;
+  color: var(--gw-t3);
+}
+
+.gw-qval {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 3px;
+}
+
+.gw-qval.ok {
+  color: var(--gw-success);
+}
+
+.gw-qbox.warning .gw-qval {
+  color: var(--gw-warning);
+}
+
+.gw-qbox.critical .gw-qval {
+  color: var(--gw-danger);
+}
+
+.gw-qval.unlimited {
+  color: var(--gw-t3);
+  font-weight: 400;
+  font-size: 11px;
+}
+
+/* ---- 最近错误 ---- */
+.gw-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--gw-danger);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gw-error-time {
+  color: var(--gw-t3);
+  font-size: 11px;
+  margin-left: 6px;
+}
+
+/* ---- 操作按钮 ---- */
+.gw-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.gw-mini {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border: 0.5px solid var(--gw-border);
+  background: var(--gw-soft-2);
+  color: var(--gw-t1);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.gw-mini:hover {
+  background: var(--gw-border);
+}
+
+.gw-mini:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.gw-mini.danger {
+  color: var(--gw-danger);
+  border-color: color-mix(in srgb, var(--gw-danger) 35%, transparent);
+  background: color-mix(in srgb, var(--gw-danger) 10%, transparent);
+}
+
+.gw-mini.danger:hover {
+  background: color-mix(in srgb, var(--gw-danger) 20%, transparent);
+}
+
+/* ---- Loading ---- */
+.gw-loading {
+  padding: 48px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ---- 暗色模式预留 ---- */
+@media (prefers-color-scheme: dark) {
+  .gw-status {
+    --gw-card: #2e2e2e;
+    --gw-soft: rgba(255, 255, 255, 0.03);
+    --gw-soft-2: rgba(255, 255, 255, 0.04);
+    --gw-border: rgba(255, 255, 255, 0.08);
+    --gw-t1: rgba(255, 255, 255, 0.8);
+    --gw-t2: rgba(255, 255, 255, 0.5);
+    --gw-t3: rgba(255, 255, 255, 0.35);
+  }
+
+  .gw-code {
+    background: rgba(255, 255, 255, 0.08);
+  }
+}

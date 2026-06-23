@@ -28,6 +28,16 @@
   --fb-radius-xl: 14px;
   --fb-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --fb-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --fb-success: #22c55e;
+  --fb-success-bg: #dcfce7;
+  --fb-success-border: #bbf7d0;
+  --fb-warning: #f59e0b;
+  --fb-warning-bg: #fef3c7;
+  --fb-warning-border: #fde68a;
+  --fb-danger: #ef4444;
+  --fb-danger-bg: #fee2e2;
+  --fb-danger-border: #fecaca;
+  --fb-info: #3b82f6;
 }
 
 /* --- Font Stack - Inter (loaded via public/index.html) + system CJK --- */
@@ -789,9 +799,9 @@
   background: transparent;
 }
 
-.fallback-runtime-card.normal::before { background: #22c55e; }
-.fallback-runtime-card.warning::before { background: #f59e0b; }
-.fallback-runtime-card.critical::before { background: #ef4444; }
+.fallback-runtime-card.normal::before { background: var(--fb-success); }
+.fallback-runtime-card.warning::before { background: var(--fb-warning); }
+.fallback-runtime-card.critical::before { background: var(--fb-danger); }
 
 .fallback-runtime-card span,
 .fallback-runtime-card small {
@@ -812,18 +822,18 @@
 }
 
 .fallback-runtime-card.normal {
-  border-color: #d6f5e7;
-  background: #fbfffd;
+  border-color: var(--fb-success-border);
+  background: var(--fb-success-bg);
 }
 
 .fallback-runtime-card.warning {
-  border-color: #fedf89;
-  background: #fffcf5;
+  border-color: var(--fb-warning-border);
+  background: var(--fb-warning-bg);
 }
 
 .fallback-runtime-card.critical {
-  border-color: #fda29b;
-  background: #fff8f6;
+  border-color: var(--fb-danger-border);
+  background: var(--fb-danger-bg);
 }
 
 /* --- Health Panel --- */
@@ -1517,11 +1527,11 @@
 
 /* --- Status Row & Deploy Styles --- */
 .fallback-deploy-row.cooling {
-  background: #fffbeb !important;
+  background: var(--fb-warning-bg) !important;
 }
 
 .fallback-deploy-row.quota-exhausted {
-  background: #fef3f2 !important;
+  background: var(--fb-danger-bg) !important;
 }
 
 .fallback-status-row {
@@ -1538,6 +1548,18 @@
   height: 8px;
   border-radius: 50%;
   flex-shrink: 0;
+}
+
+.fallback-status-dot.green { background: var(--fb-success); }
+.fallback-status-dot.yellow { background: var(--fb-warning); }
+.fallback-status-dot.red { background: var(--fb-danger); }
+.fallback-status-dot.gray { background: #94a3b8; }
+
+.fallback-dropdown-danger {
+  color: var(--fb-danger) !important;
+}
+.fallback-dropdown-danger:hover {
+  background: var(--fb-danger-bg) !important;
 }
 
 /* --- Rank Badge --- */

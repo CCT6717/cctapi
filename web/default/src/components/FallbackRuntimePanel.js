@@ -15,12 +15,12 @@ const STRATEGY_LABEL = {
   free_first: '免费优先',
 };
 
-const HEALTH_COLOR = {
-  healthy: '#22c55e',
-  rate_limited: '#f97316',
-  invalid: '#ef4444',
-  error: '#ef4444',
-  unknown: '#94a3b8',
+const HEALTH_CLASS = {
+  healthy: 'green',
+  rate_limited: 'yellow',
+  invalid: 'red',
+  error: 'red',
+  unknown: 'gray',
 };
 
 const HEALTH_TEXT = {
@@ -228,7 +228,7 @@ const FallbackRuntimePanel = () => {
                       <Table.Cell><QuotaCell used={row.day_tokens} limit={row.tpd_limit} /></Table.Cell>
                       <Table.Cell>
                         <span className='gw-health'>
-                          <span className='gw-health-dot' style={{ background: HEALTH_COLOR[health] }} />
+                          <span className={`gw-health-dot ${HEALTH_CLASS[health] || 'gray'}`} />
                           {HEALTH_TEXT[health] || health}
                         </span>
                       </Table.Cell>
