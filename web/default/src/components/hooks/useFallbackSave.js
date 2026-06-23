@@ -23,6 +23,7 @@ export const useFallbackSave = ({ loadConfig, loadDeploymentStatuses }) => {
   const execute = useCallback(async (mutator, { successMsg, onSaved } = {}) => {
     setSaving(true);
     setSaveMessage(null);
+    const scrollY = window.scrollY;
     try {
       const { data: res } = await getManualConfig();
       const fresh = res?.data;
@@ -43,6 +44,7 @@ export const useFallbackSave = ({ loadConfig, loadDeploymentStatuses }) => {
       setSaveMessage({ type: 'success', text: successMsg || '操作成功' });
       onSaved?.();
       await Promise.all([loadConfig(), loadDeploymentStatuses()]);
+      requestAnimationFrame(() => window.scrollTo(0, scrollY));
       return true;
     } catch (e) {
       setSaveMessage({ type: 'error', text: e.message || '操作异常' });

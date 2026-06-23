@@ -242,20 +242,33 @@ const ModelEditor = ({ highlightDeployment }) => {
     );
   }, [execute, setSaveMessage]);
 
-  const handleDeleteDeployment = useCallback(async (deploymentId) => {
+  const handleDeleteDeployment = useCallback(async (deploymentId, fromVmKey) => {
     if (!deploymentId) return;
     const currentDep = config?.deployments?.[deploymentId];
     if (isFreeDeployment(deploymentId, currentDep)) {
       setSaveMessage({ type: 'error', text: '免费部署不可在模型编辑器中删除' });
       return;
     }
-    if (currentDep?.pool) {
-      const pool = currentDep.pool;
-      const enabledInPool = Object.entries(config.deployments).filter(
+    const pool = currentDep?.pool;
+    if (pool) {
+      const vmsUsingPool = (config?.virtual_models ? Object.entries(config.virtual_models) : [])
+        .filter(([name, vm]) => name !== 'cct/free' && (vm.pools || []).includes(pool))
+        .map(([name]) => name);
+      const enabledInPool = Object.entries(config.deployments || {}).filter(
         ([id, d]) => !isSeparatorKey(id) && !isFreeDeployment(id, d) && d?.pool === pool && d?.enabled !== false && id !== deploymentId
       );
+      let msg = '';
+      if (vmsUsingPool.length > 1) {
+        msg = `此部署在池 "${pool}" 中，被以下虚拟模型共享：${vmsUsingPool.join('、')}。\n删除后所有这些模型都将受影响。`;
+      }
       if (enabledInPool.length === 0) {
-        if (!window.confirm(`删除后池 "${pool}" 将没有可用部署，相关虚拟模型可能无法路由。\n确定要继续吗？`)) return;
+        msg += (msg ? '\n' : '') + `删除后池 "${pool}" 将没有可用部署，相关虚拟模型可能无法路由。`;
+      }
+      if (msg) {
+        const scrollY = window.scrollY;
+        const ok = window.confirm(msg + '\n确定要继续吗？');
+        window.scrollTo(0, scrollY);
+        if (!ok) return;
       }
     }
     await execute(
@@ -711,7 +724,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                           onModeChange={(mode) => handleModeChange(dep.id, mode, vmKey)}
                           onHealthCheck={() => handleHealthCheck(dep.id)}
                           onSave={(chId, fields, onDone) => saveChannelField(chId, fields, onDone)}
-                          onDelete={() => handleDeleteDeployment(dep.id)}
+                          onDelete={() => handleDeleteDeployment(dep.id, vmKey)}
                         />
                       );
                     })}

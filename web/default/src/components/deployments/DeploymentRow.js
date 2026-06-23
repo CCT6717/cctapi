@@ -125,7 +125,7 @@ const DeploymentRow = ({
             size='mini'
             negative
             disabled={saving}
-            onClick={onDelete}
+            onClick={(e) => { e.preventDefault(); onDelete(); }}
           >
             删除
           </Button>
