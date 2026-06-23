@@ -24,6 +24,7 @@ type gatewayV2VirtualModel struct {
 	Enabled            bool     `json:"enabled"`
 	Strategy           string   `json:"strategy"`
 	Pools              []string `json:"pools"`
+	FallbackOrder      []string `json:"fallback_order,omitempty"`
 	AllowDegradeToLow  bool     `json:"allow_degrade_to_low"`
 	AllowDegradeToFree bool     `json:"allow_degrade_to_free"`
 }
@@ -130,6 +131,7 @@ func buildGatewayV2Config(cfg *fallback.Config) gatewayV2Config {
 			Enabled:            vm.Enabled,
 			Strategy:           vm.Strategy,
 			Pools:              append([]string{}, vm.Pools...),
+			FallbackOrder:      append([]string{}, vm.FallbackOrder...),
 			AllowDegradeToLow:  vm.AllowDegradeToLow,
 			AllowDegradeToFree: vm.AllowDegradeToFree,
 		}
@@ -220,6 +222,7 @@ func buildManualConfig(cfg *fallback.Config) gatewayV2Config {
 			Enabled:            vm.Enabled,
 			Strategy:           vm.Strategy,
 			Pools:              append([]string{}, vm.Pools...),
+			FallbackOrder:      append([]string{}, vm.FallbackOrder...),
 			AllowDegradeToLow:  vm.AllowDegradeToLow,
 			AllowDegradeToFree: vm.AllowDegradeToFree,
 		}
@@ -355,13 +358,20 @@ func updateManualConfig(c *gin.Context) {
 		if len(pools) == 0 {
 			pools = []string{"default"}
 		}
-		merged.VirtualModels[name] = fallback.VirtualModelConfig{
+		mergedVM := fallback.VirtualModelConfig{
 			Enabled:            vm.Enabled,
 			Strategy:           fallback.NormalizeStrategy(vm.Strategy),
 			Pools:              append([]string{}, pools...),
 			AllowDegradeToLow:  vm.AllowDegradeToLow,
 			AllowDegradeToFree: vm.AllowDegradeToFree,
 		}
+		// Use FallbackOrder from payload if provided; otherwise preserve existing.
+		if len(vm.FallbackOrder) > 0 {
+			mergedVM.FallbackOrder = append([]string{}, vm.FallbackOrder...)
+		} else if existing, ok := current.VirtualModels[name]; ok {
+			mergedVM.FallbackOrder = append([]string{}, existing.FallbackOrder...)
+		}
+		merged.VirtualModels[name] = mergedVM
 	}
 
 	// Remove virtual models that are missing from the payload (user deleted them).

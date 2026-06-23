@@ -71,12 +71,17 @@ const ModelEditor = ({ highlightDeployment }) => {
       .map((name) => {
       const vm = config.virtual_models[name];
       if (!vm) return null;
-      // v2 → v1 projection: derive fallback_order from pools
       const pools = Array.isArray(vm.pools) ? vm.pools : [];
-      const fallbackOrder = visibleDeploymentIds.filter((id) => {
-        const dep = config.deployments[id];
-        return dep && pools.includes(dep.pool);
-      });
+      let fallbackOrder;
+      // Use backend fallback_order if provided; otherwise derive from pools.
+      if (Array.isArray(vm.fallback_order) && vm.fallback_order.length > 0) {
+        fallbackOrder = vm.fallback_order.filter((id) => config.deployments[id]);
+      } else {
+        fallbackOrder = visibleDeploymentIds.filter((id) => {
+          const dep = config.deployments[id];
+          return dep && pools.includes(dep.pool);
+        });
+      }
       return {
         name,
         ...vm,
@@ -233,6 +238,19 @@ const ModelEditor = ({ highlightDeployment }) => {
         let suffix = 1;
         while (payload.deployments[newId]) { newId = `${baseId}-${suffix}`; suffix++; }
         payload.deployments[newId] = { enabled: true, channel_id: channelId, real_model: model, pool, priority: 0, weight: 100 };
+        // Add to VM's fallback_order
+        const vm = payload.virtual_models?.[vmKey];
+        if (vm) {
+          let order = Array.isArray(vm.fallback_order) ? [...vm.fallback_order] : [];
+          if (order.length === 0) {
+            const pools = vm.pools || [];
+            order = Object.entries(payload.deployments || {})
+              .filter(([id, d]) => !id.startsWith('---') && d && pools.includes(d.pool) && id !== newId)
+              .map(([id]) => id);
+          }
+          order.push(newId);
+          vm.fallback_order = order;
+        }
         return payload;
       },
       {
@@ -243,33 +261,11 @@ const ModelEditor = ({ highlightDeployment }) => {
   }, [execute, setSaveMessage]);
 
   const handleDeleteDeployment = useCallback(async (deploymentId, fromVmKey) => {
-    if (!deploymentId) return;
+    if (!deploymentId || !fromVmKey) return;
     const currentDep = config?.deployments?.[deploymentId];
     if (isFreeDeployment(deploymentId, currentDep)) {
       setSaveMessage({ type: 'error', text: '免费部署不可在模型编辑器中删除' });
       return;
-    }
-    const pool = currentDep?.pool;
-    if (pool) {
-      const vmsUsingPool = (config?.virtual_models ? Object.entries(config.virtual_models) : [])
-        .filter(([name, vm]) => name !== 'cct/free' && (vm.pools || []).includes(pool))
-        .map(([name]) => name);
-      const enabledInPool = Object.entries(config.deployments || {}).filter(
-        ([id, d]) => !isSeparatorKey(id) && !isFreeDeployment(id, d) && d?.pool === pool && d?.enabled !== false && id !== deploymentId
-      );
-      let msg = '';
-      if (vmsUsingPool.length > 1) {
-        msg = `此部署在池 "${pool}" 中，被以下虚拟模型共享：${vmsUsingPool.join('、')}。\n删除后所有这些模型都将受影响。`;
-      }
-      if (enabledInPool.length === 0) {
-        msg += (msg ? '\n' : '') + `删除后池 "${pool}" 将没有可用部署，相关虚拟模型可能无法路由。`;
-      }
-      if (msg) {
-        const scrollY = window.scrollY;
-        const ok = window.confirm(msg + '\n确定要继续吗？');
-        window.scrollTo(0, scrollY);
-        if (!ok) return;
-      }
     }
     await execute(
       (fresh) => {
@@ -278,11 +274,25 @@ const ModelEditor = ({ highlightDeployment }) => {
           return null;
         }
         const payload = JSON.parse(JSON.stringify(fresh));
-        delete payload.deployments[deploymentId];
+        const vm = payload.virtual_models?.[fromVmKey];
+        if (!vm) {
+          setSaveMessage({ type: 'error', text: `虚拟模型 ${fromVmKey} 不存在` });
+          return null;
+        }
+        // Build fallback_order if VM doesn't have one yet (showing all pool deployments).
+        let order = Array.isArray(vm.fallback_order) ? [...vm.fallback_order] : [];
+        if (order.length === 0) {
+          const pools = vm.pools || [];
+          order = Object.entries(payload.deployments || {})
+            .filter(([id, d]) => !id.startsWith('---') && d && pools.includes(d.pool))
+            .map(([id]) => id);
+        }
+        const newOrder = order.filter((id) => id !== deploymentId);
+        vm.fallback_order = newOrder;
         return payload;
       },
       {
-        successMsg: `已删除部署 ${deploymentId}`,
+        successMsg: `已从 ${fromVmKey} 移除部署`,
         onSaved: () => setDraftDeployments((prev) => { const next = { ...prev }; delete next[deploymentId]; return next; }),
       }
     );
