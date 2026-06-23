@@ -589,41 +589,48 @@ const ModelEditor = ({ highlightDeployment }) => {
                         </div>
                       ) : (
                         <Dropdown
-                        placeholder='搜索渠道或模型名称...'
-                        fluid
-                        search
-                        selection
-                        value={selectorState[vmKey]?.value || ''}
-                        options={(() => {
-                          const opts = [];
-                          manualChannels.forEach((ch) => {
-                            // Channel group header
-                            opts.push({
-                              key: `header-${ch.id}`,
-                              text: `${ch.name} (${ch.id})`,
-                              value: `__header_${ch.id}__`,
-                              disabled: true,
-                              className: 'fallback-channel-header',
-                              content: (
-                                <div style={{ fontWeight: 700, color: '#172033', padding: '4px 0', fontSize: 13 }}>
-                                  {ch.name} <span style={{ color: '#98a2b3', fontWeight: 400 }}>#{ch.id}</span>
-                                </div>
-                              ),
-                            });
-                            ch.models.forEach((model) => {
-                              const pairKey = `${ch.id}:${model}`;
-                              const exists = existingPairs.has(pairKey);
+                          placeholder='搜索渠道或模型名称...'
+                          fluid
+                          search
+                          selection
+                          value={selectorState[vmKey]?.value || ''}
+                          options={(() => {
+                            const opts = [];
+                            manualChannels.forEach((ch) => {
                               opts.push({
-                                key: pairKey,
-                                text: `#${ch.id} ${model}${exists ? ' (已添加)' : ''}`,
-                                value: pairKey,
-                                disabled: exists,
-                                description: exists ? '已存在' : '',
+                                key: `header-${ch.id}`,
+                                value: `__header_${ch.id}__`,
+                                disabled: true,
+                                className: 'fallback-channel-header',
+                                content: (
+                                  <div className='fallback-channel-header-content'>
+                                    <Icon name='server' />
+                                    <span>{ch.name}</span>
+                                    <small>#{ch.id}</small>
+                                  </div>
+                                ),
+                              });
+                              ch.models.forEach((model) => {
+                                const pairKey = `${ch.id}:${model}`;
+                                const exists = existingPairs.has(pairKey);
+                                opts.push({
+                                  key: pairKey,
+                                  value: pairKey,
+                                  disabled: exists,
+                                  className: exists ? 'fallback-model-item disabled' : 'fallback-model-item',
+                                  content: (
+                                    <div className='fallback-model-item-content'>
+                                      <span className='fallback-model-channel'>{ch.name}</span>
+                                      <span className='fallback-model-sep'>/</span>
+                                      <span className='fallback-model-name'>{model}</span>
+                                      {exists && <span className='fallback-model-badge'>已添加</span>}
+                                    </div>
+                                  ),
+                                });
                               });
                             });
-                          });
-                          return opts;
-                        })()}
+                            return opts;
+                          })()}
                         onChange={(_, { value }) => {
                           if (!value || String(value).startsWith('__header_')) return;
                           const [channelIdStr, ...modelParts] = String(value).split(':');
