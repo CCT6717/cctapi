@@ -199,6 +199,10 @@ func SetFallbackRouter(router *gin.Engine) {
 		gatewayGroup.GET("/config", getGatewayConfig)
 		gatewayGroup.PUT("/config", updateGatewayConfig)
 
+		// manual config API (excludes free pool)
+		adminGroup.GET("/manual-config", getManualConfig)
+		adminGroup.PUT("/manual-config", updateManualConfig)
+
 		adminGroup.POST("/free-pool/sync", func(c *gin.Context) {
 			cfg := fallback.GetConfig()
 			if cfg == nil || !cfg.Enabled {

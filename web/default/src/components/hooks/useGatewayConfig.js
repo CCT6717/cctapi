@@ -21,7 +21,7 @@ export const useGatewayConfig = () => {
     setLoading(true);
     setError('');
     try {
-      const res = await API.get('/api/fallback/gateway/config');
+      const res = await API.get('/api/fallback/manual-config');
       const { success, data, message } = res.data || {};
       if (success && data) {
         setConfig(data);

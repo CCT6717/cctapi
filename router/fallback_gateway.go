@@ -197,6 +197,280 @@ func getGatewayConfig(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": buildGatewayV2Config(cfg)})
 }
 
+// isManualDeployment returns true if a deployment ID/pool is NOT a free pool deployment.
+func isManualDeployment(id string, pool string) bool {
+	if pool == "free" {
+		return false
+	}
+	if strings.HasPrefix(id, "free:") {
+		return false
+	}
+	return true
+}
+
+// buildManualConfig projects the fallback.Config into a v2 view that excludes
+// free pool deployments and the cct/free virtual model.
+func buildManualConfig(cfg *fallback.Config) gatewayV2Config {
+	vms := make(map[string]gatewayV2VirtualModel, len(cfg.VirtualModels))
+	for name, vm := range cfg.VirtualModels {
+		if name == "cct/free" {
+			continue
+		}
+		vms[name] = gatewayV2VirtualModel{
+			Enabled:            vm.Enabled,
+			Strategy:           vm.Strategy,
+			Pools:              append([]string{}, vm.Pools...),
+			AllowDegradeToLow:  vm.AllowDegradeToLow,
+			AllowDegradeToFree: vm.AllowDegradeToFree,
+		}
+	}
+
+	deps := make(map[string]gatewayV2Deployment, len(cfg.Deployments))
+	for id, dep := range cfg.Deployments {
+		if !isManualDeployment(id, dep.Pool) {
+			continue
+		}
+		deps[id] = gatewayV2Deployment{
+			Enabled:           dep.Enabled,
+			ChannelID:         dep.ChannelID,
+			RealModel:         dep.RealModel,
+			Pool:              dep.Pool,
+			QualityTier:       dep.QualityTier,
+			CostTier:          dep.CostTier,
+			QuotaMode:         dep.QuotaMode,
+			SupportsStream:    dep.SupportsStream,
+			SupportsVision:    dep.SupportsVision,
+			SupportsTools:     dep.SupportsTools,
+			SupportsJSON:      dep.SupportsJSON,
+			ContextLength:     dep.ContextLength,
+			RPMLimit:          dep.RPMLimit,
+			RPDLimit:          dep.RPDLimit,
+			TPMLimit:          dep.TPMLimit,
+			TPDLimit:          dep.TPDLimit,
+			Priority:          dep.Priority,
+			Weight:            dep.Weight,
+			DailyLimitTokens:  dep.DailyLimitTokens,
+			SoftLimitRatio:    dep.SoftLimitRatio,
+			HardLimitRatio:    dep.HardLimitRatio,
+		}
+	}
+
+	fps := make(map[string]gatewayV2FreeProvider, len(cfg.FreeProviders))
+	for name, fp := range cfg.FreeProviders {
+		gfp := gatewayV2FreeProvider{
+			Enabled:  fp.Enabled,
+			KeyCount: len(fp.Keys),
+		}
+		if fp.LimitsOverride != nil {
+			gfp.LimitsOverride = &gatewayV2LimitsOverride{
+				RPMLimit: fp.LimitsOverride.RPMLimit,
+				RPDLimit: fp.LimitsOverride.RPDLimit,
+				TPMLimit: fp.LimitsOverride.TPMLimit,
+				TPDLimit: fp.LimitsOverride.TPDLimit,
+			}
+		}
+		fps[name] = gfp
+	}
+
+	return gatewayV2Config{
+		Enabled:       cfg.Enabled,
+		VirtualModels: vms,
+		Deployments:   deps,
+		FreeProviders: fps,
+	}
+}
+
+// getManualConfig handles GET /api/fallback/manual-config.
+// Returns gateway config excluding free pool deployments and cct/free virtual model.
+func getManualConfig(c *gin.Context) {
+	cfg := fallback.GetConfig()
+	if cfg == nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "fallback config is not loaded"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": buildManualConfig(cfg)})
+}
+
+// updateManualConfig handles PUT /api/fallback/manual-config.
+// Updates only non-free pool virtual models and deployments, preserving free pool data.
+func updateManualConfig(c *gin.Context) {
+	rawBody, err := c.GetRawData()
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	var rawCheck interface{}
+	if err := json.Unmarshal(rawBody, &rawCheck); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	if containsLegacyFields(rawCheck) {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"message": "legacy field detected in v2 gateway config",
+		})
+		return
+	}
+
+	var payload gatewayV2ConfigInput
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	for name, fp := range payload.FreeProviders {
+		if fp.LimitsOverride != nil {
+			if err := fallback.ValidateFreeProviderLimits(toFreeProviderLimits(fp.LimitsOverride)); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"message": fmt.Sprintf("free_provider %q limits_override: %v", name, err),
+				})
+				return
+			}
+		}
+	}
+
+	current := fallback.GetConfig()
+	if current == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "fallback config is not loaded"})
+		return
+	}
+
+	merged := *current
+	merged.Enabled = payload.Enabled
+
+	// Virtual models: merge non-free, preserve cct/free
+	if merged.VirtualModels == nil {
+		merged.VirtualModels = make(map[string]fallback.VirtualModelConfig)
+	}
+	for name, vm := range payload.VirtualModels {
+		if name == "cct/free" {
+			continue
+		}
+		pools := vm.Pools
+		if len(pools) == 0 {
+			pools = []string{"default"}
+		}
+		merged.VirtualModels[name] = fallback.VirtualModelConfig{
+			Enabled:            vm.Enabled,
+			Strategy:           fallback.NormalizeStrategy(vm.Strategy),
+			Pools:              append([]string{}, pools...),
+			AllowDegradeToLow:  vm.AllowDegradeToLow,
+			AllowDegradeToFree: vm.AllowDegradeToFree,
+		}
+	}
+
+	// Deployments: merge non-free, preserve free pool deployments
+	if merged.Deployments == nil {
+		merged.Deployments = make(map[string]fallback.DeploymentConfig)
+	}
+	for id, dep := range payload.Deployments {
+		if !isManualDeployment(id, dep.Pool) {
+			continue
+		}
+		mergedDep := fallback.DeploymentConfig{
+			Enabled:           dep.Enabled,
+			ChannelID:         dep.ChannelID,
+			RealModel:         dep.RealModel,
+			Pool:              dep.Pool,
+			QualityTier:       dep.QualityTier,
+			CostTier:          dep.CostTier,
+			QuotaMode:         dep.QuotaMode,
+			SupportsStream:    dep.SupportsStream,
+			SupportsVision:    dep.SupportsVision,
+			SupportsTools:     dep.SupportsTools,
+			SupportsJSON:      dep.SupportsJSON,
+			ContextLength:     dep.ContextLength,
+			RPMLimit:          dep.RPMLimit,
+			RPDLimit:          dep.RPDLimit,
+			TPMLimit:          dep.TPMLimit,
+			TPDLimit:          dep.TPDLimit,
+			Priority:          dep.Priority,
+			Weight:            dep.Weight,
+			DailyLimitTokens:  dep.DailyLimitTokens,
+			SoftLimitRatio:    dep.SoftLimitRatio,
+			HardLimitRatio:    dep.HardLimitRatio,
+		}
+		if existingDep, ok := current.Deployments[id]; ok {
+			mergedDep.MaxConcurrentRequests = existingDep.MaxConcurrentRequests
+		}
+		if mergedDep.Weight <= 0 {
+			mergedDep.Weight = 100
+		}
+		if mergedDep.SoftLimitRatio <= 0 {
+			mergedDep.SoftLimitRatio = 0.95
+		}
+		if mergedDep.HardLimitRatio <= 0 {
+			mergedDep.HardLimitRatio = 1.0
+		}
+		merged.Deployments[id] = mergedDep
+	}
+
+	// Free providers: merge keys carefully
+	if merged.FreeProviders == nil {
+		merged.FreeProviders = make(map[string]fallback.FreeProviderConfig)
+	}
+	for name, fpInput := range payload.FreeProviders {
+		existing := merged.FreeProviders[name]
+		keys := existing.Keys
+
+		if len(fpInput.Keys) > 0 {
+			freshKeys := make([]string, 0, len(fpInput.Keys))
+			for _, k := range fpInput.Keys {
+				k = strings.TrimSpace(k)
+				if k == "" || strings.Contains(k, "*") {
+					continue
+				}
+				freshKeys = append(freshKeys, k)
+			}
+			if len(freshKeys) > 0 {
+				keys = freshKeys
+			}
+		}
+
+		merged.FreeProviders[name] = fallback.FreeProviderConfig{
+			Enabled:        fpInput.Enabled,
+			Keys:           keys,
+			LimitsOverride: toFreeProviderLimits(fpInput.LimitsOverride),
+		}
+	}
+
+	data, err := json.MarshalIndent(merged, "", "  ")
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	data = append(data, '\n')
+
+	backupPath, err := backupFallbackEditorConfig(fallbackEditorConfigPath)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	if err := os.WriteFile(fallbackEditorConfigPath, data, 0644); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	if err := fallback.ReloadConfig(fallbackEditorConfigPath); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+
+	freshCfg := fallback.GetConfig()
+	response := gin.H{
+		"success": true,
+		"message": "manual config saved",
+		"data":    buildManualConfig(freshCfg),
+	}
+	if backupPath != "" {
+		response["backup_path"] = backupPath
+	}
+	c.JSON(http.StatusOK, response)
+}
+
 // updateGatewayConfig handles PUT /api/fallback/gateway/config.
 func updateGatewayConfig(c *gin.Context) {
 	// Step 1: read raw body.

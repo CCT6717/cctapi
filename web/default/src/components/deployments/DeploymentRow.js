@@ -1,10 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Checkbox, Icon, Input, Label } from 'semantic-ui-react';
 
-/**
- * DeploymentRow — one deployment entry inside a VM, with expandable details.
- * Pure presentational. All state and callbacks come from the parent.
- */
 const DeploymentRow = ({
   dep,
   orderIndex,
@@ -23,11 +19,25 @@ const DeploymentRow = ({
   onDraftField,
   onModeChange,
   onHealthCheck,
-  onTestAll,
+  onSave,
   onDelete,
 }) => {
   const draft = draftDeployments[dep.id] || {};
-  const [showKey, setShowKey] = useState(false);
+  const [editBaseUrl, setEditBaseUrl] = useState(null);
+  const [editKey, setEditKey] = useState(null);
+
+  const hasChannelChanges = editBaseUrl !== null || editKey !== null;
+
+  const handleSave = () => {
+    if (!dep.channel_id) return;
+    const payload = {};
+    if (editBaseUrl !== null) payload.base_url = editBaseUrl;
+    if (editKey !== null) payload.key = editKey;
+    onSave(dep.channel_id, payload, () => {
+      setEditBaseUrl(null);
+      setEditKey(null);
+    });
+  };
 
   return (
     <div className={`fallback-deployment-panel ${highlighted ? 'fallback-highlight' : ''}`}>
@@ -60,18 +70,6 @@ const DeploymentRow = ({
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
           <Button
             size='mini'
-            basic
-            color='blue'
-            icon
-            labelPosition='left'
-            disabled={saving}
-            onClick={onTestAll}
-          >
-            <Icon name='heartbeat' />
-            测试全部
-          </Button>
-          <Button
-            size='mini'
             icon
             labelPosition='left'
             loading={healthTesting}
@@ -86,6 +84,20 @@ const DeploymentRow = ({
               <Icon name={healthResult.ok ? 'check' : 'times'} />
               {healthResult.text}
             </Label>
+          )}
+          {hasChannelChanges && (
+            <Button
+              size='mini'
+              color='blue'
+              icon
+              labelPosition='left'
+              loading={saving}
+              disabled={saving || !dep.channel_id}
+              onClick={handleSave}
+            >
+              <Icon name='save' />
+              保存
+            </Button>
           )}
           <Button
             size='mini'
@@ -112,7 +124,7 @@ const DeploymentRow = ({
 
       {expanded && (
         <div className='fallback-deployment-details'>
-          {/* 部署模式按钮 - 第一行 */}
+          {/* 部署模式按钮 */}
           <div className='fallback-edit-mode-row'>
             <Button
               size='mini'
@@ -140,8 +152,8 @@ const DeploymentRow = ({
             </Button>
           </div>
 
-          {/* 横向字段网格 */}
-          <div className='fallback-edit-grid'>
+          {/* 第一行：4 个数值字段 */}
+          <div className='fallback-edit-grid-4'>
             <div className='fallback-edit-field'>
               <label>渠道 ID</label>
               <span className='fallback-edit-value'>{dep.channel_id || '-'}</span>
@@ -174,30 +186,29 @@ const DeploymentRow = ({
                 onChange={(_, { value }) => onDraftField('daily_limit_tokens', value)}
               />
             </div>
-            <div className='fallback-edit-field fallback-edit-field-wide'>
-              <label>接口地址</label>
-              <div className='fallback-edit-value-row'>
-                <span className='fallback-edit-value fallback-edit-url'>
-                  {dep.base_url || '-'}
-                </span>
-              </div>
+          </div>
+
+          {/* 第二行：接口地址 + 密钥 */}
+          <div className='fallback-edit-grid-2'>
+            <div className='fallback-edit-field'>
+              <label><Icon name='linkify' /> 接口地址</label>
+              <Input
+                size='mini'
+                fluid
+                value={editBaseUrl !== null ? editBaseUrl : dep.base_url || ''}
+                placeholder='https://api.example.com/v1'
+                onChange={(_, { value }) => setEditBaseUrl(value)}
+              />
             </div>
-            <div className='fallback-edit-field fallback-edit-field-wide'>
-              <label>密钥</label>
-              <div className='fallback-edit-value-row'>
-                <span className='fallback-edit-value fallback-edit-key'>
-                  {dep.key ? (showKey ? dep.key : '••••••••') : '-'}
-                </span>
-                <Button
-                  size='mini'
-                  basic
-                  icon
-                  onClick={() => setShowKey(!showKey)}
-                  title={showKey ? '隐藏密钥' : '显示密钥'}
-                >
-                  <Icon name={showKey ? 'eye slash' : 'eye'} />
-                </Button>
-              </div>
+            <div className='fallback-edit-field'>
+              <label><Icon name='key' /> 密钥</label>
+              <Input
+                size='mini'
+                fluid
+                value={editKey !== null ? editKey : dep.key || ''}
+                placeholder='sk-...'
+                onChange={(_, { value }) => setEditKey(value)}
+              />
             </div>
           </div>
         </div>

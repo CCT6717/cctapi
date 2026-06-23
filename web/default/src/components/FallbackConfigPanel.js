@@ -52,15 +52,13 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [baseUrlModal, setBaseUrlModal] = useState(null); // { channelId, baseUrl, saving, error }
   const [keyModal, setKeyModal] = useState(null); // { channelId, newKey, showPlain, saving, error }
 
-  const HIDDEN_VMS = ['cct/free'];
+  const HIDDEN_VMS = [];
 
   const visibleDeploymentIds = useMemo(() => {
     if (!config?.deployments) return [];
     return Object.keys(config.deployments).filter(
       (id) => {
         if (isSeparatorKey(id)) return false;
-        const dep = config.deployments[id];
-        if (isFreeDeployment(id, dep)) return false;
         return true;
       }
     );
@@ -138,6 +136,16 @@ const ModelEditor = ({ highlightDeployment }) => {
     });
     return pairs;
   }, [config]);
+
+  // Manual channels only (exclude free pool channels)
+  const manualChannels = useMemo(() => {
+    return channels.filter((ch) => {
+      const name = (ch.name || '').toLowerCase();
+      if (name.includes('[cct auto]')) return false;
+      if (name.includes('free')) return false;
+      return true;
+    });
+  }, [channels]);
 
   const setDraftField = (depId, field, value) => {
     setDraftDeployments((prev) => ({
@@ -396,6 +404,23 @@ const ModelEditor = ({ highlightDeployment }) => {
     }
   }, [keyModal]);
 
+  const saveChannelField = useCallback(async (channelId, fields, onDone) => {
+    setSaveMessage(null);
+    try {
+      const payload = { id: channelId, ...fields };
+      const res = await API.put('/api/channel/', payload);
+      if (res.data?.success) {
+        setSaveMessage({ type: 'success', text: `渠道 #${channelId} 已更新` });
+        await loadChannels();
+        if (onDone) onDone();
+      } else {
+        setSaveMessage({ type: 'error', text: res.data?.message || '保存失败' });
+      }
+    } catch (e) {
+      setSaveMessage({ type: 'error', text: e.message || '保存异常' });
+    }
+  }, [loadChannels]);
+
   useEffect(() => {
     loadConfig().then(() => {
       loadDeploymentStatuses();
@@ -557,7 +582,13 @@ const ModelEditor = ({ highlightDeployment }) => {
                       <span>添加真实模型</span>
                     </div>
                     <div className='fallback-add-model-selector'>
-                      <Dropdown
+                      {manualChannels.length === 0 ? (
+                        <div className='fallback-add-model-empty'>
+                          <Icon name='info circle' />
+                          暂无可用渠道，请先在渠道管理中添加渠道
+                        </div>
+                      ) : (
+                        <Dropdown
                         placeholder='搜索渠道或模型名称...'
                         fluid
                         search
@@ -565,7 +596,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                         value={selectorState[vmKey]?.value || ''}
                         options={(() => {
                           const opts = [];
-                          channels.forEach((ch) => {
+                          manualChannels.forEach((ch) => {
                             // Channel group header
                             opts.push({
                               key: `header-${ch.id}`,
@@ -604,6 +635,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                           }));
                         }}
                       />
+                      )}
                     </div>
 
                     {/* Preview card */}
@@ -684,6 +716,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                           onDraftField={(field, value) => setDraftField(dep.id, field, value)}
                           onModeChange={(mode) => handleModeChange(dep.id, mode, vmKey)}
                           onHealthCheck={() => handleHealthCheck(dep.id)}
+                          onSave={(chId, fields, onDone) => saveChannelField(chId, fields, onDone)}
                           onDelete={() => handleDeleteDeployment(dep.id)}
                         />
                       );

@@ -6,6 +6,12 @@ export const getGatewayConfig = () =>
 export const saveGatewayConfig = (config) =>
   API.put('/api/fallback/gateway/config', config);
 
+export const getManualConfig = () =>
+  API.get('/api/fallback/manual-config');
+
+export const saveManualConfig = (config) =>
+  API.put('/api/fallback/manual-config', config);
+
 export const reloadConfig = () =>
   API.post('/api/fallback/config/reload');
 
