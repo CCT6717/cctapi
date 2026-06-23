@@ -422,8 +422,20 @@ After fixes: SECURITY_REVIEW_STATUS: PASS
 - Frontend hooks `useGatewayConfig` and `useFallbackSave` use `getManualConfig`/`saveManualConfig` from `gatewayConfigApi.js`.
 - Free channels filtered by name (`[CCT Auto]`, `free`) in the frontend dropdown.
 
+## Per-VM Fallback Order (2026-06-24)
+
+Each virtual model now has its own `fallback_order` list, exposed via the API. This allows deleting a deployment from one VM without affecting others that share the same pool.
+
+- `gatewayV2VirtualModel` struct includes `FallbackOrder []string`.
+- `buildManualConfig` includes `fallback_order` in the API response.
+- `updateManualConfig` preserves existing `fallback_order` unless the payload provides a new one.
+- Frontend `vmArray` uses backend `fallback_order` if available; falls back to pool-based derivation.
+- `handleDeleteDeployment` removes the deployment from the VM's `fallback_order` (not from global `deployments`).
+- `handleAddDeployment` adds the new deployment to the VM's `fallback_order`.
+- When a VM has no `fallback_order` (new VM), the frontend builds one from all pool deployments before modifying it.
+
 ## Delete Button Gotchas
 
 1. Semantic UI `<Button>` defaults to `type='submit'` — always add `type='button'` to prevent form submission.
 2. `window.confirm` causes browser scroll — save `window.scrollY` before confirm, restore after.
-3. Shared-pool deletion warning: if a deployment's pool is used by multiple VMs, warn the user that all VMs will be affected before deleting.
+3. Shared-pool deletion: with per-VM fallback_order, deleting a deployment from one VM only removes it from that VM's fallback_order, not from the global config. Other VMs sharing the same pool are unaffected.
