@@ -525,3 +525,151 @@
   0%, 100% { background: #fffbe6; }
   50% { background: #fff3cd; }
 }
+
+/* ---- 编辑区横向布局 ---- */
+.fallback-edit-mode-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #edf1f5;
+}
+
+.fallback-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.fallback-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fallback-edit-field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #667085;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.fallback-edit-field-wide {
+  grid-column: span 2;
+}
+
+.fallback-edit-value {
+  font-size: 13px;
+  color: #172033;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fallback-edit-url {
+  max-width: 400px;
+}
+
+.fallback-edit-key {
+  max-width: 200px;
+}
+
+.fallback-edit-value-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.fallback-edit-value-row .fallback-edit-value {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 768px) {
+  .fallback-edit-grid {
+    grid-template-columns: 1fr;
+  }
+  .fallback-edit-field-wide {
+    grid-column: span 1;
+  }
+}
+
+/* ---- 添加真实模型区域 ---- */
+.fallback-add-model {
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+  transition: all 0.2s ease;
+}
+
+.fallback-add-model:hover {
+  border-color: #94a3b8;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.fallback-add-model-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.fallback-add-model-header .icon {
+  color: #3b82f6;
+  font-size: 18px;
+}
+
+.fallback-add-model-selector {
+  margin-bottom: 0;
+}
+
+.fallback-add-model-selector .ui.dropdown {
+  font-size: 13px;
+}
+
+.fallback-add-model-preview {
+  margin-top: 14px;
+  padding: 14px 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.fallback-add-model-preview-content {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.fallback-add-model-preview-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.fallback-add-model-preview-field strong {
+  color: #475569;
+  font-weight: 600;
+}
+
+.fallback-add-model-preview-field span {
+  color: #64748b;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.fallback-add-model-preview-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}

@@ -18,6 +18,7 @@ import DeploymentRow from './deployments/DeploymentRow';
 import { useGatewayConfig } from './hooks/useGatewayConfig';
 import { useDeploymentStatuses } from './hooks/useDeploymentStatuses';
 import { useChannels } from './hooks/useChannels';
+import { useFallbackSave } from './hooks/useFallbackSave';
 import {
   isSeparatorKey,
   isFreeDeployment,
@@ -38,10 +39,9 @@ const ModelEditor = ({ highlightDeployment }) => {
 
   const [expandedVirtualModels, setExpandedVirtualModels] = useState({});
   const [expandedDeployments, setExpandedDeployments] = useState({});
-  const [saving, setSaving] = useState(false);
+  const { execute, saving, saveMessage, setSaveMessage } = useFallbackSave({ loadConfig, loadDeploymentStatuses });
   const [draftDeployments, setDraftDeployments] = useState({});
   const [draftRoutingVm, setDraftRoutingVm] = useState({}); // { [vmKey]: strategy }
-  const [saveMessage, setSaveMessage] = useState(null);
   const [selectorState, setSelectorState] = useState({});
   const [healthTesting, setHealthTesting] = useState({});
   const [healthResults, setHealthResults] = useState({});
@@ -166,10 +166,6 @@ const ModelEditor = ({ highlightDeployment }) => {
     return map;
   }, [config]);
 
-  const handleRoutingModeChange = useCallback((vmKey, strategy) => {
-    setDraftRoutingVm((prev) => ({ ...prev, [vmKey]: strategy }));
-  }, []);
-
   const handleModeChange = useCallback((depId, mode, vmKey) => {
     setDeploymentMode((prev) => {
       const next = { ...prev, [depId]: mode };
@@ -201,93 +197,42 @@ const ModelEditor = ({ highlightDeployment }) => {
   }, [deploymentOwnerVm, setDeploymentMode, setDraftDeployments]);
 
   const handleSave = useCallback(async () => {
-    setSaving(true);
-    setSaveMessage(null);
-    try {
-      // Step 1: re-fetch fresh config
-      const freshRes = await API.get('/api/fallback/gateway/config');
-      const fresh = freshRes.data?.data;
-      if (!fresh) {
-        setSaveMessage({ type: 'error', text: '无法获取最新配置，保存中止' });
-        return;
+    await execute(
+      (fresh) => buildSavePayload(fresh, { draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm }),
+      {
+        successMsg: '保存成功',
+        onSaved: () => { setDraftDeployments({}); setDraftRoutingVm({}); },
       }
-
-      // Steps 2-3.5: build payload from fresh config + all draft state
-      const payload = buildSavePayload(fresh, { draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm });
-
-      // Step 4: PUT
-      const putRes = await API.put('/api/fallback/gateway/config', payload);
-      const { success, message } = putRes.data || {};
-      if (success) {
-        setSaveMessage({ type: 'success', text: '保存成功' });
-        setDraftDeployments({});
-        setDraftRoutingVm({});
-        await loadConfig();
-        await loadDeploymentStatuses();
-      } else {
-        setSaveMessage({ type: 'error', text: message || '保存失败' });
-      }
-    } catch (e) {
-      setSaveMessage({ type: 'error', text: e.message || '保存异常' });
-    } finally {
-      setSaving(false);
-    }
-  }, [draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm, loadConfig, loadDeploymentStatuses]);
+    );
+  }, [execute, draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm]);
 
   const handleAddDeployment = useCallback(async (channelId, model, pool, vmKey) => {
-    setSaving(true);
-    setSaveMessage(null);
-    try {
-      const freshRes = await API.get('/api/fallback/gateway/config');
-      const fresh = freshRes.data?.data;
-      if (!fresh) {
-        setSaveMessage({ type: 'error', text: '无法获取最新配置，添加中止' });
-        return;
-      }
-      const payload = JSON.parse(JSON.stringify(fresh));
-      if (!payload.deployments) payload.deployments = {};
-      // Duplicate check: (channel_id, real_model) pair
-      for (const [, dep] of Object.entries(payload.deployments)) {
-        if (dep?.channel_id === channelId && dep?.real_model === model) {
-          setSaveMessage({ type: 'error', text: `该渠道已有模型 ${model}，不可重复添加` });
-          return;
+    const ok = await execute(
+      (fresh) => {
+        const payload = JSON.parse(JSON.stringify(fresh));
+        if (!payload.deployments) payload.deployments = {};
+        for (const [, dep] of Object.entries(payload.deployments)) {
+          if (dep?.channel_id === channelId && dep?.real_model === model) {
+            setSaveMessage({ type: 'error', text: `该渠道已有模型 ${model}，不可重复添加` });
+            return null;
+          }
         }
+        let baseId = `manual-${channelId}-${slugModelName(model)}`;
+        if (baseId.startsWith('free:') || baseId.startsWith('---')) {
+          baseId = `m-${channelId}-${slugModelName(model)}`;
+        }
+        let newId = baseId;
+        let suffix = 1;
+        while (payload.deployments[newId]) { newId = `${baseId}-${suffix}`; suffix++; }
+        payload.deployments[newId] = { enabled: true, channel_id: channelId, real_model: model, pool, priority: 0, weight: 100 };
+        return payload;
+      },
+      {
+        successMsg: `已添加部署`,
+        onSaved: () => setSelectorState((prev) => ({ ...prev, [vmKey]: null })),
       }
-      // Generate unique ID
-      let baseId = `manual-${channelId}-${slugModelName(model)}`;
-      if (baseId.startsWith('free:') || baseId.startsWith('---')) {
-        baseId = `m-${channelId}-${slugModelName(model)}`;
-      }
-      let newId = baseId;
-      let suffix = 1;
-      while (payload.deployments[newId]) {
-        newId = `${baseId}-${suffix}`;
-        suffix++;
-      }
-      payload.deployments[newId] = {
-        enabled: true,
-        channel_id: channelId,
-        real_model: model,
-        pool: pool,
-        priority: 0,
-        weight: 100,
-      };
-      const putRes = await API.put('/api/fallback/gateway/config', payload);
-      const { success, message } = putRes.data || {};
-      if (success) {
-        setSaveMessage({ type: 'success', text: `已添加部署 ${newId}` });
-        setSelectorState((prev) => ({ ...prev, [vmKey]: null }));
-        await loadConfig();
-        await loadDeploymentStatuses();
-      } else {
-        setSaveMessage({ type: 'error', text: message || '添加失败' });
-      }
-    } catch (e) {
-      setSaveMessage({ type: 'error', text: e.message || '添加异常' });
-    } finally {
-      setSaving(false);
-    }
-  }, [loadConfig, loadDeploymentStatuses]);
+    );
+  }, [execute, setSaveMessage]);
 
   const handleDeleteDeployment = useCallback(async (deploymentId) => {
     if (!deploymentId) return;
@@ -296,145 +241,77 @@ const ModelEditor = ({ highlightDeployment }) => {
       setSaveMessage({ type: 'error', text: '免费部署不可在模型编辑器中删除' });
       return;
     }
-    // Pool safety check
     if (currentDep?.pool) {
       const pool = currentDep.pool;
       const enabledInPool = Object.entries(config.deployments).filter(
         ([id, d]) => !isSeparatorKey(id) && !isFreeDeployment(id, d) && d?.pool === pool && d?.enabled !== false && id !== deploymentId
       );
       if (enabledInPool.length === 0) {
-        const warnMsg = `删除后池 "${pool}" 将没有可用部署，相关虚拟模型可能无法路由。\n确定要继续吗？`;
-        if (!window.confirm(warnMsg)) return;
+        if (!window.confirm(`删除后池 "${pool}" 将没有可用部署，相关虚拟模型可能无法路由。\n确定要继续吗？`)) return;
       }
     }
-    setSaving(true);
-    setSaveMessage(null);
-    try {
-      const freshRes = await API.get('/api/fallback/gateway/config');
-      const fresh = freshRes.data?.data;
-      if (!fresh) {
-        setSaveMessage({ type: 'error', text: '无法获取最新配置，删除中止' });
-        return;
+    await execute(
+      (fresh) => {
+        if (!fresh.deployments?.[deploymentId]) {
+          setSaveMessage({ type: 'error', text: `部署 ${deploymentId} 不存在于最新配置中` });
+          return null;
+        }
+        const payload = JSON.parse(JSON.stringify(fresh));
+        delete payload.deployments[deploymentId];
+        return payload;
+      },
+      {
+        successMsg: `已删除部署 ${deploymentId}`,
+        onSaved: () => setDraftDeployments((prev) => { const next = { ...prev }; delete next[deploymentId]; return next; }),
       }
-      const payload = JSON.parse(JSON.stringify(fresh));
-      if (!payload.deployments?.[deploymentId]) {
-        setSaveMessage({ type: 'error', text: `部署 ${deploymentId} 不存在于最新配置中` });
-        return;
-      }
-      delete payload.deployments[deploymentId];
-      const putRes = await API.put('/api/fallback/gateway/config', payload);
-      const { success, message } = putRes.data || {};
-      if (success) {
-        setSaveMessage({ type: 'success', text: `已删除部署 ${deploymentId}` });
-        setDraftDeployments((prev) => {
-          const next = { ...prev };
-          delete next[deploymentId];
-          return next;
-        });
-        await loadConfig();
-        await loadDeploymentStatuses();
-      } else {
-        setSaveMessage({ type: 'error', text: message || '删除失败' });
-      }
-    } catch (e) {
-      setSaveMessage({ type: 'error', text: e.message || '删除异常' });
-    } finally {
-      setSaving(false);
-    }
-  }, [config, loadConfig, loadDeploymentStatuses]);
+    );
+  }, [config, execute, setSaveMessage]);
 
   const handleAddVirtualModel = useCallback(async () => {
     const name = newVMName.trim();
-    if (!name) {
-      setSaveMessage({ type: 'error', text: '虚拟模型名称不能为空' });
-      return;
-    }
-    if (name.startsWith('cct/')) {
-      // cct/ prefix is reserved for system VMs
-      setSaveMessage({ type: 'error', text: 'cct/ 前缀保留给系统虚拟模型，请用其他名称' });
-      return;
-    }
+    if (!name) { setSaveMessage({ type: 'error', text: '虚拟模型名称不能为空' }); return; }
+    if (name.startsWith('cct/')) { setSaveMessage({ type: 'error', text: 'cct/ 前缀保留给系统虚拟模型，请用其他名称' }); return; }
     const pool = newVMPool.trim() || 'default';
-    setSaving(true);
-    setSaveMessage(null);
-    try {
-      const freshRes = await API.get('/api/fallback/gateway/config');
-      const fresh = freshRes.data?.data;
-      if (!fresh) {
-        setSaveMessage({ type: 'error', text: '无法获取最新配置，添加中止' });
-        return;
+    await execute(
+      (fresh) => {
+        if (fresh.virtual_models?.[name]) {
+          setSaveMessage({ type: 'error', text: `虚拟模型 ${name} 已存在` });
+          return null;
+        }
+        const payload = JSON.parse(JSON.stringify(fresh));
+        if (!payload.virtual_models) payload.virtual_models = {};
+        payload.virtual_models[name] = {
+          enabled: true, strategy: newVMStrategy, pools: [pool],
+          allow_degrade_to_low: false, allow_degrade_to_free: false,
+        };
+        return payload;
+      },
+      {
+        successMsg: `已添加虚拟模型 ${name}`,
+        onSaved: () => { setNewVMName(''); setNewVMStrategy('quality_first'); setNewVMPool(''); setShowAddVM(false); },
       }
-      if (fresh.virtual_models?.[name]) {
-        setSaveMessage({ type: 'error', text: `虚拟模型 ${name} 已存在` });
-        return;
-      }
-      const payload = JSON.parse(JSON.stringify(fresh));
-      if (!payload.virtual_models) payload.virtual_models = {};
-      payload.virtual_models[name] = {
-        enabled: true,
-        strategy: newVMStrategy,
-        pools: [pool],
-        allow_degrade_to_low: false,
-        allow_degrade_to_free: false,
-      };
-      const putRes = await API.put('/api/fallback/gateway/config', payload);
-      const { success, message } = putRes.data || {};
-      if (success) {
-        setSaveMessage({ type: 'success', text: `已添加虚拟模型 ${name}` });
-        setNewVMName('');
-        setNewVMStrategy('quality_first');
-        setNewVMPool('');
-        setShowAddVM(false);
-        await loadConfig();
-        await loadDeploymentStatuses();
-      } else {
-        setSaveMessage({ type: 'error', text: message || '添加失败' });
-      }
-    } catch (e) {
-      setSaveMessage({ type: 'error', text: e.message || '添加异常' });
-    } finally {
-      setSaving(false);
-    }
-  }, [newVMName, newVMStrategy, newVMPool, loadConfig, loadDeploymentStatuses]);
+    );
+  }, [newVMName, newVMStrategy, newVMPool, execute, setSaveMessage]);
 
   const handleDeleteVirtualModel = useCallback(async (vmName) => {
     if (!vmName || HIDDEN_VMS.includes(vmName)) return;
-    if (vmName.startsWith('cct/')) {
-      setSaveMessage({ type: 'error', text: '系统虚拟模型不可删除' });
-      return;
-    }
+    if (vmName.startsWith('cct/')) { setSaveMessage({ type: 'error', text: '系统虚拟模型不可删除' }); return; }
     if (!window.confirm(`确定要删除虚拟模型 ${vmName} 吗？`)) return;
-    setSaving(true);
-    setSaveMessage(null);
-    try {
-      const freshRes = await API.get('/api/fallback/gateway/config');
-      const fresh = freshRes.data?.data;
-      if (!fresh) {
-        setSaveMessage({ type: 'error', text: '无法获取最新配置，删除中止' });
-        return;
-      }
-      if (!fresh.virtual_models?.[vmName]) {
-        setSaveMessage({ type: 'error', text: `虚拟模型 ${vmName} 不存在于最新配置中` });
-        return;
-      }
-      const payload = JSON.parse(JSON.stringify(fresh));
-      delete payload.virtual_models[vmName];
-      const putRes = await API.put('/api/fallback/gateway/config', payload);
-      const { success, message } = putRes.data || {};
-      if (success) {
-        setSaveMessage({ type: 'success', text: `已删除虚拟模型 ${vmName}` });
-        await loadConfig();
-        await loadDeploymentStatuses();
-      } else {
-        setSaveMessage({ type: 'error', text: message || '删除失败' });
-      }
-    } catch (e) {
-      setSaveMessage({ type: 'error', text: e.message || '删除异常' });
-    } finally {
-      setSaving(false);
-    }
-  }, [loadConfig, loadDeploymentStatuses]);
+    await execute(
+      (fresh) => {
+        if (!fresh.virtual_models?.[vmName]) {
+          setSaveMessage({ type: 'error', text: `虚拟模型 ${vmName} 不存在于最新配置中` });
+          return null;
+        }
+        const payload = JSON.parse(JSON.stringify(fresh));
+        delete payload.virtual_models[vmName];
+        return payload;
+      },
+      { successMsg: `已删除虚拟模型 ${vmName}` }
+    );
+  }, [execute, setSaveMessage]);
 
+  // eslint-disable-next-line no-unused-vars
   const openBaseUrlEditor = useCallback(async (channelId) => {
     try {
       const res = await API.get(`/api/channel/${channelId}`);
@@ -482,6 +359,7 @@ const ModelEditor = ({ highlightDeployment }) => {
   // 编辑 key: GET /api/channel/:id 不返回原 key,只能用新值覆盖。
   // 安全说明: 新 key 通过 HTTPS 以明文 PUT,会话已是 cookie-authed admin;
   // 空输入不触发 PUT,避免误清空; 绝不留 "显示原 key" 入口 (服务端无此数据)。
+  // eslint-disable-next-line no-unused-vars
   const openKeyEditor = useCallback((channelId) => {
     setKeyModal({ channelId, newKey: '', showPlain: false, saving: false, error: '' });
   }, []);
@@ -629,32 +507,11 @@ const ModelEditor = ({ highlightDeployment }) => {
                 <div className='fallback-virtual-summary-main'>
                   <div className='fallback-virtual-name'>
                     {vm.name || '未命名虚拟模型'}
-                    {vm.name === 'cct/high' && (
-                      <Label basic size='mini' color='blue'>高质量模型</Label>
-                    )}
-                    {vm.name === 'cct/low' && (
-                      <Label basic size='mini' color='teal'>低成本模型</Label>
-                    )}
                   </div>
                   <div className='fallback-virtual-meta'>
                     {modelCount} 个真实模型
-                    {' · '}
-                    <Dropdown
-                      inline
-                      labeled
-                      selection
-                      size='mini'
-                      style={{ minWidth: 140 }}
-                      value={draftRoutingVm[vmKey] ?? vm.strategy ?? 'quality_first'}
-                      options={[
-                        { key: 'quality_first', text: '质量优先', value: 'quality_first' },
-                        { key: 'cost_first', text: '成本优先', value: 'cost_first' },
-                        { key: 'free_first', text: '免费优先', value: 'free_first' },
-                      ]}
-                      onChange={(_, { value }) => handleRoutingModeChange(vmKey, value)}
-                    />
                     {vm.fallback_order?.some((depId) => (deploymentMode[depId] || computeInitialMode(config, depId)) === 'fixed') && (
-                      <Label basic size='mini' color='blue' style={{ marginLeft: 6 }}>固定模式</Label>
+                      <span style={{ marginLeft: 8 }}> · 固定模式</span>
                     )}
                   </div>
                 </div>
@@ -681,83 +538,100 @@ const ModelEditor = ({ highlightDeployment }) => {
               {vmExpanded && (
                 <div className='fallback-virtual-body'>
                   {/* Model Selector */}
-                  <div style={{ marginBottom: 16, padding: '12px', background: '#f8fafc', borderRadius: 8, border: '1px dashed #d9e0ea' }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#475569', marginBottom: 8 }}>
-                      <Icon name='plus circle' /> 添加真实模型
+                  <div className='fallback-add-model'>
+                    <div className='fallback-add-model-header'>
+                      <Icon name='plus circle' />
+                      <span>添加真实模型</span>
                     </div>
-                    <Dropdown
-                      placeholder='选择渠道和模型...'
-                      fluid
-                      search
-                      selection
-                      value={selectorState[vmKey]?.value || ''}
-                      options={(() => {
-                        const opts = [];
-                        channels.forEach((ch) => {
-                          // Channel group header
-                          opts.push({
-                            key: `header-${ch.id}`,
-                            text: `${ch.name} (${ch.id})`,
-                            value: `__header_${ch.id}__`,
-                            disabled: true,
-                            className: 'fallback-channel-header',
-                            content: (
-                              <div style={{ fontWeight: 700, color: '#172033', padding: '4px 0', fontSize: 13 }}>
-                                {ch.name} <span style={{ color: '#98a2b3', fontWeight: 400 }}>#{ch.id}</span>
-                              </div>
-                            ),
-                          });
-                          ch.models.forEach((model) => {
-                            const pairKey = `${ch.id}:${model}`;
-                            const exists = existingPairs.has(pairKey);
+                    <div className='fallback-add-model-selector'>
+                      <Dropdown
+                        placeholder='搜索渠道或模型名称...'
+                        fluid
+                        search
+                        selection
+                        value={selectorState[vmKey]?.value || ''}
+                        options={(() => {
+                          const opts = [];
+                          channels.forEach((ch) => {
+                            // Channel group header
                             opts.push({
-                              key: pairKey,
-                              text: `#${ch.id} ${model}${exists ? ' (已添加)' : ''}`,
-                              value: pairKey,
-                              disabled: exists,
-                              description: exists ? '已存在' : '',
+                              key: `header-${ch.id}`,
+                              text: `${ch.name} (${ch.id})`,
+                              value: `__header_${ch.id}__`,
+                              disabled: true,
+                              className: 'fallback-channel-header',
+                              content: (
+                                <div style={{ fontWeight: 700, color: '#172033', padding: '4px 0', fontSize: 13 }}>
+                                  {ch.name} <span style={{ color: '#98a2b3', fontWeight: 400 }}>#{ch.id}</span>
+                                </div>
+                              ),
+                            });
+                            ch.models.forEach((model) => {
+                              const pairKey = `${ch.id}:${model}`;
+                              const exists = existingPairs.has(pairKey);
+                              opts.push({
+                                key: pairKey,
+                                text: `#${ch.id} ${model}${exists ? ' (已添加)' : ''}`,
+                                value: pairKey,
+                                disabled: exists,
+                                description: exists ? '已存在' : '',
+                              });
                             });
                           });
-                        });
-                        return opts;
-                      })()}
-                      onChange={(_, { value }) => {
-                        if (!value || String(value).startsWith('__header_')) return;
-                        const [channelIdStr, ...modelParts] = String(value).split(':');
-                        const channelId = Number(channelIdStr);
-                        const model = modelParts.join(':');
-                        setSelectorState((prev) => ({
-                          ...prev,
-                          [vmKey]: { value, channelId, model, pool: vm.pools?.[0] || 'default' },
-                        }));
-                      }}
-                    />
+                          return opts;
+                        })()}
+                        onChange={(_, { value }) => {
+                          if (!value || String(value).startsWith('__header_')) return;
+                          const [channelIdStr, ...modelParts] = String(value).split(':');
+                          const channelId = Number(channelIdStr);
+                          const model = modelParts.join(':');
+                          setSelectorState((prev) => ({
+                            ...prev,
+                            [vmKey]: { value, channelId, model, pool: vm.pools?.[0] || 'default' },
+                          }));
+                        }}
+                      />
+                    </div>
 
                     {/* Preview card */}
                     {selectorState[vmKey] && (() => {
                       const sel = selectorState[vmKey];
                       return (
-                        <div style={{ marginTop: 10, padding: '10px 12px', background: '#fff', border: '1px solid #d9e0ea', borderRadius: 6, fontSize: 13 }}>
-                          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
-                            <span><strong>渠道:</strong> <span style={{ color: '#98a2b3' }}>#{sel.channelId}</span></span>
-                            <span><strong>模型:</strong> {sel.model}</span>
-                            <Button
-                              size='mini'
-                              color='blue'
-                              icon
-                              labelPosition='left'
-                              loading={saving}
-                              disabled={!selectorState[vmKey]}
-                              onClick={() => {
-                                const s = selectorState[vmKey];
-                                if (!s) return;
-                                handleAddDeployment(s.channelId, s.model, s.pool, vmKey);
-                              }}
-                              style={{ marginLeft: 'auto' }}
-                            >
-                              <Icon name='plus' />
-                              添加
-                            </Button>
+                        <div className='fallback-add-model-preview'>
+                          <div className='fallback-add-model-preview-content'>
+                            <div className='fallback-add-model-preview-field'>
+                              <strong>渠道:</strong>
+                              <span>#{sel.channelId}</span>
+                            </div>
+                            <div className='fallback-add-model-preview-field'>
+                              <strong>模型:</strong>
+                              <span>{sel.model}</span>
+                            </div>
+                            <div className='fallback-add-model-preview-actions'>
+                              <Button
+                                size='small'
+                                color='blue'
+                                icon
+                                labelPosition='left'
+                                loading={saving}
+                                disabled={!selectorState[vmKey]}
+                                onClick={() => {
+                                  const s = selectorState[vmKey];
+                                  if (!s) return;
+                                  handleAddDeployment(s.channelId, s.model, s.pool, vmKey);
+                                }}
+                              >
+                                <Icon name='plus' />
+                                添加到 {vm.name}
+                              </Button>
+                              <Button
+                                size='small'
+                                basic
+                                onClick={() => setSelectorState((prev) => ({ ...prev, [vmKey]: null }))}
+                              >
+                                取消
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       );
@@ -797,8 +671,9 @@ const ModelEditor = ({ highlightDeployment }) => {
                           onDraftField={(field, value) => setDraftField(dep.id, field, value)}
                           onModeChange={(mode) => handleModeChange(dep.id, mode, vmKey)}
                           onHealthCheck={() => handleHealthCheck(dep.id)}
-                          onEditBaseUrl={() => openBaseUrlEditor(dep.channel_id)}
-                          onEditKey={() => openKeyEditor(dep.channel_id)}
+                          onTestAll={() => {
+                            (vm.fallback_order || []).forEach((id) => handleHealthCheck(id));
+                          }}
                           onDelete={() => handleDeleteDeployment(dep.id)}
                         />
                       );

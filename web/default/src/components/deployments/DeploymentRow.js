@@ -1,33 +1,9 @@
-import React from 'react';
-import { Button, Checkbox, Dropdown, Icon, Input, Label, Table } from 'semantic-ui-react';
-import ErrorRulesReference from './ErrorRulesReference';
+import React, { useState } from 'react';
+import { Button, Checkbox, Icon, Input, Label } from 'semantic-ui-react';
 
 /**
  * DeploymentRow — one deployment entry inside a VM, with expandable details.
  * Pure presentational. All state and callbacks come from the parent.
- *
- * Props:
- *   dep: deployment object (id, real_model, channel_id, daily_limit_tokens, ...)
- *   orderIndex: number
- *   expanded: boolean
- *   highlighted: boolean
- *   statusMeta: { label, color, detail }
- *   ownerNames: string[]
- *   ownerText: string
- *   vmKey: string
- *   draftDeployments: object — current draft edits
- *   deploymentMode: object — { [depId]: 'fixed'|'quota'|'error' }
- *   currentMode: 'fixed'|'quota'|'error' — resolved mode for this dep
- *   healthTesting: boolean
- *   healthResult: { ok, text } | null
- *   saving: boolean
- *   onToggle: () => void
- *   onDraftField: (field, value) => void
- *   onModeChange: (mode) => void
- *   onHealthCheck: () => void
- *   onEditBaseUrl: () => void
- *   onEditKey: () => void
- *   onDelete: () => void
  */
 const DeploymentRow = ({
   dep,
@@ -47,11 +23,12 @@ const DeploymentRow = ({
   onDraftField,
   onModeChange,
   onHealthCheck,
-  onEditBaseUrl,
-  onEditKey,
+  onTestAll,
   onDelete,
 }) => {
   const draft = draftDeployments[dep.id] || {};
+  const [showKey, setShowKey] = useState(false);
+
   return (
     <div className={`fallback-deployment-panel ${highlighted ? 'fallback-highlight' : ''}`}>
       <div className='fallback-deployment-heading'>
@@ -80,6 +57,53 @@ const DeploymentRow = ({
             </Label>
           )}
         </div>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Button
+            size='mini'
+            basic
+            color='blue'
+            icon
+            labelPosition='left'
+            disabled={saving}
+            onClick={onTestAll}
+          >
+            <Icon name='heartbeat' />
+            测试全部
+          </Button>
+          <Button
+            size='mini'
+            icon
+            labelPosition='left'
+            loading={healthTesting}
+            disabled={healthTesting || saving}
+            onClick={onHealthCheck}
+          >
+            <Icon name='heartbeat' />
+            测试
+          </Button>
+          {healthResult && (
+            <Label basic size='mini' color={healthResult.ok ? 'green' : 'red'}>
+              <Icon name={healthResult.ok ? 'check' : 'times'} />
+              {healthResult.text}
+            </Label>
+          )}
+          <Button
+            size='mini'
+            negative
+            icon
+            labelPosition='left'
+            disabled={saving}
+            onClick={onDelete}
+          >
+            <Icon name='trash' />
+            删除
+          </Button>
+          <Checkbox
+            toggle
+            checked={draft.enabled !== undefined ? draft.enabled : dep.enabled !== false}
+            onChange={(_, { checked }) => onDraftField('enabled', checked)}
+          />
+        </div>
       </div>
 
       <div className='fallback-state-note'>
@@ -88,174 +112,94 @@ const DeploymentRow = ({
 
       {expanded && (
         <div className='fallback-deployment-details'>
-          <Table compact celled size='small'>
-            <Table.Body>
-              <Table.Row>
-                <Table.Cell>渠道 ID</Table.Cell>
-                <Table.Cell>{dep.channel_id || '-'}</Table.Cell>
-              </Table.Row>
-              <Table.Row>
-                <Table.Cell>启用</Table.Cell>
-                <Table.Cell>
-                  <Checkbox
-                    toggle
-                    checked={draft.enabled !== undefined ? draft.enabled : dep.enabled !== false}
-                    onChange={(_, { checked }) => onDraftField('enabled', checked)}
-                  />
-                </Table.Cell>
-              </Table.Row>
-              <Table.Row>
-                <Table.Cell>优先级</Table.Cell>
-                <Table.Cell>
-                  <Input
-                    type='number'
-                    size='mini'
-                    style={{ maxWidth: 100 }}
-                    value={draft.priority !== undefined ? draft.priority : dep.priority ?? 0}
-                    onChange={(_, { value }) => onDraftField('priority', value)}
-                  />
-                </Table.Cell>
-              </Table.Row>
-              <Table.Row>
-                <Table.Cell>权重</Table.Cell>
-                <Table.Cell>
-                  <Input
-                    type='number'
-                    size='mini'
-                    style={{ maxWidth: 100 }}
-                    value={draft.weight !== undefined ? draft.weight : dep.weight ?? 100}
-                    onChange={(_, { value }) => onDraftField('weight', value)}
-                  />
-                </Table.Cell>
-              </Table.Row>
-              <Table.Row>
-                <Table.Cell>部署模式</Table.Cell>
-                <Table.Cell>
-                  <Button.Group size='mini'>
-                    <Button
-                      color={currentMode === 'fixed' ? 'blue' : undefined}
-                      onClick={() => onModeChange('fixed')}
-                    >
-                      固定模式
-                    </Button>
-                    <Button
-                      color={currentMode === 'quota' ? 'orange' : undefined}
-                      onClick={() => onModeChange('quota')}
-                    >
-                      限额模式
-                    </Button>
-                    <Button
-                      color={currentMode === 'error' ? 'green' : undefined}
-                      onClick={() => onModeChange('error')}
-                    >
-                      触发模式
-                    </Button>
-                  </Button.Group>
-                </Table.Cell>
-              </Table.Row>
-              <Table.Row>
-                <Table.Cell>每日 Token 限额</Table.Cell>
-                <Table.Cell>
-                  <Input
-                    type='number'
-                    size='mini'
-                    style={{ maxWidth: 140 }}
-                    placeholder='0 = 无限制'
-                    value={draft.daily_limit_tokens ?? dep.daily_limit_tokens ?? 0}
-                    onChange={(_, { value }) => onDraftField('daily_limit_tokens', value)}
-                  />
-                </Table.Cell>
-              </Table.Row>
-              <Table.Row>
-                <Table.Cell>软限比例</Table.Cell>
-                <Table.Cell>
-                  <Input
-                    type='number'
-                    size='mini'
-                    step='0.01'
-                    min='0'
-                    max='1'
-                    style={{ maxWidth: 100 }}
-                    placeholder='默认 0.95'
-                    value={draft.soft_limit_ratio ?? dep.soft_limit_ratio ?? 0.95}
-                    onChange={(_, { value }) => onDraftField('soft_limit_ratio', value)}
-                  />
-                </Table.Cell>
-              </Table.Row>
-              <Table.Row>
-                <Table.Cell>硬限比例</Table.Cell>
-                <Table.Cell>
-                  <Input
-                    type='number'
-                    size='mini'
-                    step='0.01'
-                    min='0'
-                    max='1'
-                    style={{ maxWidth: 100 }}
-                    placeholder='默认 1.0'
-                    value={draft.hard_limit_ratio ?? dep.hard_limit_ratio ?? 1.0}
-                    onChange={(_, { value }) => onDraftField('hard_limit_ratio', value)}
-                  />
-                </Table.Cell>
-              </Table.Row>
-              <Table.Row>
-                <Table.Cell>操作</Table.Cell>
-                <Table.Cell>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <Button
-                      size='mini'
-                      icon
-                      labelPosition='left'
-                      loading={healthTesting}
-                      disabled={healthTesting || saving}
-                      onClick={onHealthCheck}
-                    >
-                      <Icon name='heartbeat' />
-                      连通性测试
-                    </Button>
-                    {healthResult && (
-                      <Label basic size='mini' color={healthResult.ok ? 'green' : 'red'}>
-                        <Icon name={healthResult.ok ? 'check' : 'times'} />
-                        {healthResult.text}
-                      </Label>
-                    )}
-                    <Dropdown
-                      text='更多'
-                      icon='dropdown'
-                      button
-                      basic
-                      size='mini'
-                      disabled={saving}
-                    >
-                      <Dropdown.Menu>
-                        <Dropdown.Item
-                          icon='linkify'
-                          text='编辑 base_url'
-                          disabled={!dep.channel_id}
-                          onClick={onEditBaseUrl}
-                        />
-                        <Dropdown.Item
-                          icon='key'
-                          text='编辑 key'
-                          disabled={!dep.channel_id}
-                          onClick={onEditKey}
-                        />
-                        <Dropdown.Divider />
-                        <Dropdown.Item
-                          icon='trash'
-                          text='删除此部署'
-                          onClick={onDelete}
-                          className='fallback-dropdown-danger'
-                        />
-                      </Dropdown.Menu>
-                    </Dropdown>
-                  </div>
-                </Table.Cell>
-              </Table.Row>
-            </Table.Body>
-          </Table>
+          {/* 部署模式按钮 - 第一行 */}
+          <div className='fallback-edit-mode-row'>
+            <Button
+              size='mini'
+              color={currentMode === 'fixed' ? 'purple' : undefined}
+              basic={currentMode !== 'fixed'}
+              onClick={() => onModeChange('fixed')}
+            >
+              固定模式
+            </Button>
+            <Button
+              size='mini'
+              color={currentMode === 'quota' ? 'orange' : undefined}
+              basic={currentMode !== 'quota'}
+              onClick={() => onModeChange('quota')}
+            >
+              限额模式
+            </Button>
+            <Button
+              size='mini'
+              color={currentMode === 'error' ? 'green' : undefined}
+              basic={currentMode !== 'error'}
+              onClick={() => onModeChange('error')}
+            >
+              触发模式
+            </Button>
+          </div>
 
-          <ErrorRulesReference />
+          {/* 横向字段网格 */}
+          <div className='fallback-edit-grid'>
+            <div className='fallback-edit-field'>
+              <label>渠道 ID</label>
+              <span className='fallback-edit-value'>{dep.channel_id || '-'}</span>
+            </div>
+            <div className='fallback-edit-field'>
+              <label>优先级</label>
+              <Input
+                type='number'
+                size='mini'
+                value={draft.priority !== undefined ? draft.priority : dep.priority ?? 0}
+                onChange={(_, { value }) => onDraftField('priority', value)}
+              />
+            </div>
+            <div className='fallback-edit-field'>
+              <label>权重</label>
+              <Input
+                type='number'
+                size='mini'
+                value={draft.weight !== undefined ? draft.weight : dep.weight ?? 100}
+                onChange={(_, { value }) => onDraftField('weight', value)}
+              />
+            </div>
+            <div className='fallback-edit-field'>
+              <label>每日 Token 限额</label>
+              <Input
+                type='number'
+                size='mini'
+                placeholder='0 = 无限制'
+                value={draft.daily_limit_tokens ?? dep.daily_limit_tokens ?? 0}
+                onChange={(_, { value }) => onDraftField('daily_limit_tokens', value)}
+              />
+            </div>
+            <div className='fallback-edit-field fallback-edit-field-wide'>
+              <label>接口地址</label>
+              <div className='fallback-edit-value-row'>
+                <span className='fallback-edit-value fallback-edit-url'>
+                  {dep.base_url || '-'}
+                </span>
+              </div>
+            </div>
+            <div className='fallback-edit-field fallback-edit-field-wide'>
+              <label>密钥</label>
+              <div className='fallback-edit-value-row'>
+                <span className='fallback-edit-value fallback-edit-key'>
+                  {dep.key ? (showKey ? dep.key : '••••••••') : '-'}
+                </span>
+                <Button
+                  size='mini'
+                  basic
+                  icon
+                  onClick={() => setShowKey(!showKey)}
+                  title={showKey ? '隐藏密钥' : '显示密钥'}
+                >
+                  <Icon name={showKey ? 'eye slash' : 'eye'} />
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
