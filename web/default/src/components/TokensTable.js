@@ -21,10 +21,7 @@ import {
 
 import { ITEMS_PER_PAGE } from '../constants';
 import { renderQuota } from '../helpers/render';
-
-function renderTimestamp(timestamp) {
-  return <>{timestamp2string(timestamp)}</>;
-}
+import { renderTimestamp } from './utils/commonRenderers';
 
 function renderStatus(status, t) {
   switch (status) {

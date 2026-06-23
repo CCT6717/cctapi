@@ -5,11 +5,10 @@ import { API, showError, showNotice, timestamp2string } from '../../helpers';
 import { StatusContext } from '../../context/Status';
 import { marked } from 'marked';
 import { UserContext } from '../../context/User';
-import { Link } from 'react-router-dom';
 
 const Home = () => {
   const { t } = useTranslation();
-  const [statusState, statusDispatch] = useContext(StatusContext);
+  const [statusState] = useContext(StatusContext);
   const [homePageContentLoaded, setHomePageContentLoaded] = useState(false);
   const [homePageContent, setHomePageContent] = useState('');
   const [userState] = useContext(UserContext);

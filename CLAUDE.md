@@ -191,17 +191,24 @@ Important additions over upstream One API:
 - Alert history and fallback switch logs.
 - Frontend and backend validation before saving fallback config, including fixed-route target checks.
 - Smoke test script for real client testing.
-- **Free Pool (cct/free)**: Automatic free LLM provider aggregation. Currently supports OpenRouter Free (dynamic `:free` models), Groq (static list), and Kilo (keyless, dynamic `isFree:true` models). Sync timer runs every 6h for models, 15m for OpenRouter credits. Configuration in `data/fallback.json` under `free_providers`.
+- **Free Pool (cct/free)**: Automatic free LLM provider aggregation. Supports 18 providers: OpenRouter Free (dynamic `:free` models, needs API key), Groq (static list, needs API key), Kilo (keyless, dynamic `isFree:true` models), Pollinations (keyless, static `openai-fast` model), OVH (keyless, 15 static chat models), SiliconFlow (adaptor ModelList, keyless ok), Zhipu (adaptor ModelList, keyless ok), and 11 pre-built disabled providers (Mistral, Together AI, Novita, Cloudflare, Cerebras, SambaNova, GitHub Models, Chutes, Fireworks, Nebius, Lambda Labs). Sync timer runs every 6h for models, 15m for OpenRouter credits. Configuration in `data/fallback.json` under `free_providers`.
 
 ## Important Files
 
 ```text
 fallback/                         Core fallback package
+fallback/free_pool.go             Free pool provider registry, model fetch, quota sync, StartFreeSync
+fallback/config.go                Config loading, validation, UpdateDeploymentDailyLimit
+fallback/health.go                Health checker (free deployments now ping normally)
+fallback/alert.go                 Alert manager
+fallback/quota.go                 Runtime quota state, RPM/RPD/TPM/TPD enforcement
 router/fallback.go                Fallback admin API and built-in HTML fallback pages
 controller/relay.go               Main fallback relay loop
 common/metrics.go                 Prometheus text metrics
 web/default/src/pages/Fallback/   Default-theme fallback panel
 web/default/src/components/FallbackConfigPanel.js
+web/default/src/components/fallback-gateway/FreeProvidersEditor.js
+web/default/src/components/fallback-gateway/FreeModelPool.js
 web/default/src/components/Footer.js
 scripts/fallback-smoke.ps1        Real client smoke test script
 ```

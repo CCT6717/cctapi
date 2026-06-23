@@ -4,7 +4,22 @@ import { Checkbox, Form, Icon, Input, Label, Message, Table } from 'semantic-ui-
 const PROVIDER_DISPLAY = {
   openrouter: { title: 'OpenRouter', color: 'purple', icon: 'cloud' },
   groq: { title: 'Groq', color: 'orange', icon: 'lightning' },
-  freellmapi: { title: 'FreeLLMAPI', color: 'teal', icon: 'gift' },
+  kilo: { title: 'Kilo', color: 'teal', icon: 'bolt' },
+  pollinations: { title: 'Pollinations', color: 'green', icon: 'leaf' },
+  ovh: { title: 'OVH Cloud', color: 'blue', icon: 'server' },
+  siliconflow: { title: 'SiliconFlow', color: 'violet', icon: 'microchip' },
+  zhipu: { title: 'Zhipu AI', color: 'red', icon: 'brain' },
+  mistral: { title: 'Mistral', color: 'yellow', icon: 'wind' },
+  togetherai: { title: 'Together AI', color: 'pink', icon: 'users' },
+  novita: { title: 'Novita', color: 'olive', icon: 'rocket' },
+  cloudflare: { title: 'Cloudflare', color: 'orange', icon: 'shield' },
+  cerebras: { title: 'Cerebras', color: 'blue', icon: 'microchip' },
+  sambanova: { title: 'SambaNova', color: 'purple', icon: 'server' },
+  github: { title: 'GitHub Models', color: 'grey', icon: 'github' },
+  chutes: { title: 'Chutes', color: 'green', icon: 'bolt' },
+  fireworks: { title: 'Fireworks', color: 'red', icon: 'fire' },
+  nebius: { title: 'Nebius', color: 'teal', icon: 'cloud' },
+  lambdalabs: { title: 'Lambda Labs', color: 'violet', icon: 'lambda' },
 };
 
 const FreeProvidersEditor = ({ freeProviders, onChange }) => {

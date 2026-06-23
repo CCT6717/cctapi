@@ -7,7 +7,7 @@ import {
   showSuccess,
   timestamp2string,
   verifyJSON,
-} from '../helpers';
+} from '../../helpers';
 
 const OperationSetting = () => {
   const { t } = useTranslation();

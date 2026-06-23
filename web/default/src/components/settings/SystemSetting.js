@@ -9,7 +9,7 @@ import {
   Modal,
   Message,
 } from 'semantic-ui-react';
-import { API, removeTrailingSlash, showError } from '../helpers';
+import { API, removeTrailingSlash, showError } from '../../helpers';
 
 const SystemSetting = () => {
   const { t } = useTranslation();

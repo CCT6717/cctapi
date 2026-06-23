@@ -235,7 +235,7 @@ const GatewayStatus = () => {
 
   const vmRows = useMemo(() => {
     return virtualModels
-      .slice()
+      .filter((vm) => (vm.pools || []).some((pool) => pool === 'free'))
       .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-CN'))
       .map((vm) => ({
         ...vm,

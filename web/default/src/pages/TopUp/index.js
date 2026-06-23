@@ -6,7 +6,6 @@ import {
   Header,
   Card,
   Statistic,
-  Divider,
 } from 'semantic-ui-react';
 import { API, showError, showInfo, showSuccess } from '../../helpers';
 import { renderQuota } from '../../helpers/render';

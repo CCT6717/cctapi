@@ -741,3 +741,91 @@ func TestBuiltinFreeProviderRegistry_Kilo(t *testing.T) {
 		t.Errorf("expected ContextLength 256000, got %d", meta.ContextLength)
 	}
 }
+
+func TestBuiltinFreeProviderRegistry_Pollinations(t *testing.T) {
+	meta, ok := BuiltinFreeProviders["pollinations"]
+	if !ok {
+		t.Fatal("expected pollinations in BuiltinFreeProviders")
+	}
+	if meta.ChannelType != channeltype.OpenAICompatible {
+		t.Errorf("expected channel type %d, got %d", channeltype.OpenAICompatible, meta.ChannelType)
+	}
+	if meta.DefaultBaseURL != "https://text.pollinations.ai/openai/v1" {
+		t.Errorf("unexpected base URL: %s", meta.DefaultBaseURL)
+	}
+	// Pollinations /v1/models 坏了，用静态列表
+	if len(meta.DefaultModels) != 1 || meta.DefaultModels[0] != "openai-fast" {
+		t.Errorf("unexpected DefaultModels: %v", meta.DefaultModels)
+	}
+	if meta.ContextLength != 131072 {
+		t.Errorf("expected ContextLength 131072, got %d", meta.ContextLength)
+	}
+}
+
+func TestBuiltinFreeProviderRegistry_OVH(t *testing.T) {
+	meta, ok := BuiltinFreeProviders["ovh"]
+	if !ok {
+		t.Fatal("expected ovh in BuiltinFreeProviders")
+	}
+	if meta.ChannelType != channeltype.OpenAICompatible {
+		t.Errorf("expected channel type %d, got %d", channeltype.OpenAICompatible, meta.ChannelType)
+	}
+	if meta.DefaultBaseURL != "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1" {
+		t.Errorf("unexpected base URL: %s", meta.DefaultBaseURL)
+	}
+	// OVH /v1/models 返回全量（含非 chat），用静态列表
+	if len(meta.DefaultModels) != 15 {
+		t.Errorf("expected 15 chat models, got %d: %v", len(meta.DefaultModels), meta.DefaultModels)
+	}
+	if meta.DefaultRPM != 2 {
+		t.Errorf("expected DefaultRPM 2, got %d", meta.DefaultRPM)
+	}
+	if meta.ContextLength != 262144 {
+		t.Errorf("expected ContextLength 262144, got %d", meta.ContextLength)
+	}
+}
+
+func TestParseOpenAICompatModels_Basic(t *testing.T) {
+	body := []byte(`{"data":[
+		{"id":"gpt-oss-20b","object":"model"},
+		{"id":"Qwen3.5-397B-A17B","object":"model"},
+		{"id":"gpt-oss-20b","object":"model"},
+		{"id":"Meta-Llama-3_3-70B-Instruct","object":"model"}
+	]}`)
+	models, err := parseOpenAICompatModels(body)
+	if err != nil {
+		t.Fatalf("parseOpenAICompatModels error: %v", err)
+	}
+	want := []string{
+		"Meta-Llama-3_3-70B-Instruct",
+		"Qwen3.5-397B-A17B",
+		"gpt-oss-20b",
+	}
+	if len(models) != len(want) {
+		t.Fatalf("len = %d, want %d; got %v", len(models), len(want), models)
+	}
+	for i, m := range models {
+		if m != want[i] {
+			t.Errorf("models[%d] = %q, want %q", i, m, want[i])
+		}
+	}
+}
+
+func TestParseOpenAICompatModels_EmptyAndEmptyID(t *testing.T) {
+	// 空 data
+	models, err := parseOpenAICompatModels([]byte(`{"data":[]}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(models) != 0 {
+		t.Errorf("expected 0, got %v", models)
+	}
+	// 包含空 id 应跳过
+	models, err = parseOpenAICompatModels([]byte(`{"data":[{"id":""},{"id":"good-model"}]}`))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(models) != 1 || models[0] != "good-model" {
+		t.Errorf("expected [good-model], got %v", models)
+	}
+}

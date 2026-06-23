@@ -3,9 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   Button,
   Form,
-  Header,
   Message,
-  Segment,
   Card,
 } from 'semantic-ui-react';
 import { useNavigate, useParams } from 'react-router-dom';

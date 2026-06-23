@@ -5,6 +5,7 @@
 import React from 'react';
 import { Button, Dropdown, Icon, Label, Table } from 'semantic-ui-react';
 import GatewayStatus from '../../../components/gateway-status/GatewayStatus';
+import ErrorRulesReference from '../../../components/deployments/ErrorRulesReference';
 import {
   formatConcurrency,
   formatNumber,
@@ -24,6 +25,7 @@ const StatusPanel = ({
 }) => (
   <>
     <GatewayStatus />
+    <ErrorRulesReference />
     <div className='fallback-content-toolbar'>
       <div>
         <h2>部署状态</h2>

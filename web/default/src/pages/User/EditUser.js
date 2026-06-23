@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, Form, Card } from 'semantic-ui-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API, showError, showSuccess } from '../../helpers';
-import { renderQuota, renderQuotaWithPrompt } from '../../helpers/render';
+import { renderQuotaWithPrompt } from '../../helpers/render';
 
 const EditUser = () => {
   const { t } = useTranslation();
@@ -29,7 +29,6 @@ const EditUser = () => {
     wechat_id,
     email,
     quota,
-    group,
   } = inputs;
   const handleInputChange = (e, { name, value }) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));

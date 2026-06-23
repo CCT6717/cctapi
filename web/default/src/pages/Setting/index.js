@@ -1,11 +1,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card, Tab } from 'semantic-ui-react';
-import SystemSetting from '../../components/SystemSetting';
+import SystemSetting from '../../components/settings/SystemSetting';
 import { isRoot } from '../../helpers';
-import OtherSetting from '../../components/OtherSetting';
-import PersonalSetting from '../../components/PersonalSetting';
-import OperationSetting from '../../components/OperationSetting';
+import OtherSetting from '../../components/settings/OtherSetting';
+import PersonalSetting from '../../components/settings/PersonalSetting';
+import OperationSetting from '../../components/settings/OperationSetting';
 
 const Setting = () => {
   const { t } = useTranslation();

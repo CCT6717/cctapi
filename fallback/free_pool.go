@@ -18,6 +18,11 @@ import (
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor/groq"
+	"github.com/songquanpeng/one-api/relay/adaptor/mistral"
+	"github.com/songquanpeng/one-api/relay/adaptor/novita"
+	"github.com/songquanpeng/one-api/relay/adaptor/siliconflow"
+	"github.com/songquanpeng/one-api/relay/adaptor/togetherai"
+	"github.com/songquanpeng/one-api/relay/adaptor/zhipu"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 )
 
@@ -56,20 +61,151 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		SupportsTools:  true,
 		SupportsJSON:   true,
 	},
-	"freellmapi": {
-		ChannelType:    channeltype.OpenAICompatible,
-		DefaultBaseURL: "https://TODO.freellmapi/v1", // TODO: 真实端点未上线,占位;上线后替换
-		DefaultModels:  []string{},
-		DefaultRPM:     10,
-		ContextLength:  32768,
-		SupportsStream: true,
-	},
 	"kilo": {
 		ChannelType:    channeltype.OpenAICompatible,
 		DefaultBaseURL: "https://api.kilo.ai/api/gateway/v1",
 		DefaultModels:  []string{}, // 由 fetchModels 动态拉取
 		DefaultRPM:     10,
 		ContextLength:  256000,
+		SupportsStream: true,
+	},
+	"pollinations": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://text.pollinations.ai/openai/v1",
+		DefaultModels:  []string{"openai-fast"}, // /v1/models 坏了，用静态列表
+		DefaultRPM:     5,                       // keyless 匿名，限流严格
+		ContextLength:  131072,
+		SupportsStream: true,
+	},
+	"ovh": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
+		DefaultModels: []string{
+			// 仅 chat 模型（/v1/models 还返回 embeddings/image/audio，需过滤）
+			"Llama-3.1-8B-Instruct",
+			"Meta-Llama-3_3-70B-Instruct",
+			"Mistral-7B-Instruct-v0.3",
+			"Mistral-Nemo-Instruct-2407",
+			"Mistral-Small-3.2-24B-Instruct-2506",
+			"Qwen2.5-VL-72B-Instruct",
+			"Qwen3-32B",
+			"Qwen3-Coder-30B-A3B-Instruct",
+			"Qwen3.5-397B-A17B",
+			"Qwen3.5-9B",
+			"Qwen3.6-27B",
+			"Qwen3Guard-Gen-0.6B",
+			"Qwen3Guard-Gen-8B",
+			"gpt-oss-120b",
+			"gpt-oss-20b",
+		},
+		DefaultRPM:     2, // keyless 匿名，2 req/min per IP per model
+		ContextLength:  262144,
+		SupportsStream: true,
+	},
+	// ── Phase 2: 启用的供应商 ──
+	"siliconflow": {
+		ChannelType:    channeltype.SiliconFlow,
+		DefaultBaseURL: "https://api.siliconflow.cn",
+		DefaultModels:  siliconflow.ModelList,
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"zhipu": {
+		ChannelType:    channeltype.Zhipu,
+		DefaultBaseURL: "https://open.bigmodel.cn",
+		DefaultModels:  zhipu.ModelList,
+		DefaultRPM:     5,
+		ContextLength:  128000,
+		SupportsStream: true,
+	},
+	// ── Phase 2: 预置但禁用的供应商 ──
+	"mistral": {
+		ChannelType:    channeltype.Mistral,
+		DefaultBaseURL: "https://api.mistral.ai",
+		DefaultModels:  mistral.ModelList,
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"togetherai": {
+		ChannelType:    channeltype.TogetherAI,
+		DefaultBaseURL: "https://api.together.xyz",
+		DefaultModels:  togetherai.ModelList,
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"novita": {
+		ChannelType:    channeltype.Novita,
+		DefaultBaseURL: "https://api.novita.ai/v3/openai",
+		DefaultModels:  novita.ModelList,
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"cloudflare": {
+		ChannelType:    channeltype.Cloudflare,
+		DefaultBaseURL: "https://api.cloudflare.com",
+		DefaultModels:  []string{}, // 需特殊认证（account_id:token）
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"cerebras": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.cerebras.ai/v1", // ponytail: 占位，启用后需验证
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"sambanova": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.sambanova.ai/v1", // ponytail: 占位
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"github": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://models.inference.ai.azure.com", // GitHub Models endpoint
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"chutes": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.chutes.ai/v1", // ponytail: 占位
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"fireworks": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.fireworks.ai/inference/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"nebius": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.studio.nebius.ai/v1", // ponytail: 占位
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+	},
+	"lambdalabs": {
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.lambdalabs.com/v1", // ponytail: 占位
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
 		SupportsStream: true,
 	},
 }
@@ -95,10 +231,25 @@ func SafeKeyHash(key string) string {
 // knownFreeProviders lists providers that SyncFreePool can auto-manage.
 // Used to distinguish auto-generated IDs from user-created ones.
 var knownFreeProviders = map[string]struct{}{
-	"openrouter": {},
-	"groq":       {},
-	"freellmapi": {},
-	"kilo":       {},
+	"openrouter":   {},
+	"groq":         {},
+	"kilo":         {},
+	"pollinations": {},
+	"ovh":          {},
+	// Phase 2
+	"siliconflow":  {},
+	"zhipu":        {},
+	"mistral":      {},
+	"togetherai":   {},
+	"novita":       {},
+	"cloudflare":   {},
+	"cerebras":     {},
+	"sambanova":    {},
+	"github":       {},
+	"chutes":       {},
+	"fireworks":    {},
+	"nebius":       {},
+	"lambdalabs":   {},
 }
 
 // isAutoDeploymentSuffix validates the suffix portion of an auto-generated
@@ -178,16 +329,90 @@ func SyncFreePool(cfg *Config) error {
 			logger.SysWarn(fmt.Sprintf("[free_pool] unknown provider %q, skipping", providerName))
 			continue
 		}
-		if !fp.Enabled || len(fp.Keys) == 0 {
+		if !fp.Enabled {
+			logger.SysLog(fmt.Sprintf("[free_pool] provider %q disabled, skipping", providerName))
 			continue
 		}
+		logger.SysLog(fmt.Sprintf("[free_pool] processing provider %q (enabled=%v, keys=%d)", providerName, fp.Enabled, len(fp.Keys)))
 
 		models := fp.Models
 		if len(models) == 0 {
 			models = meta.DefaultModels
 		}
+		if len(models) == 0 {
+			// 需要动态拉取的供应商，用占位模型，后续 syncAllProviderModels 会更新
+			models = []string{providerName + "/free"}
+			logger.SysLog(fmt.Sprintf("[free_pool] provider %q has no models, using placeholder: %v", providerName, models))
+		}
 		realModel := models[0]
 
+		// keyless 供应商:用空 key 创建单个 channel
+		if len(fp.Keys) == 0 {
+			keyHash := SafeKeyHash("")
+			name := channelName(providerName, keyHash)
+			now := helper.GetTimestamp()
+			weight := uint(0)
+			baseURL := meta.DefaultBaseURL
+			ch := model.Channel{
+				Name:        name,
+				Type:        meta.ChannelType,
+				Key:         "",
+				BaseURL:     &baseURL,
+				Models:      strings.Join(models, ","),
+				Status:      model.ChannelStatusEnabled,
+				Weight:      &weight,
+				CreatedTime: now,
+			}
+			desiredChannels = append(desiredChannels, desired{name, ch, providerName, keyHash})
+
+			// Build deployment
+			rpm := fp.DefaultRPM
+			if rpm <= 0 {
+				rpm = meta.DefaultRPM
+			}
+			rpd := fp.DefaultRPD
+			if rpd <= 0 {
+				rpd = meta.DefaultRPD
+			}
+			tpm := fp.DefaultTPM
+			if tpm <= 0 {
+				tpm = meta.DefaultTPM
+			}
+			tpd := fp.DefaultTPD
+			if tpd <= 0 {
+				tpd = meta.DefaultTPD
+			}
+			rpm, rpd, tpm, tpd = ApplyLimitsOverride(rpm, rpd, tpm, tpd, fp.LimitsOverride)
+
+			depID := deploymentID(providerName, keyHash)
+			autoDeployments[depID] = DeploymentConfig{
+				ID:                    depID,
+				Enabled:               true,
+				ChannelID:             0,
+				RealModel:             realModel,
+				Pool:                  "free",
+				QualityTier:           "medium",
+				CostTier:              "free",
+				SupportsVision:        meta.SupportsVision,
+				SupportsStream:        meta.SupportsStream,
+				SupportsTools:         meta.SupportsTools,
+				SupportsJSON:          meta.SupportsJSON,
+				ContextLength:         meta.ContextLength,
+				Priority:              10,
+				Weight:                100,
+				MaxConcurrentRequests: 5,
+				QuotaMode:             "free",
+				SoftLimitRatio:        0.95,
+				HardLimitRatio:        1.0,
+				RPMLimit:              rpm,
+				RPDLimit:              rpd,
+				TPMLimit:              tpm,
+				TPDLimit:              tpd,
+			}
+			continue
+		}
+
+		// 有 key 的供应商:遍历每个 key
 		for _, key := range fp.Keys {
 			if strings.TrimSpace(key) == "" {
 				continue
@@ -532,22 +757,42 @@ type openRouterCreditsResponse struct {
 // fetchModels 拉取指定 provider 的可用模型列表。
 //   - openrouter: GET /v1/models,过滤 :free 后缀,去重排序
 //   - groq: 直接返静态 groq.ModelList,不网络拉
-//   - freellmapi: 占位 URL,返 meta.DefaultModels(当前空)+ warn,不拉
 //   - kilo: GET /models,过滤 isFree:true,去重排序
+//   - pollinations: /v1/models 坏了,返静态列表,不拉
+//   - ovh: GET /v1/models(无需 auth),返回全部模型
 //
 // 失败返 error,调用方降级到静态默认。不在持有任何锁时调用。
 func fetchModels(providerName, key string) ([]string, error) {
 	switch providerName {
 	case "groq":
 		return groq.ModelList, nil
-	case "freellmapi":
-		// ponytail: 占位端点未上线,不拉,返空让调用方用静态默认
-		logger.SysWarn("[free-pool] freellmapi endpoint not live yet, skipping model fetch")
-		return BuiltinFreeProviders["freellmapi"].DefaultModels, nil
 	case "openrouter":
 		return fetchOpenRouterModels(key)
 	case "kilo":
 		return fetchKiloModels()
+	case "pollinations":
+		// /v1/models 返回畸形文本，用 DefaultModels 静态列表
+		return BuiltinFreeProviders["pollinations"].DefaultModels, nil
+	case "ovh":
+		// /v1/models 返回全量（含 embeddings/image/audio），用静态列表只保留 chat 模型
+		return BuiltinFreeProviders["ovh"].DefaultModels, nil
+	case "siliconflow":
+		return siliconflow.ModelList, nil
+	case "zhipu":
+		return zhipu.ModelList, nil
+	case "mistral":
+		return mistral.ModelList, nil
+	case "togetherai":
+		return togetherai.ModelList, nil
+	case "novita":
+		return novita.ModelList, nil
+	case "cloudflare":
+		// 需 account_id:token 特殊认证，暂不支持自动拉取
+		return []string{}, nil
+	case "cerebras", "sambanova", "github", "chutes", "fireworks", "nebius", "lambdalabs":
+		// ponytail: 零基础供应商，keyless 或 placeholder，直接走通用 OpenAI 兼容拉取
+		baseURL := BuiltinFreeProviders[providerName].DefaultBaseURL
+		return fetchOpenAICompatModels(baseURL, key)
 	default:
 		return nil, fmt.Errorf("fetchModels: unsupported provider %q", providerName)
 	}
@@ -649,6 +894,60 @@ func parseKiloFreeModels(body []byte) ([]string, error) {
 	}
 	sort.Strings(free)
 	return free, nil
+}
+
+// fetchOpenAICompatModels 通用 OpenAI 兼容 /v1/models 拉取。
+// 适用于 OVH 等标准 OpenAI 兼容端点。key 为空时不设 Authorization 头。
+func fetchOpenAICompatModels(baseURL, key string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/models", nil)
+	if err != nil {
+		return nil, err
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s /v1/models request: %w", baseURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s /v1/models status %d", baseURL, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read models body from %s: %w", baseURL, err)
+	}
+	return parseOpenAICompatModels(body)
+}
+
+// parseOpenAICompatModels 解析标准 OpenAI /v1/models 响应,去重排序。
+type openAICompatModelsResponse struct {
+	Data []struct {
+		ID string `json:"id"`
+	} `json:"data"`
+}
+
+func parseOpenAICompatModels(body []byte) ([]string, error) {
+	var respData openAICompatModelsResponse
+	if err := json.Unmarshal(body, &respData); err != nil {
+		return nil, fmt.Errorf("parse models json: %w", err)
+	}
+	seen := make(map[string]struct{}, len(respData.Data))
+	var models []string
+	for _, m := range respData.Data {
+		if m.ID == "" {
+			continue
+		}
+		if _, ok := seen[m.ID]; !ok {
+			seen[m.ID] = struct{}{}
+			models = append(models, m.ID)
+		}
+	}
+	sort.Strings(models)
+	return models, nil
 }
 
 // syncAllProviderModels 是通用的模型同步入口:遍历 cfg.FreeProviders 中

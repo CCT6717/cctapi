@@ -15,7 +15,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { UserContext } from '../context/User';
 import { API, getLogo, showError, showSuccess, showWarning } from '../helpers';
-import { onGitHubOAuthClicked, onLarkOAuthClicked } from './utils';
+import { onGitHubOAuthClicked, onLarkOAuthClicked } from './oauthUtils';
 import larkIcon from '../images/lark.svg';
 
 const LoginForm = () => {

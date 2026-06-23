@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import axios from 'axios';
+import { API } from '../../helpers';
 import './Dashboard.css';
 
 // 在 Dashboard 组件内添加自定义配置
@@ -68,7 +68,7 @@ const Dashboard = () => {
 
   const fetchDashboardData = async () => {
     try {
-      const response = await axios.get('/api/user/dashboard');
+      const response = await API.get('/api/user/dashboard');
       if (response.data.success) {
         const dashboardData = response.data.data || [];
         setData(dashboardData);
