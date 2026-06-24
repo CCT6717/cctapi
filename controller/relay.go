@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/common/claudeutil"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
@@ -25,40 +26,6 @@ import (
 	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
-
-// isClaudeRequest checks if the request is a Claude format request.
-func isClaudeRequest(c *gin.Context) bool {
-	if v, ok := c.Get("claude_format"); ok {
-		if b, ok := v.(bool); ok && b {
-			return true
-		}
-	}
-	if c.GetHeader("anthropic-version") != "" {
-		return true
-	}
-	return strings.HasPrefix(c.Request.URL.Path, "/v1/messages")
-}
-
-// writeClaudeOrOpenAIError writes an error in Claude or OpenAI format.
-func writeClaudeOrOpenAIError(c *gin.Context, statusCode int, errType string, message string) {
-	msg := helper.MessageWithRequestId(message, c.GetString(helper.RequestIdKey))
-	if isClaudeRequest(c) {
-		c.JSON(statusCode, gin.H{
-			"type": "error",
-			"error": gin.H{
-				"type":    errType,
-				"message": msg,
-			},
-		})
-	} else {
-		c.JSON(statusCode, gin.H{
-			"error": gin.H{
-				"message": msg,
-				"type":    errType,
-			},
-		})
-	}
-}
 
 // https://platform.openai.com/docs/api-reference/chat
 
@@ -177,13 +144,13 @@ func relayWithFallback(c *gin.Context) {
 	requestId := c.GetString(helper.RequestIdKey)
 	requestModelValue, exists := c.Get(ctxkey.RequestModel)
 	if !exists {
-		writeClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_error", "No request model found")
+		claudeutil.WriteClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_error", "No request model found")
 		return
 	}
 
 	virtualModel, ok := requestModelValue.(string)
 	if !ok || virtualModel == "" {
-		writeClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_error", "Invalid request model format")
+		claudeutil.WriteClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_error", "Invalid request model format")
 		return
 	}
 
@@ -203,14 +170,14 @@ func relayWithFallback(c *gin.Context) {
 		}
 	}
 	if err != nil {
-		writeClaudeOrOpenAIError(c, http.StatusServiceUnavailable, "one_api_error", fmt.Sprintf("No available deployments for virtual model %s: %s", virtualModel, err.Error()))
+		claudeutil.WriteClaudeOrOpenAIError(c, http.StatusServiceUnavailable, "one_api_error", fmt.Sprintf("No available deployments for virtual model %s: %s", virtualModel, err.Error()))
 		return
 	}
 
 	// Read the original request body once
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		writeClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_error", fmt.Sprintf("Failed to read request body: %s", err.Error()))
+		claudeutil.WriteClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_error", fmt.Sprintf("Failed to read request body: %s", err.Error()))
 		return
 	}
 
@@ -463,7 +430,7 @@ func relayWithFallback(c *gin.Context) {
 				dep.ID, getRelayErrorMessage(bizErr))
 			errCopy := *bizErr
 			errCopy.Error.Message = helper.MessageWithRequestId(errCopy.Error.Message, requestId)
-			writeClaudeOrOpenAIError(c, errCopy.StatusCode, errCopy.Error.Type, errCopy.Error.Message)
+			claudeutil.WriteClaudeOrOpenAIError(c, errCopy.StatusCode, errCopy.Error.Type, errCopy.Error.Message)
 			return
 		}
 
@@ -523,7 +490,7 @@ func relayWithFallback(c *gin.Context) {
 	})
 
 	// Unified error response — never pass raw upstream errors to client
-	writeClaudeOrOpenAIError(c, http.StatusServiceUnavailable, "one_api_error", "所有上游均不可用，请稍后重试")
+	claudeutil.WriteClaudeOrOpenAIError(c, http.StatusServiceUnavailable, "one_api_error", "所有上游均不可用，请稍后重试")
 }
 
 func Relay(c *gin.Context) {
@@ -594,7 +561,7 @@ func Relay(c *gin.Context) {
 		if errCopy.StatusCode == http.StatusTooManyRequests {
 			errCopy.Error.Message = "当前分组上游负载已饱和，请稍后再试"
 		}
-		writeClaudeOrOpenAIError(c, errCopy.StatusCode, errCopy.Error.Type, errCopy.Error.Message)
+		claudeutil.WriteClaudeOrOpenAIError(c, errCopy.StatusCode, errCopy.Error.Type, errCopy.Error.Message)
 	}
 }
 

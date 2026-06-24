@@ -32,41 +32,6 @@ import (
 	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
-// isClaudeRequest checks if the request is a Claude format request.
-// Checks context flag first (set by getAndValidateTextRequest), then falls back to header/path.
-func isClaudeRequest(c *gin.Context) bool {
-	if v, ok := c.Get("claude_format"); ok {
-		if b, ok := v.(bool); ok && b {
-			return true
-		}
-	}
-	if c.GetHeader("anthropic-version") != "" {
-		return true
-	}
-	return strings.HasPrefix(c.Request.URL.Path, "/v1/messages")
-}
-
-// writeClaudeOrOpenAIError writes an error response in Claude or OpenAI format.
-func writeClaudeOrOpenAIError(c *gin.Context, statusCode int, errType string, message string) {
-	msg := helper.MessageWithRequestId(message, c.GetString(helper.RequestIdKey))
-	if isClaudeRequest(c) {
-		c.JSON(statusCode, gin.H{
-			"type": "error",
-			"error": gin.H{
-				"type":    errType,
-				"message": msg,
-			},
-		})
-	} else {
-		c.JSON(statusCode, gin.H{
-			"error": gin.H{
-				"message": msg,
-				"type":    errType,
-			},
-		})
-	}
-}
-
 func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.GeneralOpenAIRequest, error) {
 	textRequest := &relaymodel.GeneralOpenAIRequest{}
 	err := common.UnmarshalBodyReusable(c, textRequest)

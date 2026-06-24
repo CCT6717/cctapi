@@ -2,38 +2,16 @@ package middleware
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
-	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/songquanpeng/one-api/common/claudeutil"
 	"github.com/songquanpeng/one-api/common/logger"
-	"strings"
 )
 
-func isClaudeRequest(c *gin.Context) bool {
-	if c.GetHeader("anthropic-version") != "" {
-		return true
-	}
-	return strings.HasPrefix(c.Request.URL.Path, "/v1/messages")
-}
-
 func abortWithMessage(c *gin.Context, statusCode int, message string) {
-	msg := helper.MessageWithRequestId(message, c.GetString(helper.RequestIdKey))
-	if isClaudeRequest(c) {
-		c.JSON(statusCode, gin.H{
-			"type": "error",
-			"error": gin.H{
-				"type":    "one_api_error",
-				"message": msg,
-			},
-		})
-	} else {
-		c.JSON(statusCode, gin.H{
-			"error": gin.H{
-				"message": msg,
-				"type":    "one_api_error",
-			},
-		})
-	}
+	claudeutil.WriteClaudeOrOpenAIError(c, statusCode, "one_api_error", message)
 	c.Abort()
 	logger.Error(c.Request.Context(), message)
 }

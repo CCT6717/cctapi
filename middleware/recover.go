@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
+	"github.com/songquanpeng/one-api/common/claudeutil"
 	"github.com/songquanpeng/one-api/common/logger"
 )
 
@@ -21,22 +22,7 @@ func RelayPanicRecover() gin.HandlerFunc {
 				body, _ := common.GetRequestBody(c)
 				logger.Errorf(ctx, fmt.Sprintf("request body: %s", string(body)))
 				msg := fmt.Sprintf("Panic detected, error: %v. Please submit an issue with the related log here: https://github.com/songquanpeng/one-api", err)
-				if isClaudeRequest(c) {
-					c.JSON(http.StatusInternalServerError, gin.H{
-						"type": "error",
-						"error": gin.H{
-							"type":    "one_api_panic",
-							"message": msg,
-						},
-					})
-				} else {
-					c.JSON(http.StatusInternalServerError, gin.H{
-						"error": gin.H{
-							"message": msg,
-							"type":    "one_api_panic",
-						},
-					})
-				}
+				claudeutil.WriteClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_panic", msg)
 				c.Abort()
 			}
 		}()
