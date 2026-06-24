@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Button, Checkbox, Icon, Input, Label } from 'semantic-ui-react';
+import { API } from '../../helpers';
 
 const DeploymentRow = ({
   dep,
@@ -27,6 +28,22 @@ const DeploymentRow = ({
   const draft = draftDeployments[dep.id] || {};
   const [editBaseUrl, setEditBaseUrl] = useState(null);
   const [editKey, setEditKey] = useState(null);
+  const [showKey, setShowKey] = useState(false);
+  const [realKey, setRealKey] = useState(null);
+  const [keyLoading, setKeyLoading] = useState(false);
+
+  const handleToggleKey = async () => {
+    if (!showKey && realKey === null && dep.channel_id) {
+      setKeyLoading(true);
+      try {
+        const res = await API.get(`/api/channel/${dep.channel_id}`);
+        const { success, data } = res.data || {};
+        if (success && data?.key) setRealKey(data.key);
+      } catch (e) { /* ignore */ }
+      setKeyLoading(false);
+    }
+    setShowKey((v) => !v);
+  };
 
   const hasChannelChanges = editBaseUrl !== null || editKey !== null;
 
@@ -198,9 +215,18 @@ const DeploymentRow = ({
               <Input
                 size='mini'
                 fluid
-                value={editKey !== null ? editKey : dep.key || channelData?.key || ''}
+                type={showKey ? 'text' : 'password'}
+                value={editKey !== null ? editKey : (realKey !== null ? realKey : dep.key || channelData?.key || '')}
                 placeholder='sk-...'
                 onChange={(_, { value }) => setEditKey(value)}
+                icon={
+                  <Icon
+                    name={keyLoading ? 'spinner loading' : (showKey ? 'eye slash' : 'eye')}
+                    link
+                    onClick={handleToggleKey}
+                    title={showKey ? '隐藏密钥' : '显示密钥'}
+                  />
+                }
               />
             </div>
           </div>
