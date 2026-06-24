@@ -44,6 +44,8 @@ func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.Gener
 			var bodyMap map[string]any
 			json.Unmarshal(raw, &bodyMap)
 			isClaude := anthropic.IsClaudeFormat(c, bodyMap)
+			logger.SysLog(fmt.Sprintf("[claude-detect] raw_len=%d isClaude=%v anthropic-version=%q path=%s",
+				len(raw), isClaude, c.GetHeader("anthropic-version"), c.Request.URL.Path))
 			if isClaude {
 				claudeReq, err := anthropic.UnmarshalClaudeRequest(raw)
 				if err == nil {

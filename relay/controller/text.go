@@ -34,6 +34,11 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 		logger.Errorf(ctx, "getAndValidateTextRequest failed: %s", err.Error())
 		return openai.ErrorWrapper(err, "invalid_text_request", http.StatusBadRequest)
 	}
+	// Claude-format requests arrive at /v1/messages but upstream expects /v1/chat/completions
+	if isClaude, _ := c.Get("claude_format"); isClaude == true {
+		logger.SysLog(fmt.Sprintf("[claude] rewriting RequestURLPath from %s to /v1/chat/completions", meta.RequestURLPath))
+		meta.RequestURLPath = "/v1/chat/completions"
+	}
 	meta.IsStream = textRequest.Stream
 
 	// map model name
