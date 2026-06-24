@@ -24,6 +24,12 @@ var (
 	// fallback_success_total — requests where a deployment succeeded
 	FallbackSuccessTotal int64
 
+	// claude_api_requests_total — requests via Claude API compatibility layer
+	ClaudeAPIRequestsTotal int64
+
+	// claude_api_tokens_total — tokens consumed via Claude API requests
+	ClaudeAPITokensTotal int64
+
 	// deployment_used_tokens — per-deployment token usage (label: deployment, virtual_model)
 	deploymentUsedTokens      = make(map[string]int64)
 	deploymentUsedTokensMu    sync.RWMutex
@@ -83,6 +89,8 @@ func FormatPrometheusMetrics() string {
 	swTotal := atomic.LoadInt64(&FallbackSwitchTotal)
 	failTotal := atomic.LoadInt64(&FallbackFailedTotal)
 	succTotal := atomic.LoadInt64(&FallbackSuccessTotal)
+	claudeReq := atomic.LoadInt64(&ClaudeAPIRequestsTotal)
+	claudeTok := atomic.LoadInt64(&ClaudeAPITokensTotal)
 
 	var buf string
 
@@ -102,6 +110,14 @@ func FormatPrometheusMetrics() string {
 	buf += fmt.Sprintf("# HELP fallback_success_total Total requests where a deployment succeeded\n")
 	buf += fmt.Sprintf("# TYPE fallback_success_total counter\n")
 	buf += fmt.Sprintf("fallback_success_total %d\n\n", succTotal)
+
+	buf += fmt.Sprintf("# HELP claude_api_requests_total Total requests via Claude API compatibility\n")
+	buf += fmt.Sprintf("# TYPE claude_api_requests_total counter\n")
+	buf += fmt.Sprintf("claude_api_requests_total %d\n\n", claudeReq)
+
+	buf += fmt.Sprintf("# HELP claude_api_tokens_total Total tokens consumed via Claude API\n")
+	buf += fmt.Sprintf("# TYPE claude_api_tokens_total counter\n")
+	buf += fmt.Sprintf("claude_api_tokens_total %d\n\n", claudeTok)
 
 	// Gauges with labels
 	buf += fmt.Sprintf("# HELP deployment_used_tokens Token usage per deployment\n")

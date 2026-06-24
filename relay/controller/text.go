@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/logger"
@@ -142,6 +144,11 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 				return respErr
 			}
 			convertAndWriteClaudeResponse(c, bufWriter)
+		}
+		// Track Claude API usage
+		atomic.AddInt64(&common.ClaudeAPIRequestsTotal, 1)
+		if usage != nil {
+			atomic.AddInt64(&common.ClaudeAPITokensTotal, int64(usage.TotalTokens))
 		}
 	} else {
 		usage, respErr = adaptor.DoResponse(c, resp, meta)
