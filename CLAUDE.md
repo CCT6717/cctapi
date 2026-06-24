@@ -469,11 +469,24 @@ Each virtual model now has its own `fallback_order` list, exposed via the API. T
 - `getAndValidateTextRequest()` 检测 Claude 格式，设置 `c.Set("claude_format", true)`
 - `RelayTextHelper` 中 `adaptor.DoResponse` 前用 `bufferedResponseWriter` 包裹 `c.Writer`
 - adaptor 写入 OpenAI 格式到缓冲 → 缓冲完成后调用 `convertAndWriteClaudeResponse` / `convertAndWriteClaudeStream` 转为 Claude 格式写入真实 writer
-- 错误响应也转为 Claude 格式 `{type:"error", error:{type,message}}`
+
+**错误格式**：`common/claudeutil/claudeutil.go`
+- `IsClaudeRequest(c)` — 三层检测：context flag → `anthropic-version` header → `/v1/messages` path prefix
+- `WriteClaudeOrOpenAIError(c, statusCode, errType, message)` — 根据请求格式输出对应错误 JSON
+- Claude 格式：`{"type":"error","error":{"type":"...","message":"..."}}`
+- 使用方：`controller/relay.go`（7 处）、`middleware/utils.go`（abortWithMessage）、`middleware/recover.go`（panic）
 
 **路由**：`router/relay.go` 注册 `/v1/messages`，`relaymode/helper.go` 识别为 `ChatCompletions` 模式。
 
-**备用实现**：`relay/adaptor/openai/claude_compat.go` — openai 包内的独立 Claude 转换（避免循环导入）。
+**Model 映射**：通过 fallback.json 虚拟模型路由。当前配置：
+- 虚拟模型 `opus` → deployment `claude-opus-sensenova` → channel 10（商汤 SenseNova），`real_model: sensenova-6.7-flash-lite`
+- 新增 Claude 模型名只需在 `fallback.json` 的 `virtual_models` + `deployments` 中添加条目
+
+**Prometheus 指标**：`common/metrics.go`
+- `claude_api_requests_total` — Claude 格式请求总数
+- `claude_api_tokens_total` — Claude 格式请求消耗的 token 总数
+- 埋点位置：`relay/controller/text.go` 的 `isClaude == true` 分支内
+- 自动出现在 `/metrics` 端点和 MetricsPanel 计数器表
 
 ## Deployment Row UI (2026-06-24)
 
