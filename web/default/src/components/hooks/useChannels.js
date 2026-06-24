@@ -35,6 +35,8 @@ export const useChannels = () => {
       const parsed = allChannels.map((ch) => ({
         id: ch.id,
         name: ch.name || `渠道 ${ch.id}`,
+        base_url: ch.base_url || '',
+        key: ch.key || '',
         models: (ch.models || '').split(',').map((m) => m.trim()).filter(Boolean),
       }));
       setChannels(parsed);
