@@ -62,6 +62,16 @@ func (a *Adaptor) DoRequest(c *gin.Context, meta *meta.Meta, requestBody io.Read
 }
 
 func (a *Adaptor) DoResponse(c *gin.Context, resp *http.Response, meta *meta.Meta) (usage *model.Usage, err *model.ErrorWithStatusCode) {
+	// 客户端发的是 Claude 格式请求，上游返回 OpenAI 格式，需要转回 Claude
+	if isClaude, _ := c.Get("claude_format"); isClaude == true {
+		if meta.IsStream {
+			err, usage = ClaudeFormatStreamHandler(c, resp)
+		} else {
+			err, usage = ClaudeFormatNonStreamHandler(c, resp)
+		}
+		return
+	}
+	// 原有逻辑：上游是真 Claude API，转为 OpenAI 格式返回
 	if meta.IsStream {
 		err, usage = StreamHandler(c, resp)
 	} else {

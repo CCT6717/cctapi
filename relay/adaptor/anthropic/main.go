@@ -377,3 +377,38 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 	_, err = c.Writer.Write(jsonResponse)
 	return nil, &usage
 }
+
+// ClaudeFormatNonStreamHandler handles non-streaming responses when the client
+// sent a Claude-format request. The upstream returned OpenAI format; convert it back.
+func ClaudeFormatNonStreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return openai.ErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError), nil
+	}
+	resp.Body.Close()
+
+	var openaiResp openai.TextResponse
+	if err = json.Unmarshal(responseBody, &openaiResp); err != nil {
+		return openai.ErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError), nil
+	}
+
+	claudeResp := ConvertOpenAIResponseToClaude(&openaiResp)
+
+	c.Writer.Header().Set("Content-Type", "application/json")
+	c.Writer.WriteHeader(resp.StatusCode)
+	json.NewEncoder(c.Writer).Encode(claudeResp)
+
+	usage := &model.Usage{
+		PromptTokens:     claudeResp.Usage.InputTokens,
+		CompletionTokens: claudeResp.Usage.OutputTokens,
+		TotalTokens:      claudeResp.Usage.InputTokens + claudeResp.Usage.OutputTokens,
+	}
+	return nil, usage
+}
+
+// ClaudeFormatStreamHandler handles streaming responses when the client
+// sent a Claude-format request. Reads OpenAI SSE from upstream and emits Claude SSE.
+func ClaudeFormatStreamHandler(c *gin.Context, resp *http.Response) (*model.ErrorWithStatusCode, *model.Usage) {
+	ConvertOpenAIStreamToClaude(c, resp)
+	return nil, nil // ponytail: streaming usage is best-effort, counted upstream
+}

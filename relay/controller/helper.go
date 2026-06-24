@@ -1,15 +1,19 @@
 package controller
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"strings"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/songquanpeng/one-api/relay/adaptor/anthropic"
 	"github.com/songquanpeng/one-api/relay/constant/role"
 
 	"github.com/gin-gonic/gin"
@@ -33,6 +37,24 @@ func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.Gener
 	err := common.UnmarshalBodyReusable(c, textRequest)
 	if err != nil {
 		return nil, err
+	}
+	// Claude 格式检测 + 转换（必须在 validation 之前）
+	if relayMode == relaymode.ChatCompletions {
+		if raw, _ := common.GetRequestBody(c); raw != nil {
+			var bodyMap map[string]any
+			if json.Unmarshal(raw, &bodyMap) == nil && anthropic.IsClaudeFormat(c, bodyMap) {
+				var claudeReq anthropic.Request
+				if json.Unmarshal(raw, &claudeReq) == nil {
+					textRequest = anthropic.ConvertClaudeRequestToOpenAI(&claudeReq)
+					c.Set("claude_format", true)
+					// 重写 context 中的 body，供后续 token 计数等复用
+					if newBody, err := json.Marshal(textRequest); err == nil {
+						c.Set(ctxkey.KeyRequestBody, newBody)
+						c.Request.Body = io.NopCloser(bytes.NewBuffer(newBody))
+					}
+				}
+			}
+		}
 	}
 	if relayMode == relaymode.Moderations && textRequest.Model == "" {
 		textRequest.Model = "text-moderation-latest"

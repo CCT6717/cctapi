@@ -128,7 +128,12 @@ func TokenAuth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		key := c.Request.Header.Get("Authorization")
-		key = strings.TrimPrefix(key, "Bearer ")
+		if key == "" {
+			key = c.Request.Header.Get("x-api-key")
+		} else {
+			key = strings.TrimPrefix(key, "Bearer ")
+		}
+		key = strings.TrimPrefix(key, "sk-ant-")
 		key = strings.TrimPrefix(key, "sk-")
 		parts := strings.Split(key, "-")
 		key = parts[0]
