@@ -596,13 +596,11 @@ const ModelEditor = ({ highlightDeployment }) => {
                     <Button
                       size='mini'
                       negative
-                      icon
-                      labelPosition='left'
                       loading={saving}
                       onClick={() => handleDeleteVirtualModel(vm.name)}
                     >
                       <Icon name='trash' />
-                      删除虚拟模型
+                      删除
                     </Button>
                   )}
                 </div>

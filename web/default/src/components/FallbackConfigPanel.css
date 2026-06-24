@@ -104,6 +104,13 @@
   gap: 6px !important;
 }
 
+.fallback-virtual-summary-actions .ui.negative.button {
+  width: auto !important;
+  height: 34px !important;
+  padding: 0 14px !important;
+  gap: 6px !important;
+}
+
 .fallback-virtual-summary-actions .ui.button .icon {
   margin: 0 !important;
 }
