@@ -215,6 +215,7 @@ web/default/src/components/deployments/DeploymentRow.js
 web/default/src/components/gateway-status/GatewayStatus.jsx
 web/default/src/components/hooks/useGatewayConfig.js
 web/default/src/components/hooks/useFallbackSave.js
+web/default/src/components/hooks/useChannels.js
 web/default/src/pages/Fallback/panels/KpiCards.js
 web/default/src/pages/Fallback/panels/StatusPanel.js
 web/default/src/components/Footer.js
@@ -439,3 +440,19 @@ Each virtual model now has its own `fallback_order` list, exposed via the API. T
 1. Semantic UI `<Button>` defaults to `type='submit'` — always add `type='button'` to prevent form submission.
 2. `window.confirm` causes browser scroll — save `window.scrollY` before confirm, restore after.
 3. Shared-pool deletion: with per-VM fallback_order, deleting a deployment from one VM only removes it from that VM's fallback_order, not from the global config. Other VMs sharing the same pool are unaffected.
+
+## Deployment Row UI (2026-06-24)
+
+Deployment rows display `渠道名 / 真实模型名`（如 `商汤2 / sensenova-6.7-flash-lite`）。
+
+- `useChannels` hook returns `{ id, name, base_url, key, models }` for each channel.
+- `channelDataMap` in FallbackConfigPanel passes full channel data to DeploymentRow.
+- Deployment details展开后自动填充 `base_url` 和 `key`（优先用 fallback config 的值，fallback 到渠道 API 数据）。
+
+### Key 显示 / 安全
+
+- 渠道列表 API `/api/channel/` 用 `Omit("key")` 不返回 key（安全设计）。
+- 单个渠道 API `/api/channel/:id` 原来也 omit key（`selectAll=false`），改为 `selectAll=true` 返回完整 key。
+- 前端密钥字段默认 `type='password'` 显示黑点。
+- 点击小眼睛按钮 → 调 `/api/channel/:id` 获取完整 key → 切换为明文显示。
+- `fallback_order` 已从 `legacyGatewayFields` 移除，不再被 v2 API 拦截（它是 v2 合法字段）。
