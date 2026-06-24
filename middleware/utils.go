@@ -9,13 +9,31 @@ import (
 	"strings"
 )
 
+func isClaudeRequest(c *gin.Context) bool {
+	if c.GetHeader("anthropic-version") != "" {
+		return true
+	}
+	return strings.HasPrefix(c.Request.URL.Path, "/v1/messages")
+}
+
 func abortWithMessage(c *gin.Context, statusCode int, message string) {
-	c.JSON(statusCode, gin.H{
-		"error": gin.H{
-			"message": helper.MessageWithRequestId(message, c.GetString(helper.RequestIdKey)),
-			"type":    "one_api_error",
-		},
-	})
+	msg := helper.MessageWithRequestId(message, c.GetString(helper.RequestIdKey))
+	if isClaudeRequest(c) {
+		c.JSON(statusCode, gin.H{
+			"type": "error",
+			"error": gin.H{
+				"type":    "one_api_error",
+				"message": msg,
+			},
+		})
+	} else {
+		c.JSON(statusCode, gin.H{
+			"error": gin.H{
+				"message": msg,
+				"type":    "one_api_error",
+			},
+		})
+	}
 	c.Abort()
 	logger.Error(c.Request.Context(), message)
 }

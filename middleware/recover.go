@@ -2,11 +2,12 @@ package middleware
 
 import (
 	"fmt"
+	"net/http"
+	"runtime/debug"
+
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/logger"
-	"net/http"
-	"runtime/debug"
 )
 
 func RelayPanicRecover() gin.HandlerFunc {
@@ -19,12 +20,23 @@ func RelayPanicRecover() gin.HandlerFunc {
 				logger.Errorf(ctx, fmt.Sprintf("request: %s %s", c.Request.Method, c.Request.URL.Path))
 				body, _ := common.GetRequestBody(c)
 				logger.Errorf(ctx, fmt.Sprintf("request body: %s", string(body)))
-				c.JSON(http.StatusInternalServerError, gin.H{
-					"error": gin.H{
-						"message": fmt.Sprintf("Panic detected, error: %v. Please submit an issue with the related log here: https://github.com/songquanpeng/one-api", err),
-						"type":    "one_api_panic",
-					},
-				})
+				msg := fmt.Sprintf("Panic detected, error: %v. Please submit an issue with the related log here: https://github.com/songquanpeng/one-api", err)
+				if isClaudeRequest(c) {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"type": "error",
+						"error": gin.H{
+							"type":    "one_api_panic",
+							"message": msg,
+						},
+					})
+				} else {
+					c.JSON(http.StatusInternalServerError, gin.H{
+						"error": gin.H{
+							"message": msg,
+							"type":    "one_api_panic",
+						},
+					})
+				}
 				c.Abort()
 			}
 		}()
