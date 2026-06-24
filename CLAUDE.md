@@ -219,6 +219,10 @@ web/default/src/components/hooks/useChannels.js
 web/default/src/pages/Fallback/panels/KpiCards.js
 web/default/src/pages/Fallback/panels/StatusPanel.js
 web/default/src/components/Footer.js
+relay/adaptor/anthropic/claude_convert.go   Claude ↔ OpenAI 请求/响应转换
+relay/adaptor/anthropic/claude_stream.go    OpenAI SSE → Claude SSE 流式转换
+relay/controller/buffered_writer.go         Claude 响应缓冲 + 格式转换
+relay/adaptor/openai/claude_compat.go       备用 Claude 转换实现
 scripts/fallback-smoke.ps1        Real client smoke test script
 ```
 
@@ -450,20 +454,26 @@ Each virtual model now has its own `fallback_order` list, exposed via the API. T
 `middleware/auth.go` 按顺序 strip `sk-ant-` 和 `sk-` 前缀。
 
 **请求转换**：`relay/adaptor/anthropic/claude_convert.go`
-- `IsClaudeFormat()` — 检测请求是否为 Claude 格式（检查 `stop_sequences`/`system`/`tool_use` 等信号）
+- `IsClaudeFormat(c, body)` — 检测请求是否为 Claude 格式（检查 `stop_sequences`/`system`/`tool_use` 等信号 + `anthropic-version` header）
+- `UnmarshalClaudeRequest(raw)` — 处理 Anthropic SDK 的 string/array content 兼容（`"content": "hello"` vs `"content": [{"type":"text","text":"hello"}]`）
 - `ConvertClaudeRequestToOpenAI()` — Claude 请求 → OpenAI `GeneralOpenAIRequest`
 - `convertClaudeMessages()` — 处理 text/image/tool_use/tool_result 四种 content type
 - `convertClaudeTools()` — `input_schema` → `function.parameters`
 - `convertClaudeToolChoice()` — auto/any/tool 映射
 
-**响应转换**：同文件 + `claude_stream.go`
+**响应转换**：`claude_convert.go` + `claude_stream.go`
 - `ConvertOpenAIResponseToClaude()` — 非流式：OpenAI `TextResponse` → Claude `Response`
-- `ConvertOpenAIStreamToClaude()` — 流式：OpenAI SSE → Claude SSE 事件流
-- `ClaudeFormatNonStreamHandler` / `ClaudeFormatStreamHandler` — adaptor.DoResponse 中的分支
+- `ConvertOpenAIStreamToClaude()` — 流式：OpenAI SSE → Claude SSE 事件流（message_start → content_block_delta → message_stop）
+
+**架构**：`relay/controller/text.go` + `buffered_writer.go`
+- `getAndValidateTextRequest()` 检测 Claude 格式，设置 `c.Set("claude_format", true)`
+- `RelayTextHelper` 中 `adaptor.DoResponse` 前用 `bufferedResponseWriter` 包裹 `c.Writer`
+- adaptor 写入 OpenAI 格式到缓冲 → 缓冲完成后调用 `convertAndWriteClaudeResponse` / `convertAndWriteClaudeStream` 转为 Claude 格式写入真实 writer
+- 错误响应也转为 Claude 格式 `{type:"error", error:{type,message}}`
 
 **路由**：`router/relay.go` 注册 `/v1/messages`，`relaymode/helper.go` 识别为 `ChatCompletions` 模式。
 
-**检测流程**：`getAndValidateTextRequest()` 在 validation 之前检测 Claude 格式，设置 `claude_format` context flag，adaptor.DoResponse 根据 flag 分流到 Claude 响应转换路径。
+**备用实现**：`relay/adaptor/openai/claude_compat.go` — openai 包内的独立 Claude 转换（避免循环导入）。
 
 ## Deployment Row UI (2026-06-24)
 
