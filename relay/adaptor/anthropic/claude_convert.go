@@ -209,6 +209,46 @@ func ExtractClaudeToolResultContent(content any) string {
 	return s
 }
 
+// UnmarshalClaudeRequest handles both string and array content formats.
+// Anthropic SDK may send "content": "hello" (string) or "content": [{"type":"text","text":"hello"}] (array).
+func UnmarshalClaudeRequest(raw []byte) (*Request, error) {
+	var req Request
+	if err := json.Unmarshal(raw, &req); err == nil {
+		return &req, nil
+	}
+	// Fallback: parse as raw map, normalize string content to []Content, retry
+	var rawMap map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &rawMap); err != nil {
+		return nil, err
+	}
+	msgsRaw, ok := rawMap["messages"]
+	if !ok {
+		return nil, json.Unmarshal(raw, &req) // return original error
+	}
+	var msgs []map[string]json.RawMessage
+	if err := json.Unmarshal(msgsRaw, &msgs); err != nil {
+		return nil, err
+	}
+	for i, msg := range msgs {
+		if contentRaw, exists := msg["content"]; exists {
+			// Check if content is a string (not an array)
+			var s string
+			if err := json.Unmarshal(contentRaw, &s); err == nil {
+				// String content → wrap in []Content
+				wrapped, _ := json.Marshal([]Content{{Type: "text", Text: s}})
+				msgs[i]["content"] = wrapped
+			}
+		}
+	}
+	normalized, _ := json.Marshal(msgs)
+	rawMap["messages"] = normalized
+	rebuilt, _ := json.Marshal(rawMap)
+	if err := json.Unmarshal(rebuilt, &req); err != nil {
+		return nil, err
+	}
+	return &req, nil
+}
+
 // IsClaudeFormat checks whether the request is Claude format.
 // Primary signal: Anthropic SDK always sends anthropic-version header.
 // Fallback: body-based heuristics (stop_sequences, system field, content block types).

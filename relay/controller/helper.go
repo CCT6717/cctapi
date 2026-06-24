@@ -42,10 +42,12 @@ func getAndValidateTextRequest(c *gin.Context, relayMode int) (*relaymodel.Gener
 	if relayMode == relaymode.ChatCompletions {
 		if raw, _ := common.GetRequestBody(c); raw != nil {
 			var bodyMap map[string]any
-			if json.Unmarshal(raw, &bodyMap) == nil && anthropic.IsClaudeFormat(c, bodyMap) {
-				var claudeReq anthropic.Request
-				if json.Unmarshal(raw, &claudeReq) == nil {
-					textRequest = anthropic.ConvertClaudeRequestToOpenAI(&claudeReq)
+			json.Unmarshal(raw, &bodyMap)
+			isClaude := anthropic.IsClaudeFormat(c, bodyMap)
+			if isClaude {
+				claudeReq, err := anthropic.UnmarshalClaudeRequest(raw)
+				if err == nil {
+					textRequest = anthropic.ConvertClaudeRequestToOpenAI(claudeReq)
 					c.Set("claude_format", true)
 					// 重写 context 中的 body，供后续 token 计数等复用
 					if newBody, err := json.Marshal(textRequest); err == nil {

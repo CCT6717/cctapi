@@ -89,7 +89,9 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	}
 
 	// For fallback streaming requests, use buffered handler to support fallback on stream failure
-	if meta.IsStream {
+	// Skip for Claude format requests — they need adaptor.DoResponse for format conversion
+	isClaudeFormat, _ := c.Get("claude_format")
+	if meta.IsStream && isClaudeFormat != true {
 		if realModelValue, exists := c.Get(ctxkey.FallbackRealModel); exists {
 			if realModel, ok := realModelValue.(string); ok && realModel != "" {
 				respErr, responseText, usage := openai.BufferedStreamHandler(c, resp, meta.Mode)
@@ -111,12 +113,43 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 		}
 	}
 
-	// do response
-	usage, respErr := adaptor.DoResponse(c, resp, meta)
-	if respErr != nil {
-		logger.Errorf(ctx, "respErr is not nil: %+v", respErr)
-		billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
-		return respErr
+	// do response — if Claude format request, convert output from OpenAI to Claude
+	isClaude, _ := c.Get("claude_format")
+	var usage *model.Usage
+	var respErr *model.ErrorWithStatusCode
+	if isClaude == true {
+		if meta.IsStream {
+			// Streaming: read full OpenAI SSE, convert to Claude SSE
+			bufWriter := &bufferedResponseWriter{ResponseWriter: c.Writer, statusCode: http.StatusOK}
+			c.Writer = bufWriter
+			usage, respErr = adaptor.DoResponse(c, resp, meta)
+			c.Writer = bufWriter.ResponseWriter
+			if respErr != nil {
+				logger.Errorf(ctx, "respErr is not nil: %+v", respErr)
+				billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+				return respErr
+			}
+			convertAndWriteClaudeStream(c, bufWriter)
+		} else {
+			// Non-streaming: buffer output, convert JSON
+			bufWriter := &bufferedResponseWriter{ResponseWriter: c.Writer, statusCode: http.StatusOK}
+			c.Writer = bufWriter
+			usage, respErr = adaptor.DoResponse(c, resp, meta)
+			c.Writer = bufWriter.ResponseWriter
+			if respErr != nil {
+				logger.Errorf(ctx, "respErr is not nil: %+v", respErr)
+				billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+				return respErr
+			}
+			convertAndWriteClaudeResponse(c, bufWriter)
+		}
+	} else {
+		usage, respErr = adaptor.DoResponse(c, resp, meta)
+		if respErr != nil {
+			logger.Errorf(ctx, "respErr is not nil: %+v", respErr)
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+			return respErr
+		}
 	}
 	// post-consume quota
 	go postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
