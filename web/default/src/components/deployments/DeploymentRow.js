@@ -219,13 +219,18 @@ const DeploymentRow = ({
                 value={editKey !== null ? editKey : (realKey !== null ? realKey : dep.key || channelData?.key || '')}
                 placeholder='sk-...'
                 onChange={(_, { value }) => setEditKey(value)}
-                icon={
-                  <Icon
-                    name={keyLoading ? 'spinner loading' : (showKey ? 'eye slash' : 'eye')}
-                    link
+                action={
+                  <Button
+                    type='button'
+                    size='mini'
+                    icon
+                    basic
+                    loading={keyLoading}
                     onClick={handleToggleKey}
                     title={showKey ? '隐藏密钥' : '显示密钥'}
-                  />
+                  >
+                    <Icon name={showKey ? 'eye slash' : 'eye'} />
+                  </Button>
                 }
               />
             </div>
