@@ -283,6 +283,7 @@ npm run build
 | `/api/fallback/*` | `router/fallback.go` | Fallback admin API + built-in HTML pages |
 | `/api/*` | `router/api.go` | Main API (channels, tokens, logs, etc.) |
 | `/relay/*` | `router/relay.go` | Relay proxy endpoints |
+| `/v1/messages` | `controller/relay.go` | Claude API 兼容接口（Anthropic SDK 可直连） |
 | `/dashboard/*` | `router/dashboard.go` | Dashboard data endpoints |
 | `/web/*` | `router/web.go` | Static files and settings UI |
 
@@ -440,6 +441,29 @@ Each virtual model now has its own `fallback_order` list, exposed via the API. T
 1. Semantic UI `<Button>` defaults to `type='submit'` — always add `type='button'` to prevent form submission.
 2. `window.confirm` causes browser scroll — save `window.scrollY` before confirm, restore after.
 3. Shared-pool deletion: with per-VM fallback_order, deleting a deployment from one VM only removes it from that VM's fallback_order, not from the global config. Other VMs sharing the same pool are unaffected.
+
+## Claude API 兼容接口 (2026-06-24)
+
+`POST /v1/messages` — 接受 Anthropic Messages API 格式，客户端可用 Anthropic SDK 直连。
+
+**认证**：支持 `x-api-key` header（Anthropic SDK 默认方式）和 `Authorization: Bearer`（OpenAI 方式）。
+`middleware/auth.go` 按顺序 strip `sk-ant-` 和 `sk-` 前缀。
+
+**请求转换**：`relay/adaptor/anthropic/claude_convert.go`
+- `IsClaudeFormat()` — 检测请求是否为 Claude 格式（检查 `stop_sequences`/`system`/`tool_use` 等信号）
+- `ConvertClaudeRequestToOpenAI()` — Claude 请求 → OpenAI `GeneralOpenAIRequest`
+- `convertClaudeMessages()` — 处理 text/image/tool_use/tool_result 四种 content type
+- `convertClaudeTools()` — `input_schema` → `function.parameters`
+- `convertClaudeToolChoice()` — auto/any/tool 映射
+
+**响应转换**：同文件 + `claude_stream.go`
+- `ConvertOpenAIResponseToClaude()` — 非流式：OpenAI `TextResponse` → Claude `Response`
+- `ConvertOpenAIStreamToClaude()` — 流式：OpenAI SSE → Claude SSE 事件流
+- `ClaudeFormatNonStreamHandler` / `ClaudeFormatStreamHandler` — adaptor.DoResponse 中的分支
+
+**路由**：`router/relay.go` 注册 `/v1/messages`，`relaymode/helper.go` 识别为 `ChatCompletions` 模式。
+
+**检测流程**：`getAndValidateTextRequest()` 在 validation 之前检测 Claude 格式，设置 `claude_format` context flag，adaptor.DoResponse 根据 flag 分流到 Claude 响应转换路径。
 
 ## Deployment Row UI (2026-06-24)
 
