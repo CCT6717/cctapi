@@ -245,7 +245,7 @@ const RegisterForm = () => {
                 style={{
                   textAlign: 'center',
                   fontSize: '0.9em',
-                  color: '#666',
+                  color: '#374151',
                 }}
               >
                 {t('auth.register.has_account')}

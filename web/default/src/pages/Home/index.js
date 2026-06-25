@@ -134,7 +134,7 @@ const Home = () => {
                           <a
                             href='https://github.com/songquanpeng/one-api'
                             target='_blank'
-                            style={{ color: '#2185d0' }}
+                            style={{ color: 'var(--fb-primary, #3b82f6)' }}
                           >
                             {t('home.system_status.info.source_link')}
                           </a>

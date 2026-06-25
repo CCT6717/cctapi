@@ -127,7 +127,7 @@ const PasswordResetConfirm = () => {
                 loading={loading}
                 disabled={disableButton}
                 style={{
-                  background: '#2F73FF',
+                  background: 'var(--fb-primary, #3b82f6)',
                   color: 'white',
                   marginBottom: '1.5em',
                 }}
@@ -139,7 +139,7 @@ const PasswordResetConfirm = () => {
             </Form>
             {newPassword && (
               <Message style={{ background: 'transparent', boxShadow: 'none' }}>
-                <p style={{ fontSize: '0.9em', color: '#666' }}>
+                <p style={{ fontSize: '0.9em', color: '#6B7280' }}>
                   {t('auth.reset.confirm.notice')}
                 </p>
               </Message>

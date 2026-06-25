@@ -132,7 +132,7 @@ const PasswordResetForm = () => {
                 loading={loading}
                 disabled={disableButton}
                 style={{
-                  background: '#2F73FF', // 使用更现代的蓝色
+                  background: 'var(--fb-primary, #3b82f6)',
                   color: 'white',
                   marginBottom: '1.5em',
                 }}
@@ -143,7 +143,7 @@ const PasswordResetForm = () => {
               </Button>
             </Form>
             <Message style={{ background: 'transparent', boxShadow: 'none' }}>
-              <p style={{ fontSize: '0.9em', color: '#666' }}>
+              <p style={{ fontSize: '0.9em', color: '#6B7280' }}>
                 {t('auth.reset.notice')}
               </p>
             </Message>
