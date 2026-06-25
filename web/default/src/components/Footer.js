@@ -30,7 +30,7 @@ const Footer = () => {
 
   return (
     <Segment vertical>
-      <Container textAlign='center' style={{ color: '#666666' }}>
+      <Container textAlign='center' style={{ color: '#6B7280' }}>
         {footer ? (
           <div
             className='custom-footer'

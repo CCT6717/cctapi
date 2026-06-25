@@ -35,21 +35,21 @@ const chartConfig = {
     },
   },
   colors: {
-    requests: '#4318FF',
-    quota: '#00B5D8',
-    tokens: '#6C63FF',
+    requests: '#2563EB',
+    quota: '#0891B2',
+    tokens: '#059669',
   },
   barColors: [
-    '#4318FF', // 深紫色
-    '#00B5D8', // 青色
-    '#6C63FF', // 紫色
-    '#05CD99', // 绿色
-    '#FFB547', // 橙色
-    '#FF5E7D', // 粉色
-    '#41B883', // 翠绿
-    '#7983FF', // 淡紫
-    '#FF8F6B', // 珊瑚色
-    '#49BEFF', // 天蓝
+    '#2563EB', // 蓝
+    '#0891B2', // 青
+    '#059669', // 绿
+    '#D97706', // 琥珀
+    '#E11D48', // 玫红
+    '#7C3AED', // 紫
+    '#0D9488', // 碧
+    '#4F46E5', // 靛
+    '#DC2626', // 红
+    '#0284C7', // 天蓝
   ],
 };
 
@@ -224,7 +224,7 @@ const Dashboard = () => {
     tickLine: false,
     tick: {
       fontSize: 12,
-      fill: '#A3AED0',
+      fill: '#6B7280',
       textAnchor: 'middle', // 文本居中对齐
     },
     tickFormatter: formatDate,
@@ -418,7 +418,7 @@ const Dashboard = () => {
                 <YAxis
                   axisLine={false}
                   tickLine={false}
-                  tick={{ fontSize: 12, fill: '#A3AED0' }}
+                  tick={{ fontSize: 12, fill: '#6B7280' }}
                 />
                 <Tooltip
                   contentStyle={{

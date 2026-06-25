@@ -134,7 +134,7 @@ const Header = () => {
           style={{
             fontSize: '15px',
             fontWeight: '400',
-            color: '#666',
+            color: '#374151',
           }}
         >
           <Icon name={button.icon} style={{ marginRight: '4px' }} />
@@ -213,7 +213,7 @@ const Header = () => {
               </Menu.Item>
               <Menu.Item>
                 {userState.user ? (
-                  <Button onClick={logout} style={{ color: '#666666' }}>
+                  <Button onClick={logout} style={{ color: '#374151' }}>
                     {t('header.logout')}
                   </Button>
                 ) : (
@@ -269,7 +269,7 @@ const Header = () => {
               style={{
                 fontSize: '18px',
                 fontWeight: '500',
-                color: '#333',
+                color: '#111827',
               }}
             >
               {systemName}
@@ -288,7 +288,7 @@ const Header = () => {
               style={{
                 fontSize: '16px',
                 fontWeight: '400',
-                color: '#666',
+                color: '#374151',
                 padding: '0 10px',
               }}
             />
@@ -300,7 +300,7 @@ const Header = () => {
                 style={{
                   fontSize: '15px',
                   fontWeight: '400',
-                  color: '#666',
+                  color: '#374151',
                 }}
               >
                 <Dropdown.Menu>
@@ -309,7 +309,7 @@ const Header = () => {
                     style={{
                       fontSize: '15px',
                       fontWeight: '400',
-                      color: '#666',
+                      color: '#374151',
                     }}
                   >
                     {t('header.logout')}
@@ -325,7 +325,7 @@ const Header = () => {
                 style={{
                   fontSize: '15px',
                   fontWeight: '400',
-                  color: '#666',
+                  color: '#374151',
                 }}
               />
             )}

@@ -252,10 +252,7 @@
   font-weight: 700;
   line-height: 1.25;
   letter-spacing: -0.3px;
-  background: var(--fb-gradient);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
+  color: var(--fb-primary);
 }
 
 .fallback-page-header p {
@@ -1440,7 +1437,7 @@
   height: 100%;
   border-radius: inherit;
   background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  transition: width 0.35s ease, filter 0.2s ease;
+  transition: transform 0.35s ease, filter 0.2s ease;
 }
 
 .fallback-score-trend-row.is-top .fallback-score-trend-track span {
@@ -1703,7 +1700,7 @@
   width: var(--score-percent, 0%);
   border-radius: inherit;
   background: linear-gradient(90deg, #3b82f6, #8b5cf6);
-  transition: width 0.35s ease, filter 0.2s ease;
+  transition: transform 0.35s ease, filter 0.2s ease;
 }
 
 .fallback-subsection:has(.fallback-score-summary) tbody tr:first-child .fallback-score-mini-bars::before {

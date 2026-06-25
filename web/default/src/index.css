@@ -2,7 +2,7 @@ body {
     margin: 0;
     padding-top: 55px;
     overflow-y: scroll;
-    font-family: Lato, 'Helvetica Neue', Arial, Helvetica, "Microsoft YaHei", sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scrollbar-width: none;
@@ -118,6 +118,6 @@ code {
 
 /* Toastify z-index override */
 .Toastify__toast-container {
-  z-index: 99999 !important;
+  z-index: 10000 !important;
 }
 

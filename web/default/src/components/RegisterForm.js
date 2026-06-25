@@ -229,7 +229,7 @@ const RegisterForm = () => {
                 size='large'
                 onClick={handleSubmit}
                 style={{
-                  background: '#2F73FF', // 使用更现代的蓝色
+                  background: 'var(--fb-primary, #3b82f6)',
                   color: 'white',
                   marginBottom: '1.5em',
                 }}
@@ -251,7 +251,7 @@ const RegisterForm = () => {
                 {t('auth.register.has_account')}
                 <Link
                   to='/login'
-                  style={{ color: '#2185d0', marginLeft: '2px' }}
+                  style={{ color: 'var(--fb-primary, #3b82f6)', marginLeft: '2px' }}
                 >
                   {t('auth.register.login')}
                 </Link>

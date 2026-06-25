@@ -16,7 +16,7 @@
 }
 
 .stat-card:hover {
-    transform: translateY(-5px);
+    transform: translateY(-2px);
 }
 
 .stat-card .statistic {
@@ -58,10 +58,10 @@
 }
 
 .stat-value {
-    color: #4318FF;
+    color: #2563EB;
     font-weight: bold;
     font-size: 1.1em;
-    background: rgba(67, 24, 255, 0.1);
+    background: rgba(37, 99, 235, 0.1);
     padding: 4px 12px;
     border-radius: 8px;
     white-space: nowrap; /* 防止数值换行 */
