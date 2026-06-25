@@ -97,19 +97,23 @@ const LoginForm = () => {
   }
 
   return (
-    <Grid textAlign='center' style={{ marginTop: '48px' }}>
-      <Grid.Column style={{ maxWidth: 450 }}>
+    <Grid textAlign='center' style={{ marginTop: '48px', minHeight: '60vh', alignContent: 'center' }}>
+      <Grid.Column style={{ maxWidth: 420 }}>
         <Card
           fluid
-          className='chart-card'
-          style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.12)' }}
+          style={{
+            boxShadow: '0 1px 3px rgba(0,0,0,0.08), 0 4px 16px rgba(0,0,0,0.06)',
+            border: '1px solid #E5E7EB',
+            borderRadius: '12px',
+            padding: '8px 0',
+          }}
         >
           <Card.Content>
             <Card.Header>
               <Header
                 as='h2'
                 textAlign='center'
-                style={{ marginBottom: '1.5em' }}
+                style={{ marginBottom: '1.5em', fontWeight: '600', letterSpacing: '-0.3px' }}
               >
                 <Image src={logo} style={{ marginBottom: '10px' }} />
                 <Header.Content>{t('auth.login.title')}</Header.Content>

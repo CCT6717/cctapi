@@ -132,9 +132,10 @@ const Header = () => {
           as={Link}
           to={button.to}
           style={{
-            fontSize: '15px',
-            fontWeight: '400',
+            fontSize: '14px',
+            fontWeight: '500',
             color: '#374151',
+            transition: 'color 0.15s ease',
           }}
         >
           <Icon name={button.icon} style={{ marginRight: '4px' }} />
@@ -252,8 +253,9 @@ const Header = () => {
         borderless
         style={{
           borderTop: 'none',
-          boxShadow: 'rgba(0, 0, 0, 0.04) 0px 2px 12px 0px',
+          boxShadow: 'none',
           border: 'none',
+          borderBottom: '1px solid #E5E7EB',
         }}
       >
         <Container
@@ -264,12 +266,13 @@ const Header = () => {
           }}
         >
           <Menu.Item as={Link} to='/' className={'hide-on-mobile'}>
-            <img src={logo} alt='logo' style={{ marginRight: '0.75em' }} />
+            <img src={logo} alt='logo' style={{ marginRight: '0.75em', height: '28px' }} />
             <div
               style={{
                 fontSize: '18px',
-                fontWeight: '500',
+                fontWeight: '600',
                 color: '#111827',
+                letterSpacing: '-0.3px',
               }}
             >
               {systemName}
