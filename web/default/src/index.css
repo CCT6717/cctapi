@@ -3,6 +3,9 @@ body {
     padding-top: 55px;
     overflow-y: scroll;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    letter-spacing: 0.01em;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     scrollbar-width: none;
@@ -119,5 +122,73 @@ code {
 /* Toastify z-index override */
 .Toastify__toast-container {
   z-index: 10000 !important;
+}
+
+/* === 全局字号放大 + 清晰易读 === */
+
+/* 表格文字放大 */
+.ui.table {
+  font-size: 14px !important;
+}
+.ui.table .header,
+.ui.table td,
+.ui.table th {
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+}
+
+/* 表单输入框放大 */
+.ui.form input[type="text"],
+.ui.form input[type="password"],
+.ui.form input[type="email"],
+.ui.form input[type="number"],
+.ui.form textarea,
+.ui.form .ui.input > input {
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+}
+
+/* 表单标签放大 */
+.ui.form .field > label {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* 按钮文字 */
+.ui.button {
+  font-size: 14px !important;
+  font-weight: 500 !important;
+}
+
+/* 菜单导航 */
+.ui.menu .item {
+  font-size: 14px !important;
+}
+
+/* 卡片标题 */
+.ui.card > .content > .header {
+  font-size: 16px !important;
+}
+
+/* 段落和描述文字 */
+.ui.card > .content > .description,
+.ui.card > .content p {
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+}
+
+/* 下拉菜单 */
+.ui.dropdown .menu > .item {
+  font-size: 14px !important;
+}
+
+/* 消息提示 */
+.ui.message {
+  font-size: 14px !important;
+}
+
+/* 分页 */
+.ui.pagination .item {
+  font-size: 14px !important;
 }
 
