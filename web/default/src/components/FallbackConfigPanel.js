@@ -31,7 +31,7 @@ import './FallbackConfigPanel.css';
 
 const ModelEditor = ({ highlightDeployment }) => {
   // Gateway config + deployment modes (modes initialised from config)
-  const { config, loading, error, loadConfig, deploymentMode, setDeploymentMode } = useGatewayConfig();
+  const { config, allDeployments, loading, error, loadConfig, deploymentMode, setDeploymentMode } = useGatewayConfig();
   // Runtime statuses (optional, silent fail)
   const { deploymentStatuses, loadDeploymentStatuses } = useDeploymentStatuses();
   // Channels for the model selector (optional, silent fail)
@@ -54,6 +54,9 @@ const ModelEditor = ({ highlightDeployment }) => {
 
   const HIDDEN_VMS = [];
 
+  // Full deployment map (editor config) for pool→deployment matching; includes free pool.
+  const fullDeploymentMap = useMemo(() => allDeployments || config?.deployments || {}, [allDeployments, config]);
+
   const visibleDeploymentIds = useMemo(() => {
     if (!config?.deployments) return [];
     return Object.keys(config.deployments).filter(
@@ -74,11 +77,13 @@ const ModelEditor = ({ highlightDeployment }) => {
       const pools = Array.isArray(vm.pools) ? vm.pools : [];
       let fallbackOrder;
       // Use backend fallback_order if provided; otherwise derive from pools.
+      // ponytail: use fullDeploymentMap (includes free pool) for accurate counts.
+      const allDepIds = Object.keys(fullDeploymentMap).filter((id) => !isSeparatorKey(id));
       if (Array.isArray(vm.fallback_order) && vm.fallback_order.length > 0) {
-        fallbackOrder = vm.fallback_order.filter((id) => config.deployments[id]);
+        fallbackOrder = vm.fallback_order.filter((id) => fullDeploymentMap[id]);
       } else {
-        fallbackOrder = visibleDeploymentIds.filter((id) => {
-          const dep = config.deployments[id];
+        fallbackOrder = allDepIds.filter((id) => {
+          const dep = fullDeploymentMap[id];
           return dep && pools.includes(dep.pool);
         });
       }
@@ -88,7 +93,7 @@ const ModelEditor = ({ highlightDeployment }) => {
         fallback_order: fallbackOrder,
       };
     }).filter(Boolean);
-  }, [config, visibleDeploymentIds]);
+  }, [config, fullDeploymentMap]);
 
   const deploymentArray = useMemo(() => {
     if (!config?.deployments) return [];
@@ -100,11 +105,15 @@ const ModelEditor = ({ highlightDeployment }) => {
 
   const deploymentsById = useMemo(() => {
     const map = {};
+    // ponytail: merge fullDeploymentMap so fallback_order can resolve free pool deps
+    Object.entries(fullDeploymentMap).forEach(([id, dep]) => {
+      if (!isSeparatorKey(id)) map[id] = dep;
+    });
     deploymentArray.forEach((dep) => {
       map[dep.id] = dep;
     });
     return map;
-  }, [deploymentArray]);
+  }, [deploymentArray, fullDeploymentMap]);
 
   const channelNameMap = useMemo(() => {
     const map = {};
@@ -140,18 +149,27 @@ const ModelEditor = ({ highlightDeployment }) => {
     }
   }, [loadDeploymentStatuses]);
 
-  // Existing (channel_id, real_model) pairs in non-free deployments
-  const existingPairs = useMemo(() => {
-    const pairs = new Set();
-    if (!config?.deployments) return pairs;
+  // Existing (channel_id, real_model) pairs — per VM, scoped to current VM's pools
+  const existingPairsByVm = useMemo(() => {
+    const map = {}; // vmKey → Set of "channel_id:real_model"
+    if (!config?.deployments || !config?.virtual_models) return map;
+    // Build pool→vmKey map
+    const poolToVm = {};
+    Object.entries(config.virtual_models).forEach(([vmKey, vm]) => {
+      (vm.pools || []).forEach((p) => { poolToVm[p] = vmKey; });
+    });
     Object.entries(config.deployments).forEach(([id, dep]) => {
       if (isSeparatorKey(id)) return;
       if (isFreeDeployment(id, dep)) return;
       if (dep?.channel_id && dep?.real_model) {
-        pairs.add(`${dep.channel_id}:${dep.real_model}`);
+        const vmKey = poolToVm[dep.pool];
+        if (vmKey) {
+          if (!map[vmKey]) map[vmKey] = new Set();
+          map[vmKey].add(`${dep.channel_id}:${dep.real_model}`);
+        }
       }
     });
-    return pairs;
+    return map;
   }, [config]);
 
   // Manual channels only (exclude free pool channels)
@@ -629,10 +647,11 @@ const ModelEditor = ({ highlightDeployment }) => {
                           value={selectorState[vmKey]?.value || ''}
                           options={(() => {
                             const opts = [];
+                            const vmPairs = existingPairsByVm[vmKey] || new Set();
                             manualChannels.forEach((ch) => {
                               ch.models.forEach((model) => {
                                 const pairKey = `${ch.id}:${model}`;
-                                const exists = existingPairs.has(pairKey);
+                                const exists = vmPairs.has(pairKey);
                                 opts.push({
                                   key: pairKey,
                                   value: pairKey,
