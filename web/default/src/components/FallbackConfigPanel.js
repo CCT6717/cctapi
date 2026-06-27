@@ -254,8 +254,10 @@ const ModelEditor = ({ highlightDeployment }) => {
       (fresh) => {
         const payload = JSON.parse(JSON.stringify(fresh));
         if (!payload.deployments) payload.deployments = {};
+        // ponytail: only check duplicates within the target VM's pools
+        const vmPools = new Set(config?.virtual_models?.[vmKey]?.pools || []);
         for (const [, dep] of Object.entries(payload.deployments)) {
-          if (dep?.channel_id === channelId && dep?.real_model === model) {
+          if (dep?.channel_id === channelId && dep?.real_model === model && vmPools.has(dep.pool)) {
             setSaveMessage({ type: 'error', text: `该渠道已有模型 ${model}，不可重复添加` });
             return null;
           }
