@@ -213,7 +213,7 @@ func TestGatewayGetConfig_Success(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Test 2-4: Legacy field rejection (routing_mode, fallback_order, fixed_deployment)
+// Test 2-4: Legacy field rejection (fixed_deployment)
 // ---------------------------------------------------------------------------
 
 func TestGatewayUpdateConfig_LegacyFieldsRejected(t *testing.T) {
@@ -221,11 +221,10 @@ func TestGatewayUpdateConfig_LegacyFieldsRejected(t *testing.T) {
 	setupGatewayConfigReadOnly(t, baseValidConfigJSON)
 
 	tests := []struct {
-		name       string
-		legacyKey  string
-		legacyVal  string
+		name      string
+		legacyKey string
+		legacyVal string
 	}{
-		{"routing_mode", "routing_mode", `"weighted"`},
 		// fallback_order is no longer a legacy field — manual-config returns it legitimately.
 		{"fixed_deployment", "fixed_deployment", `"dep-1"`},
 	}
@@ -789,8 +788,8 @@ func TestContainsLegacyFields(t *testing.T) {
 		},
 		{
 			"routing_mode at top level",
-			`{"routing_mode":"weighted"}`,
-			true,
+			`{"routing_mode":"fallback"}`,
+			false,
 		},
 		{
 			"fallback_order nested (not legacy — manual-config returns it)",
@@ -803,9 +802,9 @@ func TestContainsLegacyFields(t *testing.T) {
 			true,
 		},
 		{
-			"legacy field in array element",
+			"routing_mode in array element",
 			`{"items":[{"routing_mode":"fixed"}]}`,
-			true,
+			false,
 		},
 		{
 			"no legacy fields in complex payload",

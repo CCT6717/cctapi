@@ -42,6 +42,7 @@ const ModelEditor = ({ highlightDeployment }) => {
   const { execute, saving, saveMessage, setSaveMessage } = useFallbackSave({ loadConfig, loadDeploymentStatuses });
   const [draftDeployments, setDraftDeployments] = useState({});
   const [draftRoutingVm, setDraftRoutingVm] = useState({}); // { [vmKey]: strategy }
+  const [draftVirtualRouting, setDraftVirtualRouting] = useState({});
   const [selectorState, setSelectorState] = useState({});
   const [healthTesting, setHealthTesting] = useState({});
   const [healthResults, setHealthResults] = useState({});
@@ -221,6 +222,16 @@ const ModelEditor = ({ highlightDeployment }) => {
       }
       return next;
     });
+    if (mode === 'fixed' || mode === 'quota' || mode === 'error') {
+      setDraftVirtualRouting((prev) => ({
+        ...prev,
+        [vmKey]: {
+          ...(prev[vmKey] || {}),
+          routing_mode: mode === 'fixed' ? 'fixed' : 'fallback',
+          preferred_deployment: depId,
+        },
+      }));
+    }
     if (mode === 'quota') {
       setDraftDeployments((prev) => {
         const cur = prev[depId];
@@ -236,17 +247,17 @@ const ModelEditor = ({ highlightDeployment }) => {
         [depId]: { ...(prev[depId] || {}), daily_limit_tokens: 0 },
       }));
     }
-  }, [deploymentOwnerVm, setDeploymentMode, setDraftDeployments]);
+  }, [config, deploymentOwnerVm, setDeploymentMode, setDraftDeployments, setSaveMessage]);
 
   const handleSave = useCallback(async () => {
     await execute(
-      (fresh) => buildSavePayload(fresh, { draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm }),
+      (fresh) => buildSavePayload(fresh, { draftDeployments, draftRoutingVm, draftVirtualRouting, deploymentMode, deploymentOwnerVm }),
       {
         successMsg: '保存成功',
-        onSaved: () => { setDraftDeployments({}); setDraftRoutingVm({}); },
+        onSaved: () => { setDraftDeployments({}); setDraftRoutingVm({}); setDraftVirtualRouting({}); },
       }
     );
-  }, [execute, draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm]);
+  }, [execute, draftDeployments, draftRoutingVm, draftVirtualRouting, deploymentMode, deploymentOwnerVm]);
 
   const handleAddDeployment = useCallback(async (channelId, model, pool, vmKey) => {
     const ok = await execute(
@@ -571,6 +582,9 @@ const ModelEditor = ({ highlightDeployment }) => {
           const vmKey = vm.name;
           const vmExpanded = !!expandedVirtualModels[vmKey];
           const modelCount = (vm.fallback_order || []).length;
+          const routeDraft = draftVirtualRouting[vmKey] || {};
+          const routingMode = routeDraft.routing_mode || vm.routing_mode || 'fallback';
+          const preferredDeployment = routeDraft.preferred_deployment || vm.preferred_deployment || '';
 
           return (
             <section className='fallback-virtual-panel' key={vmKey}>
@@ -748,7 +762,10 @@ const ModelEditor = ({ highlightDeployment }) => {
                       const statusMeta = getDeploymentStatusMeta(deploymentStatus);
                       const ownerNames = getDeploymentOwnerNames(vmArray, deploymentId);
                       const ownerText = ownerNames.join(' / ');
-                      const currentMode = deploymentMode[dep.id] || computeInitialMode(config, dep.id);
+                      const rowMode = deploymentMode[dep.id] || computeInitialMode(config, dep.id);
+                      const currentMode = routingMode === 'fixed'
+                        ? (preferredDeployment === dep.id && rowMode !== 'quota' ? 'fixed' : rowMode === 'quota' ? 'quota' : 'error')
+                        : rowMode;
 
                       return (
                         <DeploymentRow

@@ -30,6 +30,8 @@ export const slugModelName = (name) =>
 export const computeInitialMode = (data, depId) => {
   const dep = data?.deployments?.[depId];
   if (!dep) return 'error';
+  const vms = data?.virtual_models || {};
+  if (Object.values(vms).some((vm) => vm?.routing_mode === 'fixed' && vm?.preferred_deployment === depId)) return 'fixed';
   if (dep.daily_limit_tokens > 0) return 'quota';
   if (dep.pool && dep.pool.startsWith('_fixed_')) return 'fixed';
   return 'error';

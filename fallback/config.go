@@ -30,13 +30,13 @@ type FreeProviderConfig struct {
 }
 
 type Config struct {
-	Enabled       bool                          `json:"enabled"`
-	VirtualModels map[string]VirtualModelConfig `json:"virtual_models"`
-	Deployments   map[string]DeploymentConfig   `json:"deployments"`
-	FreeProviders map[string]FreeProviderConfig `json:"free_providers,omitempty"`
-	Alert         AlertConfig                   `json:"alert"`
-	SmartSort     SmartSortConfig               `json:"smart_sort"`
-	BlockedErrorCodes []string                  `json:"blocked_error_codes"`
+	Enabled           bool                          `json:"enabled"`
+	VirtualModels     map[string]VirtualModelConfig `json:"virtual_models"`
+	Deployments       map[string]DeploymentConfig   `json:"deployments"`
+	FreeProviders     map[string]FreeProviderConfig `json:"free_providers,omitempty"`
+	Alert             AlertConfig                   `json:"alert"`
+	SmartSort         SmartSortConfig               `json:"smart_sort"`
+	BlockedErrorCodes []string                      `json:"blocked_error_codes"`
 }
 
 type VirtualModelConfig struct {
@@ -48,35 +48,36 @@ type VirtualModelConfig struct {
 	AllowDegradeToFree bool     `json:"allow_degrade_to_free"`
 	// Legacy — populated from old-format fallback.json, ignored for new configs.
 	// These get zero-values when JSON doesn't have them, so new configs are clean.
-	RoutingMode      string   `json:"routing_mode,omitempty"`
-	FallbackOrder    []string `json:"fallback_order,omitempty"`
-	FixedDeployment  string   `json:"fixed_deployment,omitempty"`
+	RoutingMode         string   `json:"routing_mode,omitempty"`
+	PreferredDeployment string   `json:"preferred_deployment,omitempty"`
+	FallbackOrder       []string `json:"fallback_order,omitempty"`
+	FixedDeployment     string   `json:"fixed_deployment,omitempty"`
 }
 
 type DeploymentConfig struct {
-	ID                    string `json:"-"`
-	Enabled               bool   `json:"enabled"`
-	ChannelID             int    `json:"channel_id"`
-	RealModel             string `json:"real_model"`
-	Pool                  string `json:"pool"` // paid_high / cheap / local / free
-	QualityTier           string `json:"quality_tier"` // high / medium / low
-	CostTier              string `json:"cost_tier"`    // free / cheap / paid
-	SupportsVision        bool   `json:"supports_vision"`
-	SupportsStream        bool   `json:"supports_stream"`
-	SupportsTools         bool   `json:"supports_tools"`
-	SupportsJSON          bool   `json:"supports_json"`
-	ContextLength         int    `json:"context_length"`
-	Priority              int    `json:"priority"`
-	Weight                int    `json:"weight"`
-	MaxConcurrentRequests int    `json:"max_concurrent_requests"`
-	DailyLimitTokens      int64  `json:"daily_limit_tokens"`
-	QuotaMode             string `json:"quota_mode"`
+	ID                    string  `json:"-"`
+	Enabled               bool    `json:"enabled"`
+	ChannelID             int     `json:"channel_id"`
+	RealModel             string  `json:"real_model"`
+	Pool                  string  `json:"pool"`         // paid_high / cheap / local / free
+	QualityTier           string  `json:"quality_tier"` // high / medium / low
+	CostTier              string  `json:"cost_tier"`    // free / cheap / paid
+	SupportsVision        bool    `json:"supports_vision"`
+	SupportsStream        bool    `json:"supports_stream"`
+	SupportsTools         bool    `json:"supports_tools"`
+	SupportsJSON          bool    `json:"supports_json"`
+	ContextLength         int     `json:"context_length"`
+	Priority              int     `json:"priority"`
+	Weight                int     `json:"weight"`
+	MaxConcurrentRequests int     `json:"max_concurrent_requests"`
+	DailyLimitTokens      int64   `json:"daily_limit_tokens"`
+	QuotaMode             string  `json:"quota_mode"`
 	SoftLimitRatio        float64 `json:"soft_limit_ratio"`
 	HardLimitRatio        float64 `json:"hard_limit_ratio"`
-	RPMLimit              int    `json:"rpm_limit"`
-	RPDLimit              int    `json:"rpd_limit"`
-	TPMLimit              int    `json:"tpm_limit"`
-	TPDLimit              int    `json:"tpd_limit"`
+	RPMLimit              int     `json:"rpm_limit"`
+	RPDLimit              int     `json:"rpd_limit"`
+	TPMLimit              int     `json:"tpm_limit"`
+	TPDLimit              int     `json:"tpd_limit"`
 }
 
 var (
@@ -88,6 +89,8 @@ const (
 	StrategyQualityFirst = "quality_first"
 	StrategyCostFirst    = "cost_first"
 	StrategyFreeFirst    = "free_first"
+	RoutingModeFallback  = "fallback"
+	RoutingModeFixed     = "fixed"
 )
 
 var ValidStrategies = []string{StrategyQualityFirst, StrategyCostFirst, StrategyFreeFirst}
@@ -107,6 +110,15 @@ func normalizeStrategy(s string) string {
 
 func NormalizeStrategy(s string) string {
 	return normalizeStrategy(s)
+}
+
+func normalizeRoutingMode(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case RoutingModeFixed:
+		return RoutingModeFixed
+	default:
+		return RoutingModeFallback
+	}
 }
 
 // loadConfigData parses JSON config data and applies normalization defaults.
@@ -130,8 +142,12 @@ func loadConfigData(data []byte) (*Config, error) {
 		cfg.SmartSort.Weights = defaults.Weights
 	}
 
+	legacyVirtualModels := make(map[string]bool)
 	for name, vm := range cfg.VirtualModels {
 		vm.Strategy = normalizeStrategy(vm.Strategy)
+		if len(vm.Pools) == 0 && (len(vm.FallbackOrder) > 0 || vm.FixedDeployment != "") {
+			legacyVirtualModels[name] = true
+		}
 		if len(vm.Pools) == 0 {
 			vm.Pools = []string{"default"}
 		}
@@ -140,22 +156,24 @@ func loadConfigData(data []byte) (*Config, error) {
 
 	// Detect old-format config (routing_mode/fallback_order era).
 	for name, vm := range cfg.VirtualModels {
-		if vm.RoutingMode == "" {
+		if !legacyVirtualModels[name] {
 			continue
 		}
 		logger.SysLogf("[config] legacy VM %q with routing_mode=%s — assigning synthetic pool", name, vm.RoutingMode)
 
-		switch vm.RoutingMode {
-		case "fixed":
-			// fixed_deployment is handled by GetDeploymentsForVirtualModel
-			// (returns just the one deployment). Still assign pool to the
-			// fixed deployment so validateConfigData can verify it.
+		if vm.FixedDeployment != "" && vm.PreferredDeployment == "" {
+			vm.PreferredDeployment = vm.FixedDeployment
+		}
+
+		switch normalizeRoutingMode(vm.RoutingMode) {
+		case RoutingModeFixed:
 			poolName := "_fixed_" + name
-			if dep, ok := cfg.Deployments[vm.FixedDeployment]; ok {
+			if dep, ok := cfg.Deployments[vm.PreferredDeployment]; ok {
 				dep.Pool = poolName
-				cfg.Deployments[vm.FixedDeployment] = dep
+				cfg.Deployments[vm.PreferredDeployment] = dep
 			}
 			vm.Pools = []string{poolName}
+			vm.RoutingMode = RoutingModeFixed
 		default:
 			// weighted / sequential: assign fallback_order deployments to a
 			// VM-specific pool so pool-based filtering works correctly.
@@ -167,6 +185,7 @@ func loadConfigData(data []byte) (*Config, error) {
 				}
 			}
 			vm.Pools = []string{poolName}
+			vm.RoutingMode = RoutingModeFallback
 		}
 		cfg.VirtualModels[name] = vm
 	}
@@ -330,18 +349,6 @@ func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error)
 		return nil, fmt.Errorf("virtual model not found or disabled: %s", modelName)
 	}
 
-	// Legacy fixed mode: return only the fixed_deployment, bypass pool/strategy.
-	if vm.RoutingMode == "fixed" && vm.FixedDeployment != "" {
-		if dep, ok := config.Deployments[vm.FixedDeployment]; ok && dep.Enabled {
-			dep.ID = vm.FixedDeployment
-			configLock.RUnlock()
-			return []DeploymentConfig{dep}, nil
-		}
-		configLock.RUnlock()
-		return nil, fmt.Errorf("legacy fixed deployment %s not found or disabled for VM %s",
-			vm.FixedDeployment, modelName)
-	}
-
 	pools := vm.Pools
 	deployments := make([]DeploymentConfig, 0)
 	for depID, dep := range config.Deployments {
@@ -377,7 +384,38 @@ func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error)
 		})
 	}
 
+	preferredDeployment := vm.PreferredDeployment
+	if preferredDeployment == "" && vm.FixedDeployment != "" {
+		preferredDeployment = vm.FixedDeployment
+	}
+	deployments = preferDeployment(deployments, preferredDeployment)
+	if normalizeRoutingMode(vm.RoutingMode) == RoutingModeFixed && preferredDeployment != "" {
+		if len(deployments) > 0 && deployments[0].ID == preferredDeployment {
+			return deployments[:1], nil
+		}
+		return nil, fmt.Errorf("fixed preferred deployment %s not found or disabled for VM %s", preferredDeployment, modelName)
+	}
+
 	return deployments, nil
+}
+
+func preferDeployment(deployments []DeploymentConfig, deploymentID string) []DeploymentConfig {
+	if deploymentID == "" || len(deployments) <= 1 {
+		return deployments
+	}
+	for i, dep := range deployments {
+		if dep.ID == deploymentID {
+			if i == 0 {
+				return deployments
+			}
+			out := make([]DeploymentConfig, 0, len(deployments))
+			out = append(out, dep)
+			out = append(out, deployments[:i]...)
+			out = append(out, deployments[i+1:]...)
+			return out
+		}
+	}
+	return deployments
 }
 
 // getDeploymentScore calculates the smart score for a deployment
@@ -455,6 +493,43 @@ func validateConfigData(cfg *Config) error {
 		}
 		if !hasDeployment {
 			logger.SysLogf("[config] warning: virtual model %s has no enabled deployments in pools %v", modelName, vm.Pools)
+		}
+
+		preferredDeployment := vm.PreferredDeployment
+		if preferredDeployment == "" && vm.FixedDeployment != "" {
+			preferredDeployment = vm.FixedDeployment
+		}
+		if preferredDeployment != "" {
+			dep, ok := cfg.Deployments[preferredDeployment]
+			if !ok {
+				return fmt.Errorf("virtual model %s preferred deployment %s not found", modelName, preferredDeployment)
+			}
+			if vm.Enabled && !dep.Enabled {
+				return fmt.Errorf("virtual model %s preferred deployment %s is disabled", modelName, preferredDeployment)
+			}
+			if len(vm.FallbackOrder) > 0 {
+				inOrder := false
+				for _, depID := range vm.FallbackOrder {
+					if depID == preferredDeployment {
+						inOrder = true
+						break
+					}
+				}
+				if !inOrder {
+					return fmt.Errorf("virtual model %s preferred deployment %s is not in fallback_order", modelName, preferredDeployment)
+				}
+			} else {
+				inPool := false
+				for _, pool := range vm.Pools {
+					if dep.Pool == pool {
+						inPool = true
+						break
+					}
+				}
+				if !inPool {
+					return fmt.Errorf("virtual model %s preferred deployment %s is not in configured pools", modelName, preferredDeployment)
+				}
+			}
 		}
 	}
 

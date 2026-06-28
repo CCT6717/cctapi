@@ -1,4 +1,4 @@
-import { isSeparatorKey, isFreeDeployment, slugModelName } from './deploymentMeta';
+import { isSeparatorKey, isFreeDeployment } from './deploymentMeta';
 
 /**
  * applyDraftEdits overlays user-editable draft fields onto payload deployments.
@@ -58,16 +58,34 @@ function applyDeploymentModes(payload, deploymentMode, deploymentOwnerVm) {
     const vm = payload.virtual_models[vmKey];
 
     if (mode === 'fixed') {
-      const fixedPool = `_fixed_${slugModelName(vmKey)}_${depId}`;
-      vm.pools = [fixedPool];
+      vm.routing_mode = 'fixed';
+      vm.preferred_deployment = depId;
       vm.allow_degrade_to_low = false;
       vm.allow_degrade_to_free = false;
-      dep.pool = fixedPool;
-    } else if (mode === 'error' && dep.pool && dep.pool.startsWith('_fixed_')) {
-      dep.pool = 'default';
-      vm.pools = Array.from(new Set([...(vm.pools || []).filter((p) => !p.startsWith('_fixed_')), 'default']));
+    } else if (mode === 'quota') {
+      vm.routing_mode = 'fallback';
+      vm.preferred_deployment = depId;
       vm.allow_degrade_to_low = true;
       vm.allow_degrade_to_free = true;
+    } else if (mode === 'error' && vm.preferred_deployment === depId) {
+      vm.routing_mode = 'fallback';
+      vm.preferred_deployment = depId;
+      vm.allow_degrade_to_low = true;
+      vm.allow_degrade_to_free = true;
+    }
+  });
+}
+
+function applyVirtualRouting(payload, draftVirtualRouting) {
+  if (!payload.virtual_models) return;
+  Object.entries(draftVirtualRouting || {}).forEach(([vmKey, draft]) => {
+    const vm = payload.virtual_models[vmKey];
+    if (!vm || !draft) return;
+    if (draft.routing_mode) vm.routing_mode = draft.routing_mode === 'fixed' ? 'fixed' : 'fallback';
+    if (draft.preferred_deployment !== undefined) vm.preferred_deployment = draft.preferred_deployment;
+    if (vm.routing_mode === 'fixed') {
+      vm.allow_degrade_to_low = false;
+      vm.allow_degrade_to_free = false;
     }
   });
 }
@@ -89,10 +107,11 @@ function applyRoutingStrategy(payload, draftRoutingVm) {
  * Pure function — does not mutate input, always returns a new object.
  * Returns { payload, skippedFreeCount } so callers can warn about free edits.
  */
-export function buildSavePayload(fresh, { draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm }) {
+export function buildSavePayload(fresh, { draftDeployments, draftRoutingVm, draftVirtualRouting, deploymentMode, deploymentOwnerVm }) {
   const payload = JSON.parse(JSON.stringify(fresh));
   const skippedFreeCount = applyDraftEdits(payload, draftDeployments);
   applyDeploymentModes(payload, deploymentMode, deploymentOwnerVm);
+  applyVirtualRouting(payload, draftVirtualRouting);
   applyRoutingStrategy(payload, draftRoutingVm);
   return { payload, skippedFreeCount };
 }

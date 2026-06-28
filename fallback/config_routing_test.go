@@ -64,9 +64,9 @@ func TestGetDeploymentsForVirtualModelFiltersByPool(t *testing.T) {
 			},
 		},
 		Deployments: map[string]DeploymentConfig{
-			"free-1":  {Enabled: true, ChannelID: 1, RealModel: "free1", Pool: "free", Priority: 1},
-			"paid-1":  {Enabled: true, ChannelID: 2, RealModel: "paid1", Pool: "paid_high", Priority: 1},
-			"free-2":  {Enabled: false, ChannelID: 1, RealModel: "free2", Pool: "free", Priority: 2},
+			"free-1": {Enabled: true, ChannelID: 1, RealModel: "free1", Pool: "free", Priority: 1},
+			"paid-1": {Enabled: true, ChannelID: 2, RealModel: "paid1", Pool: "paid_high", Priority: 1},
+			"free-2": {Enabled: false, ChannelID: 1, RealModel: "free2", Pool: "free", Priority: 2},
 		},
 	})
 
@@ -80,6 +80,92 @@ func TestGetDeploymentsForVirtualModelFiltersByPool(t *testing.T) {
 	}
 	if deployments[0].ID != "free-1" {
 		t.Fatalf("expected free-1, got %s", deployments[0].ID)
+	}
+}
+
+func TestGetDeploymentsForVirtualModelStartsWithPreferredDeployment(t *testing.T) {
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+	})
+	resetConfigForTest(&Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/high": {
+				Enabled:             true,
+				Strategy:            StrategyQualityFirst,
+				Pools:               []string{"paid_high"},
+				PreferredDeployment: "dep-b",
+			},
+		},
+		Deployments: map[string]DeploymentConfig{
+			"dep-a": {Enabled: true, ChannelID: 1, RealModel: "a", Pool: "paid_high", Priority: 1},
+			"dep-b": {Enabled: true, ChannelID: 2, RealModel: "b", Pool: "paid_high", Priority: 2},
+			"dep-c": {Enabled: true, ChannelID: 3, RealModel: "c", Pool: "paid_high", Priority: 3},
+		},
+	})
+
+	deployments, err := GetDeploymentsForVirtualModel("cct/high")
+	if err != nil {
+		t.Fatalf("GetDeploymentsForVirtualModel failed: %v", err)
+	}
+	if got := deployments[0].ID; got != "dep-b" {
+		t.Fatalf("expected preferred deployment dep-b first, got %s", got)
+	}
+	if len(deployments) != 3 {
+		t.Fatalf("expected fallback candidates to remain available, got %d", len(deployments))
+	}
+}
+
+func TestGetDeploymentsForVirtualModelFixedUsesOnlyPreferredDeployment(t *testing.T) {
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+	})
+	resetConfigForTest(&Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/high": {
+				Enabled:             true,
+				Strategy:            StrategyQualityFirst,
+				Pools:               []string{"paid_high"},
+				RoutingMode:         RoutingModeFixed,
+				PreferredDeployment: "dep-b",
+			},
+		},
+		Deployments: map[string]DeploymentConfig{
+			"dep-a": {Enabled: true, ChannelID: 1, RealModel: "a", Pool: "paid_high", Priority: 1},
+			"dep-b": {Enabled: true, ChannelID: 2, RealModel: "b", Pool: "paid_high", Priority: 2},
+		},
+	})
+
+	deployments, err := GetDeploymentsForVirtualModel("cct/high")
+	if err != nil {
+		t.Fatalf("GetDeploymentsForVirtualModel failed: %v", err)
+	}
+	if len(deployments) != 1 || deployments[0].ID != "dep-b" {
+		t.Fatalf("expected fixed mode to return only dep-b, got %#v", deployments)
+	}
+}
+
+func TestValidateConfigDataRejectsPreferredDeploymentOutsideFallbackOrder(t *testing.T) {
+	cfg := &Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/high": {
+				Enabled:             true,
+				Strategy:            StrategyQualityFirst,
+				Pools:               []string{"paid_high"},
+				PreferredDeployment: "dep-b",
+				FallbackOrder:       []string{"dep-a"},
+			},
+		},
+		Deployments: map[string]DeploymentConfig{
+			"dep-a": {Enabled: true, ChannelID: 1, RealModel: "a", Pool: "paid_high", Priority: 1},
+			"dep-b": {Enabled: true, ChannelID: 2, RealModel: "b", Pool: "paid_high", Priority: 2},
+		},
+	}
+
+	if err := validateConfigData(cfg); err == nil {
+		t.Fatalf("expected validateConfigData to reject preferred deployment outside fallback_order")
 	}
 }
 

@@ -21,31 +21,33 @@ type gatewayV2Config struct {
 }
 
 type gatewayV2VirtualModel struct {
-	Enabled            bool     `json:"enabled"`
-	Strategy           string   `json:"strategy"`
-	Pools              []string `json:"pools"`
-	FallbackOrder      []string `json:"fallback_order,omitempty"`
-	AllowDegradeToLow  bool     `json:"allow_degrade_to_low"`
-	AllowDegradeToFree bool     `json:"allow_degrade_to_free"`
+	Enabled             bool     `json:"enabled"`
+	Strategy            string   `json:"strategy"`
+	Pools               []string `json:"pools"`
+	RoutingMode         string   `json:"routing_mode,omitempty"`
+	PreferredDeployment string   `json:"preferred_deployment,omitempty"`
+	FallbackOrder       []string `json:"fallback_order,omitempty"`
+	AllowDegradeToLow   bool     `json:"allow_degrade_to_low"`
+	AllowDegradeToFree  bool     `json:"allow_degrade_to_free"`
 }
 
 type gatewayV2Deployment struct {
-	Enabled        bool   `json:"enabled"`
-	ChannelID      int    `json:"channel_id"`
-	RealModel      string `json:"real_model"`
-	Pool           string `json:"pool"`
-	QualityTier    string `json:"quality_tier"`
-	CostTier       string `json:"cost_tier"`
-	QuotaMode      string `json:"quota_mode"`
-	SupportsStream bool   `json:"supports_stream"`
-	SupportsVision bool   `json:"supports_vision"`
-	SupportsTools  bool   `json:"supports_tools"`
-	SupportsJSON   bool   `json:"supports_json"`
-	ContextLength  int    `json:"context_length"`
-	RPMLimit       int    `json:"rpm_limit"`
-	RPDLimit       int    `json:"rpd_limit"`
-	TPMLimit       int    `json:"tpm_limit"`
-	TPDLimit       int    `json:"tpd_limit"`
+	Enabled          bool    `json:"enabled"`
+	ChannelID        int     `json:"channel_id"`
+	RealModel        string  `json:"real_model"`
+	Pool             string  `json:"pool"`
+	QualityTier      string  `json:"quality_tier"`
+	CostTier         string  `json:"cost_tier"`
+	QuotaMode        string  `json:"quota_mode"`
+	SupportsStream   bool    `json:"supports_stream"`
+	SupportsVision   bool    `json:"supports_vision"`
+	SupportsTools    bool    `json:"supports_tools"`
+	SupportsJSON     bool    `json:"supports_json"`
+	ContextLength    int     `json:"context_length"`
+	RPMLimit         int     `json:"rpm_limit"`
+	RPDLimit         int     `json:"rpd_limit"`
+	TPMLimit         int     `json:"tpm_limit"`
+	TPDLimit         int     `json:"tpd_limit"`
 	Priority         int     `json:"priority"`
 	Weight           int     `json:"weight"`
 	DailyLimitTokens int64   `json:"daily_limit_tokens"`
@@ -83,7 +85,7 @@ type gatewayV2FreeProviderInput struct {
 
 // legacyGatewayFields lists JSON keys that belong to the legacy (v1) config
 // format and must be rejected by the v2 endpoint.
-var legacyGatewayFields = []string{"routing_mode", "fixed_deployment"}
+var legacyGatewayFields = []string{"fixed_deployment"}
 
 // containsLegacyFields recursively inspects a decoded JSON value and returns
 // true if any object at any depth contains a legacy v1 key.
@@ -128,36 +130,38 @@ func buildGatewayV2Config(cfg *fallback.Config) gatewayV2Config {
 	vms := make(map[string]gatewayV2VirtualModel, len(cfg.VirtualModels))
 	for name, vm := range cfg.VirtualModels {
 		vms[name] = gatewayV2VirtualModel{
-			Enabled:            vm.Enabled,
-			Strategy:           vm.Strategy,
-			Pools:              append([]string{}, vm.Pools...),
-			FallbackOrder:      append([]string{}, vm.FallbackOrder...),
-			AllowDegradeToLow:  vm.AllowDegradeToLow,
-			AllowDegradeToFree: vm.AllowDegradeToFree,
+			Enabled:             vm.Enabled,
+			Strategy:            vm.Strategy,
+			Pools:               append([]string{}, vm.Pools...),
+			RoutingMode:         vm.RoutingMode,
+			PreferredDeployment: vm.PreferredDeployment,
+			FallbackOrder:       append([]string{}, vm.FallbackOrder...),
+			AllowDegradeToLow:   vm.AllowDegradeToLow,
+			AllowDegradeToFree:  vm.AllowDegradeToFree,
 		}
 	}
 
 	deps := make(map[string]gatewayV2Deployment, len(cfg.Deployments))
 	for id, dep := range cfg.Deployments {
 		deps[id] = gatewayV2Deployment{
-			Enabled:         dep.Enabled,
-			ChannelID:       dep.ChannelID,
-			RealModel:       dep.RealModel,
-			Pool:            dep.Pool,
-			QualityTier:     dep.QualityTier,
-			CostTier:        dep.CostTier,
-			QuotaMode:       dep.QuotaMode,
-			SupportsStream:  dep.SupportsStream,
-			SupportsVision:  dep.SupportsVision,
-			SupportsTools:   dep.SupportsTools,
-			SupportsJSON:    dep.SupportsJSON,
-			ContextLength:   dep.ContextLength,
-			RPMLimit:        dep.RPMLimit,
-			RPDLimit:        dep.RPDLimit,
-			TPMLimit:        dep.TPMLimit,
-			TPDLimit:        dep.TPDLimit,
-			Priority:        dep.Priority,
-			Weight:          dep.Weight,
+			Enabled:          dep.Enabled,
+			ChannelID:        dep.ChannelID,
+			RealModel:        dep.RealModel,
+			Pool:             dep.Pool,
+			QualityTier:      dep.QualityTier,
+			CostTier:         dep.CostTier,
+			QuotaMode:        dep.QuotaMode,
+			SupportsStream:   dep.SupportsStream,
+			SupportsVision:   dep.SupportsVision,
+			SupportsTools:    dep.SupportsTools,
+			SupportsJSON:     dep.SupportsJSON,
+			ContextLength:    dep.ContextLength,
+			RPMLimit:         dep.RPMLimit,
+			RPDLimit:         dep.RPDLimit,
+			TPMLimit:         dep.TPMLimit,
+			TPDLimit:         dep.TPDLimit,
+			Priority:         dep.Priority,
+			Weight:           dep.Weight,
 			DailyLimitTokens: dep.DailyLimitTokens,
 			SoftLimitRatio:   dep.SoftLimitRatio,
 			HardLimitRatio:   dep.HardLimitRatio,
@@ -219,12 +223,14 @@ func buildManualConfig(cfg *fallback.Config) gatewayV2Config {
 			continue
 		}
 		vms[name] = gatewayV2VirtualModel{
-			Enabled:            vm.Enabled,
-			Strategy:           vm.Strategy,
-			Pools:              append([]string{}, vm.Pools...),
-			FallbackOrder:      append([]string{}, vm.FallbackOrder...),
-			AllowDegradeToLow:  vm.AllowDegradeToLow,
-			AllowDegradeToFree: vm.AllowDegradeToFree,
+			Enabled:             vm.Enabled,
+			Strategy:            vm.Strategy,
+			Pools:               append([]string{}, vm.Pools...),
+			RoutingMode:         vm.RoutingMode,
+			PreferredDeployment: vm.PreferredDeployment,
+			FallbackOrder:       append([]string{}, vm.FallbackOrder...),
+			AllowDegradeToLow:   vm.AllowDegradeToLow,
+			AllowDegradeToFree:  vm.AllowDegradeToFree,
 		}
 	}
 
@@ -237,27 +243,27 @@ func buildManualConfig(cfg *fallback.Config) gatewayV2Config {
 			continue
 		}
 		deps[id] = gatewayV2Deployment{
-			Enabled:           dep.Enabled,
-			ChannelID:         dep.ChannelID,
-			RealModel:         dep.RealModel,
-			Pool:              dep.Pool,
-			QualityTier:       dep.QualityTier,
-			CostTier:          dep.CostTier,
-			QuotaMode:         dep.QuotaMode,
-			SupportsStream:    dep.SupportsStream,
-			SupportsVision:    dep.SupportsVision,
-			SupportsTools:     dep.SupportsTools,
-			SupportsJSON:      dep.SupportsJSON,
-			ContextLength:     dep.ContextLength,
-			RPMLimit:          dep.RPMLimit,
-			RPDLimit:          dep.RPDLimit,
-			TPMLimit:          dep.TPMLimit,
-			TPDLimit:          dep.TPDLimit,
-			Priority:          dep.Priority,
-			Weight:            dep.Weight,
-			DailyLimitTokens:  dep.DailyLimitTokens,
-			SoftLimitRatio:    dep.SoftLimitRatio,
-			HardLimitRatio:    dep.HardLimitRatio,
+			Enabled:          dep.Enabled,
+			ChannelID:        dep.ChannelID,
+			RealModel:        dep.RealModel,
+			Pool:             dep.Pool,
+			QualityTier:      dep.QualityTier,
+			CostTier:         dep.CostTier,
+			QuotaMode:        dep.QuotaMode,
+			SupportsStream:   dep.SupportsStream,
+			SupportsVision:   dep.SupportsVision,
+			SupportsTools:    dep.SupportsTools,
+			SupportsJSON:     dep.SupportsJSON,
+			ContextLength:    dep.ContextLength,
+			RPMLimit:         dep.RPMLimit,
+			RPDLimit:         dep.RPDLimit,
+			TPMLimit:         dep.TPMLimit,
+			TPDLimit:         dep.TPDLimit,
+			Priority:         dep.Priority,
+			Weight:           dep.Weight,
+			DailyLimitTokens: dep.DailyLimitTokens,
+			SoftLimitRatio:   dep.SoftLimitRatio,
+			HardLimitRatio:   dep.HardLimitRatio,
 		}
 	}
 
@@ -377,11 +383,13 @@ func updateManualConfig(c *gin.Context) {
 			pools = []string{"default"}
 		}
 		mergedVM := fallback.VirtualModelConfig{
-			Enabled:            vm.Enabled,
-			Strategy:           fallback.NormalizeStrategy(vm.Strategy),
-			Pools:              append([]string{}, pools...),
-			AllowDegradeToLow:  vm.AllowDegradeToLow,
-			AllowDegradeToFree: vm.AllowDegradeToFree,
+			Enabled:             vm.Enabled,
+			Strategy:            fallback.NormalizeStrategy(vm.Strategy),
+			Pools:               append([]string{}, pools...),
+			RoutingMode:         vm.RoutingMode,
+			PreferredDeployment: vm.PreferredDeployment,
+			AllowDegradeToLow:   vm.AllowDegradeToLow,
+			AllowDegradeToFree:  vm.AllowDegradeToFree,
 		}
 		// Use FallbackOrder from payload if provided; otherwise preserve existing.
 		if len(vm.FallbackOrder) > 0 {
@@ -419,27 +427,27 @@ func updateManualConfig(c *gin.Context) {
 			continue
 		}
 		mergedDep := fallback.DeploymentConfig{
-			Enabled:           dep.Enabled,
-			ChannelID:         dep.ChannelID,
-			RealModel:         dep.RealModel,
-			Pool:              dep.Pool,
-			QualityTier:       dep.QualityTier,
-			CostTier:          dep.CostTier,
-			QuotaMode:         dep.QuotaMode,
-			SupportsStream:    dep.SupportsStream,
-			SupportsVision:    dep.SupportsVision,
-			SupportsTools:     dep.SupportsTools,
-			SupportsJSON:      dep.SupportsJSON,
-			ContextLength:     dep.ContextLength,
-			RPMLimit:          dep.RPMLimit,
-			RPDLimit:          dep.RPDLimit,
-			TPMLimit:          dep.TPMLimit,
-			TPDLimit:          dep.TPDLimit,
-			Priority:          dep.Priority,
-			Weight:            dep.Weight,
-			DailyLimitTokens:  dep.DailyLimitTokens,
-			SoftLimitRatio:    dep.SoftLimitRatio,
-			HardLimitRatio:    dep.HardLimitRatio,
+			Enabled:          dep.Enabled,
+			ChannelID:        dep.ChannelID,
+			RealModel:        dep.RealModel,
+			Pool:             dep.Pool,
+			QualityTier:      dep.QualityTier,
+			CostTier:         dep.CostTier,
+			QuotaMode:        dep.QuotaMode,
+			SupportsStream:   dep.SupportsStream,
+			SupportsVision:   dep.SupportsVision,
+			SupportsTools:    dep.SupportsTools,
+			SupportsJSON:     dep.SupportsJSON,
+			ContextLength:    dep.ContextLength,
+			RPMLimit:         dep.RPMLimit,
+			RPDLimit:         dep.RPDLimit,
+			TPMLimit:         dep.TPMLimit,
+			TPDLimit:         dep.TPDLimit,
+			Priority:         dep.Priority,
+			Weight:           dep.Weight,
+			DailyLimitTokens: dep.DailyLimitTokens,
+			SoftLimitRatio:   dep.SoftLimitRatio,
+			HardLimitRatio:   dep.HardLimitRatio,
 		}
 		if existingDep, ok := current.Deployments[id]; ok {
 			mergedDep.MaxConcurrentRequests = existingDep.MaxConcurrentRequests
@@ -603,11 +611,14 @@ func updateGatewayConfig(c *gin.Context) {
 			pools = []string{"default"}
 		}
 		merged.VirtualModels[name] = fallback.VirtualModelConfig{
-			Enabled:            vm.Enabled,
-			Strategy:           fallback.NormalizeStrategy(vm.Strategy),
-			Pools:              append([]string{}, pools...),
-			AllowDegradeToLow:  vm.AllowDegradeToLow,
-			AllowDegradeToFree: vm.AllowDegradeToFree,
+			Enabled:             vm.Enabled,
+			Strategy:            fallback.NormalizeStrategy(vm.Strategy),
+			Pools:               append([]string{}, pools...),
+			RoutingMode:         vm.RoutingMode,
+			PreferredDeployment: vm.PreferredDeployment,
+			FallbackOrder:       append([]string{}, vm.FallbackOrder...),
+			AllowDegradeToLow:   vm.AllowDegradeToLow,
+			AllowDegradeToFree:  vm.AllowDegradeToFree,
 		}
 	}
 

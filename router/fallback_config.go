@@ -29,13 +29,16 @@ type fallbackEditorConfig struct {
 }
 
 type fallbackEditorVirtualModel struct {
-	Name            string   `json:"name"`
-	Enabled         bool     `json:"enabled"`
-	Description     string   `json:"description"`
-	Strategy        string   `json:"strategy"`
-	Pools           []string `json:"pools"`
-	AllowDegradeToLow  bool  `json:"allow_degrade_to_low"`
-	AllowDegradeToFree bool `json:"allow_degrade_to_free"`
+	Name                string   `json:"name"`
+	Enabled             bool     `json:"enabled"`
+	Description         string   `json:"description"`
+	Strategy            string   `json:"strategy"`
+	Pools               []string `json:"pools"`
+	RoutingMode         string   `json:"routing_mode,omitempty"`
+	PreferredDeployment string   `json:"preferred_deployment,omitempty"`
+	FallbackOrder       []string `json:"fallback_order,omitempty"`
+	AllowDegradeToLow   bool     `json:"allow_degrade_to_low"`
+	AllowDegradeToFree  bool     `json:"allow_degrade_to_free"`
 }
 
 type fallbackEditorDeployment struct {
@@ -101,34 +104,11 @@ func getFallbackEditorConfig(c *gin.Context) {
 }
 
 func updateFallbackEditorConfig(c *gin.Context) {
-	// Step 1: read raw body and check for old frontend payload (routing_mode / fallback_order).
+	// Step 1: read raw body.
 	rawBody, err := c.GetRawData()
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
-	}
-	var rawPayload map[string]any
-	if err := json.Unmarshal(rawBody, &rawPayload); err == nil {
-		if vms, ok := rawPayload["virtual_models"].([]any); ok {
-			for _, vm := range vms {
-				if vmObj, ok := vm.(map[string]any); ok {
-					if _, has := vmObj["routing_mode"]; has {
-						c.JSON(http.StatusBadRequest, gin.H{
-							"success": false,
-							"message": "旧版编辑器发送的 payload 包含 routing_mode，新版不再支持此字段。请关闭旧编辑器页面后刷新重试，或直接编辑 data/fallback.json。",
-						})
-						return
-					}
-					if _, has := vmObj["fallback_order"]; has {
-						c.JSON(http.StatusBadRequest, gin.H{
-							"success": false,
-							"message": "旧版编辑器发送的 payload 包含 fallback_order，新版不再支持此字段。请关闭旧编辑器页面后刷新重试，或直接编辑 data/fallback.json。",
-						})
-						return
-					}
-				}
-			}
-		}
 	}
 
 	// Step 2: re-bind to struct
@@ -224,14 +204,17 @@ func buildFallbackEditorConfig(cfg *fallback.Config) fallbackEditorConfig {
 	virtualModels := make([]fallbackEditorVirtualModel, 0, len(vmNames))
 	for _, name := range vmNames {
 		vm := cfg.VirtualModels[name]
-	virtualModels = append(virtualModels, fallbackEditorVirtualModel{
-			Name:            name,
-			Enabled:         vm.Enabled,
-			Description:     vm.Description,
-			Strategy:        vm.Strategy,
-			Pools:           append([]string{}, vm.Pools...),
-			AllowDegradeToLow:  vm.AllowDegradeToLow,
-			AllowDegradeToFree: vm.AllowDegradeToFree,
+		virtualModels = append(virtualModels, fallbackEditorVirtualModel{
+			Name:                name,
+			Enabled:             vm.Enabled,
+			Description:         vm.Description,
+			Strategy:            vm.Strategy,
+			Pools:               append([]string{}, vm.Pools...),
+			RoutingMode:         vm.RoutingMode,
+			PreferredDeployment: vm.PreferredDeployment,
+			FallbackOrder:       append([]string{}, vm.FallbackOrder...),
+			AllowDegradeToLow:   vm.AllowDegradeToLow,
+			AllowDegradeToFree:  vm.AllowDegradeToFree,
 		})
 	}
 
@@ -411,6 +394,11 @@ func normalizeFallbackEditorPayload(payload fallbackEditorConfig) ([]fallbackEdi
 	for _, vm := range payload.VirtualModels {
 		vm.Name = strings.TrimSpace(vm.Name)
 		vm.Strategy = fallback.NormalizeStrategy(vm.Strategy)
+		vm.RoutingMode = strings.TrimSpace(vm.RoutingMode)
+		if vm.RoutingMode != "fixed" {
+			vm.RoutingMode = "fallback"
+		}
+		vm.PreferredDeployment = strings.TrimSpace(vm.PreferredDeployment)
 		if len(vm.Pools) == 0 {
 			vm.Pools = []string{"default"}
 		}
@@ -430,6 +418,15 @@ func normalizeFallbackEditorPayload(payload fallbackEditorConfig) ([]fallbackEdi
 		}
 		if vm.Enabled && len(vm.Pools) == 0 {
 			return nil, nil, fmt.Errorf("enabled virtual model %s needs at least one pool", vm.Name)
+		}
+		if vm.PreferredDeployment != "" {
+			dep, ok := deploymentEnabled[vm.PreferredDeployment]
+			if !ok {
+				return nil, nil, fmt.Errorf("preferred deployment %s for virtual model %s does not exist", vm.PreferredDeployment, vm.Name)
+			}
+			if vm.Enabled && !dep {
+				return nil, nil, fmt.Errorf("preferred deployment %s for virtual model %s is disabled", vm.PreferredDeployment, vm.Name)
+			}
 		}
 		// Verify each pool has at least one enabled deployment
 		if vm.Enabled {
@@ -489,12 +486,15 @@ func buildFallbackConfigFromEditor(payload fallbackEditorConfig, virtualModels [
 
 	for _, vm := range virtualModels {
 		cfg.VirtualModels[vm.Name] = fallback.VirtualModelConfig{
-			Enabled:            vm.Enabled,
-			Description:        vm.Description,
-			Strategy:           fallback.NormalizeStrategy(vm.Strategy),
-			Pools:              append([]string{}, vm.Pools...),
-			AllowDegradeToLow:  vm.AllowDegradeToLow,
-			AllowDegradeToFree: vm.AllowDegradeToFree,
+			Enabled:             vm.Enabled,
+			Description:         vm.Description,
+			Strategy:            fallback.NormalizeStrategy(vm.Strategy),
+			Pools:               append([]string{}, vm.Pools...),
+			RoutingMode:         vm.RoutingMode,
+			PreferredDeployment: vm.PreferredDeployment,
+			FallbackOrder:       append([]string{}, vm.FallbackOrder...),
+			AllowDegradeToLow:   vm.AllowDegradeToLow,
+			AllowDegradeToFree:  vm.AllowDegradeToFree,
 		}
 	}
 

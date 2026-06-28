@@ -156,9 +156,17 @@ func relayWithFallback(c *gin.Context) {
 
 	// Get all deployments for this virtual model
 	deployments, err := fallback.GetDeploymentsForVirtualModel(virtualModel)
+	vmConfig, hasVMConfig := fallback.GetVirtualModel(virtualModel)
+	preferredID := ""
+	if hasVMConfig {
+		preferredID = vmConfig.PreferredDeployment
+		if preferredID == "" {
+			preferredID = vmConfig.FixedDeployment
+		}
+	}
 	// Sticky routing: prefer last successful deployment; skip only when it hits soft limit, error, or becomes unavailable.
 	stickyID := fallback.GetStickyDeployment(virtualModel)
-	if stickyID != "" {
+	if stickyID != "" && preferredID == "" {
 		for i, dep := range deployments {
 			if dep.ID == stickyID {
 				if i > 0 {
@@ -212,19 +220,23 @@ func relayWithFallback(c *gin.Context) {
 	}
 
 	// Strategy-aware sort (quality_first / cost_first / free_first).
-	if vm, ok := fallback.GetVirtualModel(virtualModel); ok && len(deployments) > 1 {
-		deployments = fallback.SortByStrategy(deployments, vm.Strategy)
+	if hasVMConfig && len(deployments) > 1 {
+		deployments = fallback.SortByStrategy(deployments, vmConfig.Strategy)
+		if preferredID != "" {
+			for i, dep := range deployments {
+				if dep.ID == preferredID {
+					deployments = append([]fallback.DeploymentConfig{dep}, append(deployments[:i], deployments[i+1:]...)...)
+					break
+				}
+			}
+		}
 	}
 
-	if stickyID != "" {
+	if stickyID != "" && preferredID == "" {
 		logger.Infof(ctx, "[fallback] sticky active for %s -> %s", virtualModel, stickyID)
 	} else if len(deployments) > 0 {
 		logger.Infof(ctx, "[fallback] strategy-based start deployment for %s: %s", virtualModel, deployments[0].ID)
 	}
-
-
-
-
 
 	relayMode := relaymode.GetByPath(c.Request.URL.Path)
 	var lastBizErr *model.ErrorWithStatusCode
@@ -262,7 +274,6 @@ func relayWithFallback(c *gin.Context) {
 			prevDurationMs = 0
 			continue
 		}
-
 
 		// Get channel by deployment's channel ID
 		channel, err := dbmodel.GetChannelById(dep.ChannelID, true)
