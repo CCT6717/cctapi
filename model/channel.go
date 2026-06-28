@@ -55,19 +55,33 @@ type ChannelConfig struct {
 func GetAllChannels(startIdx int, num int, scope string) ([]*Channel, error) {
 	var channels []*Channel
 	var err error
+	query := DB.Order("id desc")
+	if scope == "manual" {
+		query = query.Where("name NOT LIKE ?", "[CCT Auto] %")
+	} else if scope == "auto" {
+		query = query.Where("name LIKE ?", "[CCT Auto] %")
+	}
 	switch scope {
 	case "all":
-		err = DB.Order("id desc").Find(&channels).Error
+		err = query.Find(&channels).Error
 	case "disabled":
-		err = DB.Order("id desc").Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Find(&channels).Error
+		err = query.Where("status = ? or status = ?", ChannelStatusAutoDisabled, ChannelStatusManuallyDisabled).Find(&channels).Error
 	default:
-		err = DB.Order("id desc").Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
+		err = query.Limit(num).Offset(startIdx).Omit("key").Find(&channels).Error
 	}
 	return channels, err
 }
 
-func SearchChannels(keyword string) (channels []*Channel, err error) {
-	err = DB.Omit("key").Where("id = ? or name LIKE ?", helper.String2Int(keyword), keyword+"%").Find(&channels).Error
+func SearchChannels(keyword string, scope ...string) (channels []*Channel, err error) {
+	query := DB.Omit("key").Where("id = ? or name LIKE ?", helper.String2Int(keyword), keyword+"%")
+	if len(scope) > 0 {
+		if scope[0] == "manual" {
+			query = query.Where("name NOT LIKE ?", "[CCT Auto] %")
+		} else if scope[0] == "auto" {
+			query = query.Where("name LIKE ?", "[CCT Auto] %")
+		}
+	}
+	err = query.Find(&channels).Error
 	return channels, err
 }
 

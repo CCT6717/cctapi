@@ -1,7 +1,7 @@
 import { API } from '../helpers';
 
-export const getChannels = (page) =>
-  API.get(`/api/channel/?p=${page}`);
+export const getChannels = (page, scope = 'manual') =>
+  API.get(`/api/channel/?p=${page}&scope=${scope}`);
 
 export const deleteChannel = (id) =>
   API.delete(`/api/channel/${id}/`);
@@ -9,8 +9,8 @@ export const deleteChannel = (id) =>
 export const updateChannel = (data) =>
   API.put('/api/channel/', data);
 
-export const searchChannels = (keyword) =>
-  API.get(`/api/channel/search?keyword=${keyword}`);
+export const searchChannels = (keyword, scope = 'manual') =>
+  API.get(`/api/channel/search?keyword=${keyword}&scope=${scope}`);
 
 export const testChannel = (id, model) =>
   API.get(`/api/channel/test/${id}?model=${model}`);

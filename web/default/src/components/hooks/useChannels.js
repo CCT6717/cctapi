@@ -10,7 +10,7 @@ import { API } from '../../helpers';
  *   channels: [{ id, name, models: string[] }]
  *   loadChannels: () => Promise<void>
  */
-export const useChannels = () => {
+export const useChannels = (scope = 'manual') => {
   const [channels, setChannels] = useState([]);
 
   const loadChannels = useCallback(async () => {
@@ -19,7 +19,7 @@ export const useChannels = () => {
       let page = 0;
       let hasMore = true;
       while (hasMore) {
-        const res = await API.get(`/api/channel/?p=${page}`);
+        const res = await API.get(`/api/channel/?p=${page}&scope=${scope}`);
         const { success, data } = res.data || {};
         if (!success || !Array.isArray(data) || data.length === 0) {
           hasMore = false;
@@ -43,7 +43,7 @@ export const useChannels = () => {
     } catch (e) {
       // 静默失败，渠道数据可选
     }
-  }, []);
+  }, [scope]);
 
   return { channels, loadChannels };
 };

@@ -34,8 +34,8 @@ const ModelEditor = ({ highlightDeployment }) => {
   const { config, allDeployments, loading, error, loadConfig, deploymentMode, setDeploymentMode } = useGatewayConfig();
   // Runtime statuses (optional, silent fail)
   const { deploymentStatuses, loadDeploymentStatuses } = useDeploymentStatuses();
-  // Channels for the model selector (optional, silent fail)
-  const { channels, loadChannels } = useChannels();
+  // Channels for the high/low model selector (optional, silent fail)
+  const { channels, loadChannels } = useChannels('manual');
 
   const [expandedVirtualModels, setExpandedVirtualModels] = useState({});
   const [expandedDeployments, setExpandedDeployments] = useState({});
@@ -172,15 +172,7 @@ const ModelEditor = ({ highlightDeployment }) => {
     return map;
   }, [config]);
 
-  // Manual channels only (exclude free pool channels)
-  const manualChannels = useMemo(() => {
-    return channels.filter((ch) => {
-      const name = (ch.name || '').toLowerCase();
-      if (name.includes('[cct auto]')) return false;
-      if (name.includes('free')) return false;
-      return true;
-    });
-  }, [channels]);
+  const manualChannels = channels;
 
   const setDraftField = (depId, field, value) => {
     setDraftDeployments((prev) => ({
