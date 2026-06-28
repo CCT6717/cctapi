@@ -10,6 +10,26 @@ import (
 	"strings"
 )
 
+// isFallbackAutoChannel returns true if the channel was auto-created by
+// SyncFreePool (name starts with "[CCT Auto] "). These are managed by the
+// fallback free-pool panel and hidden from the /channel admin page.
+func isFallbackAutoChannel(ch *model.Channel) bool {
+	return ch != nil && strings.HasPrefix(ch.Name, "[CCT Auto] ")
+}
+
+// filterAutoChannels returns the subset of channels that are NOT fallback
+// auto-channels. Used by /channel admin page to keep free-pool infrastructure
+// channels out of the manually-managed channel list.
+func filterAutoChannels(channels []*model.Channel) []*model.Channel {
+	out := make([]*model.Channel, 0, len(channels))
+	for _, ch := range channels {
+		if !isFallbackAutoChannel(ch) {
+			out = append(out, ch)
+		}
+	}
+	return out
+}
+
 func GetAllChannels(c *gin.Context) {
 	p, _ := strconv.Atoi(c.Query("p"))
 	if p < 0 {
@@ -22,6 +42,12 @@ func GetAllChannels(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+	// Hide fallback auto-channels from the admin channel list — they are
+	// owned by the fallback free-pool subsystem. Admin can opt in with
+	// ?include_auto=1 (kept for debugging).
+	if c.Query("include_auto") != "1" {
+		channels = filterAutoChannels(channels)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -40,6 +66,10 @@ func SearchChannels(c *gin.Context) {
 			"message": err.Error(),
 		})
 		return
+	}
+	// Hide fallback auto-channels from search results too.
+	if c.Query("include_auto") != "1" {
+		channels = filterAutoChannels(channels)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
