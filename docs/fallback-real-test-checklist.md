@@ -1,6 +1,6 @@
 # Fallback 真实场景测试清单
 
-本文档用于实际验证 CCT API 的虚拟模型 fallback 行为。默认服务地址按本地开发环境写为 `http://localhost:3007`。
+本文档用于实际验证 CCT API 的虚拟模型 fallback 行为。默认服务地址按本地开发环境写为 `http://localhost:3008`。
 
 ## 准备
 
@@ -14,7 +14,7 @@
 PowerShell 环境变量示例：
 
 ```powershell
-$env:CCT_API_BASE_URL = "http://localhost:3007"
+$env:CCT_API_BASE_URL = "http://localhost:3008"
 $env:CCT_API_TOKEN = "sk-user-token"
 $env:CCT_ADMIN_TOKEN = "sk-admin-token"
 $env:CCT_API_MODEL = "all/auto"
@@ -134,7 +134,7 @@ powershell -ExecutionPolicy Bypass -File scripts/fallback-smoke.ps1 -RunFaultSce
 
 ```powershell
 Invoke-WebRequest -Method POST `
-  -Uri "http://localhost:3007/api/fallback/deployments/<deployment-id>/recover" `
+  -Uri "http://localhost:3008/api/fallback/deployments/<deployment-id>/recover" `
   -Headers @{ Authorization = "Bearer $env:CCT_ADMIN_TOKEN" } `
   -UseBasicParsing
 ```
@@ -149,16 +149,16 @@ Invoke-WebRequest -Method POST `
 
 常用页面：
 
-- `http://localhost:3007/fallback/status`
-- `http://localhost:3007/fallback/scores`
+- `http://localhost:3008/fallback/status`
+- `http://localhost:3008/fallback/scores`
 
 常用接口：
 
 ```powershell
-Invoke-WebRequest http://localhost:3007/metrics -UseBasicParsing
-Invoke-WebRequest http://localhost:3007/api/fallback/states -Headers @{ Authorization = "Bearer $env:CCT_ADMIN_TOKEN" } -UseBasicParsing
-Invoke-WebRequest http://localhost:3007/api/fallback/logs?limit=20 -Headers @{ Authorization = "Bearer $env:CCT_ADMIN_TOKEN" } -UseBasicParsing
-Invoke-WebRequest http://localhost:3007/api/fallback/alert/history?limit=20 -Headers @{ Authorization = "Bearer $env:CCT_ADMIN_TOKEN" } -UseBasicParsing
+Invoke-WebRequest http://localhost:3008/metrics -UseBasicParsing
+Invoke-WebRequest http://localhost:3008/api/fallback/states -Headers @{ Authorization = "Bearer $env:CCT_ADMIN_TOKEN" } -UseBasicParsing
+Invoke-WebRequest http://localhost:3008/api/fallback/logs?limit=20 -Headers @{ Authorization = "Bearer $env:CCT_ADMIN_TOKEN" } -UseBasicParsing
+Invoke-WebRequest http://localhost:3008/api/fallback/alert/history?limit=20 -Headers @{ Authorization = "Bearer $env:CCT_ADMIN_TOKEN" } -UseBasicParsing
 ```
 
 ## 测试结论模板

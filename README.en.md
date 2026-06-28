@@ -63,7 +63,7 @@ services:
   one-api:
     build: .
     ports:
-      - "3007:3007"
+      - "3008:3008"
     volumes:
       - ./data:/data
       - ./logs:/app/logs
@@ -91,7 +91,7 @@ go build -o one-api.exe .
 
 ### First Login
 
-- URL: `http://localhost:3007`
+- URL: `http://localhost:3008`
 - Credentials: `root` / `123456`
 
 ---

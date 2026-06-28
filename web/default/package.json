@@ -54,5 +54,5 @@
     "singleQuote": true,
     "jsxSingleQuote": true
   },
-  "proxy": "http://localhost:3007"
+  "proxy": "http://localhost:3008"
 }

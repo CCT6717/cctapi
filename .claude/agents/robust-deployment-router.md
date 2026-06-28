@@ -83,7 +83,7 @@ npm run build
 For real client checks:
 
 ```powershell
-$env:CCT_API_BASE_URL = "http://localhost:3007"
+$env:CCT_API_BASE_URL = "http://localhost:3008"
 $env:CCT_API_TOKEN = "sk-..."
 $env:CCT_API_MODEL = "high/auto"
 powershell -ExecutionPolicy Bypass -File scripts/fallback-smoke.ps1

@@ -9,7 +9,7 @@ This file gives Codex agents current, practical guidance for working in this rep
 The user usually works in Chinese and verifies the local app at:
 
 ```powershell
-http://localhost:3007
+http://localhost:3008
 ```
 
 ## Build And Run
@@ -24,7 +24,7 @@ cd D:\project\cctapi
 go build -o one-api-new.exe .
 ```
 
-To replace the running local server on port `3007`, stop the process on that port, move `one-api-new.exe` over `one-api.exe`, then start with `PORT=3007`.
+To replace the running local server on port `3008`, stop the process on that port, move `one-api-new.exe` over `one-api.exe`, then start with `PORT=3008`.
 
 Useful checks:
 
@@ -100,7 +100,7 @@ scripts/fallback-smoke.ps1        Real client smoke test script
 Use a real API token and a virtual fallback model:
 
 ```powershell
-$env:CCT_API_BASE_URL = "http://localhost:3007"
+$env:CCT_API_BASE_URL = "http://localhost:3008"
 $env:CCT_API_TOKEN = "sk-..."
 $env:CCT_API_MODEL = "high/auto"
 powershell -ExecutionPolicy Bypass -File scripts/fallback-smoke.ps1

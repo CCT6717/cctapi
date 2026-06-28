@@ -62,7 +62,7 @@ services:
   one-api:
     build: .
     ports:
-      - "3007:3007"
+      - "3008:3008"
     volumes:
       - ./data:/data
       - ./logs:/app/logs
@@ -90,7 +90,7 @@ go build -o one-api.exe .
 
 ### 初始登录
 
-地址：`http://localhost:3007`
+地址：`http://localhost:3008`
 账号：`root` / `123456`
 
 ---

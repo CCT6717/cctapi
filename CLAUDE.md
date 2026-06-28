@@ -9,7 +9,7 @@ This file gives Claude Code current, practical guidance for working in this repo
 The user usually works in Chinese and verifies the local app at:
 
 ```powershell
-http://localhost:3007
+http://localhost:3008
 ```
 
 ## Current Verified Local State
@@ -17,7 +17,7 @@ http://localhost:3007
 Last locally checked state:
 
 - Project path: `D:\project\cctapi`.
-- Default port: `3007`.
+- Default port: `3008`.
 - Local service helpers exist:
   - `scripts\start-cctapi.ps1`
   - `scripts\stop-cctapi.ps1`
@@ -33,7 +33,7 @@ powershell -ExecutionPolicy Bypass -File scripts\start-cctapi.ps1 -NoBrowser
 powershell -ExecutionPolicy Bypass -File scripts\stop-cctapi.ps1
 ```
 
-- `http://localhost:3007` was checked locally and returned HTTP 200 while a process was listening on port `3007`.
+- `http://localhost:3008` was checked locally and returned HTTP 200 while a process was listening on port `3008`.
 - The repository was not clean at the last check: `web/build/default` generated assets were modified and `one-api-check.exe` was untracked. Treat these as likely build/check artifacts unless the user says otherwise.
 
 Recently verified feature locations:
@@ -87,7 +87,7 @@ powershell -ExecutionPolicy Bypass -File scripts\stop-cctapi.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start-cctapi.ps1 -NoBrowser
 ```
 
-The local service was restarted on port `3007`, `http://localhost:3007` returned HTTP 200, and the user confirmed SenseNova responded normally.
+The local service was restarted on port `3008`, `http://localhost:3008` returned HTTP 200, and the user confirmed SenseNova responded normally.
 
 ## Git Convention
 
@@ -108,9 +108,9 @@ cd D:\project\cctapi
 go build -o one-api-new.exe .
 ```
 
-To replace the running local server on port `3007`, stop the process on that port, move `one-api-new.exe` over `one-api.exe`, then start with `PORT=3007`.
+To replace the running local server on port `3008`, stop the process on that port, move `one-api-new.exe` over `one-api.exe`, then start with `PORT=3008`.
 
-Important: this repository embeds `web/build/default` into the Go binary. If the user says a frontend change is not visible, verify the page is loading the latest hashed JS/CSS from `web/build/default/index.html`, rebuild the Go binary, replace the running `one-api.exe`, and restart the `3007` server.
+Important: this repository embeds `web/build/default` into the Go binary. If the user says a frontend change is not visible, verify the page is loading the latest hashed JS/CSS from `web/build/default/index.html`, rebuild the Go binary, replace the running `one-api.exe`, and restart the `3008` server.
 
 Useful checks:
 
@@ -231,7 +231,7 @@ scripts/fallback-smoke.ps1        Real client smoke test script
 Use a real API token and a virtual fallback model:
 
 ```powershell
-$env:CCT_API_BASE_URL = "http://localhost:3007"
+$env:CCT_API_BASE_URL = "http://localhost:3008"
 $env:CCT_API_TOKEN = "sk-..."
 $env:CCT_API_MODEL = "high/auto"
 powershell -ExecutionPolicy Bypass -File scripts/fallback-smoke.ps1
@@ -251,7 +251,7 @@ Most settings are controlled via `.env` at the project root:
 
 | Variable | Default | Description |
 |---|---|---|
-| `PORT` | 3007 | Server listen port |
+| `PORT` | 3008 | Server listen port |
 | `FALLBACK_CONFIG_PATH` | data/fallback.json | Fallback config file |
 | `SESSION_SECRET` | (auto) | Session encryption key |
 | `GIN_MODE` | release | Gin debug/release mode |

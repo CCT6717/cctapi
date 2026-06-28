@@ -3,7 +3,7 @@
 项目默认本地地址：
 
 ```powershell
-http://localhost:3007
+http://localhost:3008
 ```
 
 ## 一键启动
@@ -27,7 +27,7 @@ powershell -ExecutionPolicy Bypass -File scripts\stop-cctapi.ps1
 
 ## 安装开机自启
 
-安装后，Windows 登录时会自动启动 `one-api.exe`，端口为 `3007`。
+安装后，Windows 登录时会自动启动 `one-api.exe`，端口为 `3008`。
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\install-cctapi-autostart.ps1

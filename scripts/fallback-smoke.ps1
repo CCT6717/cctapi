@@ -1,5 +1,5 @@
 param(
-  [string]$BaseUrl = $(if ($env:CCT_API_BASE_URL) { $env:CCT_API_BASE_URL } else { 'http://localhost:3007' }),
+  [string]$BaseUrl = $(if ($env:CCT_API_BASE_URL) { $env:CCT_API_BASE_URL } else { 'http://localhost:3008' }),
   [string]$ApiToken = $env:CCT_API_TOKEN,
   [string]$Model = $env:CCT_API_MODEL,
   [string]$AdminToken = $env:CCT_ADMIN_TOKEN,

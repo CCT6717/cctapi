@@ -1,6 +1,6 @@
 param(
   [string]$TaskName = 'CCT API Local Server',
-  [int]$Port = 3007,
+  [int]$Port = 3008,
   [string]$ProjectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 )
 
