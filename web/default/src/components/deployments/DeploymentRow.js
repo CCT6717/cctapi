@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Button, Checkbox, Icon, Input, Label } from 'semantic-ui-react';
 import { API } from '../../helpers';
+import { isFreeDeployment } from '../utils/deploymentMeta';
 
 const DeploymentRow = ({
   dep,
@@ -26,6 +27,7 @@ const DeploymentRow = ({
   onDelete,
 }) => {
   const draft = draftDeployments[dep.id] || {};
+  const isFree = isFreeDeployment(dep.id, dep);
   const [editBaseUrl, setEditBaseUrl] = useState(null);
   const [editKey, setEditKey] = useState(null);
   const [showKey, setShowKey] = useState(false);
@@ -85,11 +87,12 @@ const DeploymentRow = ({
         </div>
 
         {/* 模式按钮 - 直接在标题行，无需展开 */}
-        <div className='fallback-deploy-mode-btns'>
+        <div className='fallback-deploy-mode-btns' title={isFree ? '免费部署请在「免费模型池」面板编辑' : ''}>
           <Button
             size='mini'
             className={currentMode === 'fixed' ? 'active-mode' : ''}
             basic={currentMode !== 'fixed'}
+            disabled={isFree}
             onClick={() => onModeChange('fixed')}
           >
             固定
@@ -98,6 +101,7 @@ const DeploymentRow = ({
             size='mini'
             className={currentMode === 'quota' ? 'active-mode' : ''}
             basic={currentMode !== 'quota'}
+            disabled={isFree}
             onClick={() => onModeChange('quota')}
           >
             限额
@@ -106,6 +110,7 @@ const DeploymentRow = ({
             size='mini'
             className={currentMode === 'error' ? 'active-mode' : ''}
             basic={currentMode !== 'error'}
+            disabled={isFree}
             onClick={() => onModeChange('error')}
           >
             触发
@@ -143,13 +148,15 @@ const DeploymentRow = ({
             type='button'
             size='mini'
             negative
-            disabled={saving}
+            disabled={isFree || saving}
+            title={isFree ? '免费部署不可在模型编辑器中删除' : ''}
             onClick={(e) => { e.preventDefault(); onDelete(); }}
           >
             删除
           </Button>
           <Checkbox
             toggle
+            disabled={isFree}
             checked={draft.enabled !== undefined ? draft.enabled : dep.enabled !== false}
             onChange={(_, { checked }) => onDraftField('enabled', checked)}
           />
@@ -173,6 +180,7 @@ const DeploymentRow = ({
               <Input
                 type='number'
                 size='mini'
+                disabled={isFree}
                 value={draft.priority !== undefined ? draft.priority : dep.priority ?? 0}
                 onChange={(_, { value }) => onDraftField('priority', value)}
               />
@@ -182,6 +190,7 @@ const DeploymentRow = ({
               <Input
                 type='number'
                 size='mini'
+                disabled={isFree}
                 value={draft.weight !== undefined ? draft.weight : dep.weight ?? 100}
                 onChange={(_, { value }) => onDraftField('weight', value)}
               />
@@ -191,6 +200,7 @@ const DeploymentRow = ({
               <Input
                 type='number'
                 size='mini'
+                disabled={isFree}
                 placeholder='0 = 无限制'
                 value={draft.daily_limit_tokens ?? dep.daily_limit_tokens ?? 0}
                 onChange={(_, { value }) => onDraftField('daily_limit_tokens', value)}

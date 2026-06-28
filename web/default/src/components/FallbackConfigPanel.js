@@ -210,6 +210,13 @@ const ModelEditor = ({ highlightDeployment }) => {
   }, [config]);
 
   const handleModeChange = useCallback((depId, mode, vmKey) => {
+    // Guard: free deployments are managed by the free pool panel — mode
+    // changes here would silently mutate the owning VM's pools/degrade.
+    const currentDep = config?.deployments?.[depId];
+    if (isFreeDeployment(depId, currentDep)) {
+      setSaveMessage({ type: 'error', text: '免费部署不可在模型编辑器中修改模式，请到「免费模型池」面板编辑' });
+      return;
+    }
     setDeploymentMode((prev) => {
       const next = { ...prev, [depId]: mode };
       if (mode === 'fixed') {
@@ -606,7 +613,14 @@ const ModelEditor = ({ highlightDeployment }) => {
                     className='fallback-btn-test-all'
                     disabled={saving}
                     onClick={() => {
-                      (vm.fallback_order || []).forEach((id) => handleHealthCheck(id));
+                      // Skip free deployments — they're managed by the free
+                      // pool panel and often disabled; health-checking them
+                      // shows misleading red failures.
+                      (vm.fallback_order || []).forEach((id) => {
+                        const dep = config?.deployments?.[id] || fullDeploymentMap?.[id];
+                        if (isFreeDeployment(id, dep)) return;
+                        handleHealthCheck(id);
+                      });
                     }}
                   >
                     <Icon name='heartbeat' />
