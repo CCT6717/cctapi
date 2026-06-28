@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react';
 import { API } from '../../helpers';
-import { isSeparatorKey, computeInitialMode } from '../utils/deploymentMeta';
+import { isSeparatorKey } from '../utils/deploymentMeta';
 
 /**
  * useGatewayConfig — owns the gateway config fetch + the deploymentMode
@@ -31,14 +31,7 @@ export const useGatewayConfig = () => {
       const { success, data, message } = manualRes.data || {};
       if (success && data) {
         setConfig(data);
-        const modes = {};
-        if (data.deployments) {
-          Object.keys(data.deployments).forEach((id) => {
-            if (isSeparatorKey(id)) return;
-            modes[id] = computeInitialMode(data, id);
-          });
-        }
-        setDeploymentMode(modes);
+        setDeploymentMode({});
       } else {
         setError(message || '加载网关配置失败');
       }

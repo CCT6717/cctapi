@@ -394,10 +394,7 @@ func normalizeFallbackEditorPayload(payload fallbackEditorConfig) ([]fallbackEdi
 	for _, vm := range payload.VirtualModels {
 		vm.Name = strings.TrimSpace(vm.Name)
 		vm.Strategy = fallback.NormalizeStrategy(vm.Strategy)
-		vm.RoutingMode = strings.TrimSpace(vm.RoutingMode)
-		if vm.RoutingMode != "fixed" {
-			vm.RoutingMode = "fallback"
-		}
+		vm.RoutingMode = fallback.NormalizeRoutingMode(vm.RoutingMode)
 		vm.PreferredDeployment = strings.TrimSpace(vm.PreferredDeployment)
 		if len(vm.Pools) == 0 {
 			vm.Pools = []string{"default"}

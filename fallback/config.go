@@ -113,6 +113,10 @@ func NormalizeStrategy(s string) string {
 }
 
 func normalizeRoutingMode(s string) string {
+	return NormalizeRoutingMode(s)
+}
+
+func NormalizeRoutingMode(s string) string {
 	switch strings.ToLower(strings.TrimSpace(s)) {
 	case RoutingModeFixed:
 		return RoutingModeFixed
@@ -388,7 +392,7 @@ func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error)
 	if preferredDeployment == "" && vm.FixedDeployment != "" {
 		preferredDeployment = vm.FixedDeployment
 	}
-	deployments = preferDeployment(deployments, preferredDeployment)
+	deployments = PreferDeployment(deployments, preferredDeployment)
 	if normalizeRoutingMode(vm.RoutingMode) == RoutingModeFixed && preferredDeployment != "" {
 		if len(deployments) > 0 && deployments[0].ID == preferredDeployment {
 			return deployments[:1], nil
@@ -399,7 +403,7 @@ func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error)
 	return deployments, nil
 }
 
-func preferDeployment(deployments []DeploymentConfig, deploymentID string) []DeploymentConfig {
+func PreferDeployment(deployments []DeploymentConfig, deploymentID string) []DeploymentConfig {
 	if deploymentID == "" || len(deployments) <= 1 {
 		return deployments
 	}

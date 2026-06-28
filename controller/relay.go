@@ -220,15 +220,11 @@ func relayWithFallback(c *gin.Context) {
 	}
 
 	// Strategy-aware sort (quality_first / cost_first / free_first).
+	// Preferred deployment is promoted to first position after sort.
 	if hasVMConfig && len(deployments) > 1 {
 		deployments = fallback.SortByStrategy(deployments, vmConfig.Strategy)
 		if preferredID != "" {
-			for i, dep := range deployments {
-				if dep.ID == preferredID {
-					deployments = append([]fallback.DeploymentConfig{dep}, append(deployments[:i], deployments[i+1:]...)...)
-					break
-				}
-			}
+			deployments = fallback.PreferDeployment(deployments, preferredID)
 		}
 	}
 

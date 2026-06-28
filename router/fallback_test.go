@@ -85,11 +85,11 @@ func TestBuildFallbackConfigFromEditorPreservesStrategyAndPools(t *testing.T) {
 	}
 	virtualModels := []fallbackEditorVirtualModel{
 		{
-			Name:            "cct/free",
-			Enabled:         true,
-			Description:     "free pool virtual model",
-			Strategy:        "free_first",
-			Pools:           []string{"free"},
+			Name:               "cct/free",
+			Enabled:            true,
+			Description:        "free pool virtual model",
+			Strategy:           "free_first",
+			Pools:              []string{"free"},
 			AllowDegradeToLow:  false,
 			AllowDegradeToFree: false,
 		},
@@ -238,6 +238,59 @@ func TestMaskSecretKey_Length(t *testing.T) {
 	masked := maskSecretKey(original)
 	if len(masked) != len(original) {
 		t.Fatalf("expected masked length %d, got %d", len(original), len(masked))
+	}
+}
+
+func TestNormalizeFallbackEditorPayloadNormalizesRoutingMode(t *testing.T) {
+	payload := fallbackEditorConfig{
+		Enabled: true,
+		VirtualModels: []fallbackEditorVirtualModel{
+			{
+				Name:                "cct/high",
+				Enabled:             true,
+				Strategy:            "quality_first",
+				Pools:               []string{"paid_high"},
+				RoutingMode:         "Fixed",
+				PreferredDeployment: "dep-a",
+			},
+		},
+		Deployments: []fallbackEditorDeployment{
+			{ID: "dep-a", Enabled: true, ChannelID: 1, RealModel: "gpt-4", Pool: "paid_high"},
+		},
+	}
+	vms, _, err := normalizeFallbackEditorPayload(payload)
+	if err != nil {
+		t.Fatalf("expected normalize to succeed, got %v", err)
+	}
+	if len(vms) != 1 {
+		t.Fatalf("expected 1 VM, got %d", len(vms))
+	}
+	if vms[0].RoutingMode != "fixed" {
+		t.Fatalf("expected RoutingMode 'fixed' after normalization, got %q", vms[0].RoutingMode)
+	}
+}
+
+func TestNormalizeFallbackEditorPayloadDefaultsRoutingModeToFallback(t *testing.T) {
+	payload := fallbackEditorConfig{
+		Enabled: true,
+		VirtualModels: []fallbackEditorVirtualModel{
+			{
+				Name:     "cct/high",
+				Enabled:  true,
+				Strategy: "quality_first",
+				Pools:    []string{"paid_high"},
+			},
+		},
+		Deployments: []fallbackEditorDeployment{
+			{ID: "dep-a", Enabled: true, ChannelID: 1, RealModel: "gpt-4", Pool: "paid_high"},
+		},
+	}
+	vms, _, err := normalizeFallbackEditorPayload(payload)
+	if err != nil {
+		t.Fatalf("expected normalize to succeed, got %v", err)
+	}
+	if vms[0].RoutingMode != "fallback" {
+		t.Fatalf("expected RoutingMode 'fallback' when omitted, got %q", vms[0].RoutingMode)
 	}
 }
 

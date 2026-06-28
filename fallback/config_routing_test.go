@@ -50,6 +50,24 @@ func TestNormalizeStrategy(t *testing.T) {
 	}
 }
 
+func TestNormalizeRoutingMode(t *testing.T) {
+	if got := NormalizeRoutingMode(" fixed "); got != RoutingModeFixed {
+		t.Fatalf("expected fixed, got %s", got)
+	}
+	if got := NormalizeRoutingMode("Fixed"); got != RoutingModeFixed {
+		t.Fatalf("expected mixed case Fixed to normalize to fixed, got %s", got)
+	}
+	if got := NormalizeRoutingMode("FALLBACK"); got != RoutingModeFallback {
+		t.Fatalf("expected FALLBACK to normalize to fallback, got %s", got)
+	}
+	if got := NormalizeRoutingMode(""); got != RoutingModeFallback {
+		t.Fatalf("expected empty string to default to fallback, got %s", got)
+	}
+	if got := NormalizeRoutingMode("unknown"); got != RoutingModeFallback {
+		t.Fatalf("expected unknown value to default to fallback, got %s", got)
+	}
+}
+
 func TestGetDeploymentsForVirtualModelFiltersByPool(t *testing.T) {
 	t.Cleanup(func() {
 		resetConfigForTest(nil)

@@ -42,7 +42,6 @@ const ModelEditor = ({ highlightDeployment }) => {
   const { execute, saving, saveMessage, setSaveMessage } = useFallbackSave({ loadConfig, loadDeploymentStatuses });
   const [draftDeployments, setDraftDeployments] = useState({});
   const [draftRoutingVm, setDraftRoutingVm] = useState({}); // { [vmKey]: strategy }
-  const [draftVirtualRouting, setDraftVirtualRouting] = useState({});
   const [selectorState, setSelectorState] = useState({});
   const [healthTesting, setHealthTesting] = useState({});
   const [healthResults, setHealthResults] = useState({});
@@ -217,16 +216,6 @@ const ModelEditor = ({ highlightDeployment }) => {
       }
       return next;
     });
-    if (mode === 'fixed' || mode === 'quota' || mode === 'error') {
-      setDraftVirtualRouting((prev) => ({
-        ...prev,
-        [vmKey]: {
-          ...(prev[vmKey] || {}),
-          routing_mode: mode === 'fixed' ? 'fixed' : 'fallback',
-          preferred_deployment: depId,
-        },
-      }));
-    }
     if (mode === 'quota') {
       setDraftDeployments((prev) => {
         const cur = prev[depId];
@@ -246,13 +235,13 @@ const ModelEditor = ({ highlightDeployment }) => {
 
   const handleSave = useCallback(async () => {
     await execute(
-      (fresh) => buildSavePayload(fresh, { draftDeployments, draftRoutingVm, draftVirtualRouting, deploymentMode, deploymentOwnerVm }),
+      (fresh) => buildSavePayload(fresh, { draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm }),
       {
         successMsg: '保存成功',
-        onSaved: () => { setDraftDeployments({}); setDraftRoutingVm({}); setDraftVirtualRouting({}); },
+        onSaved: () => { setDraftDeployments({}); setDraftRoutingVm({}); },
       }
     );
-  }, [execute, draftDeployments, draftRoutingVm, draftVirtualRouting, deploymentMode, deploymentOwnerVm]);
+  }, [execute, draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm]);
 
   const handleAddDeployment = useCallback(async (channelId, model, pool, vmKey) => {
     const ok = await execute(
@@ -577,9 +566,12 @@ const ModelEditor = ({ highlightDeployment }) => {
           const vmKey = vm.name;
           const vmExpanded = !!expandedVirtualModels[vmKey];
           const modelCount = (vm.fallback_order || []).length;
-          const routeDraft = draftVirtualRouting[vmKey] || {};
-          const routingMode = routeDraft.routing_mode || vm.routing_mode || 'fallback';
-          const preferredDeployment = routeDraft.preferred_deployment || vm.preferred_deployment || '';
+          const fixedDepId = (vm.fallback_order || []).find((depId) => deploymentMode[depId] === 'fixed')
+            || (vm.fallback_order || []).find(
+              (depId) => deploymentMode[depId] === undefined && computeInitialMode(config, depId) === 'fixed'
+            );
+          const routingMode = fixedDepId ? 'fixed' : (vm.routing_mode || 'fallback');
+          const preferredDeployment = fixedDepId || vm.preferred_deployment || '';
 
           return (
             <section className='fallback-virtual-panel' key={vmKey}>
@@ -598,7 +590,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                   </div>
                   <div className='fallback-virtual-meta'>
                     {modelCount} 个真实模型
-                    {vm.fallback_order?.some((depId) => (deploymentMode[depId] || computeInitialMode(config, depId)) === 'fixed') && (
+                    {!!fixedDepId && (
                       <span style={{ marginLeft: 8 }}> · 固定模式</span>
                     )}
                   </div>

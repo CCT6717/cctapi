@@ -41,8 +41,8 @@ function applyDraftEdits(payload, draftDeployments) {
 
 /**
  * applyDeploymentModes maps deployment mode changes to VM-level fields.
- * fixed mode → single-deployment pool + disable degrade
- * restoring from fixed → reset to default pool
+ * Handles fixed / quota / error modes and their effect on routing_mode,
+ * preferred_deployment, degrade flags, and quota fields.
  * Skips free deployments (managed by free pool panel).
  */
 function applyDeploymentModes(payload, deploymentMode, deploymentOwnerVm) {
@@ -51,7 +51,6 @@ function applyDeploymentModes(payload, deploymentMode, deploymentOwnerVm) {
     if (isSeparatorKey(depId)) return;
     const dep = payload.deployments[depId];
     if (!dep) return;
-    // Guard: free deployments must not mutate VM-level pools/degrade flags.
     if (isFreeDeployment(depId, dep)) return;
     const vmKey = deploymentOwnerVm[depId];
     if (!vmKey || !payload.virtual_models[vmKey]) return;
@@ -65,27 +64,11 @@ function applyDeploymentModes(payload, deploymentMode, deploymentOwnerVm) {
     } else if (mode === 'quota') {
       vm.routing_mode = 'fallback';
       vm.preferred_deployment = depId;
-      vm.allow_degrade_to_low = true;
-      vm.allow_degrade_to_free = true;
-    } else if (mode === 'error' && vm.preferred_deployment === depId) {
+    } else if (mode === 'error') {
       vm.routing_mode = 'fallback';
       vm.preferred_deployment = depId;
       vm.allow_degrade_to_low = true;
       vm.allow_degrade_to_free = true;
-    }
-  });
-}
-
-function applyVirtualRouting(payload, draftVirtualRouting) {
-  if (!payload.virtual_models) return;
-  Object.entries(draftVirtualRouting || {}).forEach(([vmKey, draft]) => {
-    const vm = payload.virtual_models[vmKey];
-    if (!vm || !draft) return;
-    if (draft.routing_mode) vm.routing_mode = draft.routing_mode === 'fixed' ? 'fixed' : 'fallback';
-    if (draft.preferred_deployment !== undefined) vm.preferred_deployment = draft.preferred_deployment;
-    if (vm.routing_mode === 'fixed') {
-      vm.allow_degrade_to_low = false;
-      vm.allow_degrade_to_free = false;
     }
   });
 }
@@ -107,11 +90,10 @@ function applyRoutingStrategy(payload, draftRoutingVm) {
  * Pure function — does not mutate input, always returns a new object.
  * Returns { payload, skippedFreeCount } so callers can warn about free edits.
  */
-export function buildSavePayload(fresh, { draftDeployments, draftRoutingVm, draftVirtualRouting, deploymentMode, deploymentOwnerVm }) {
+export function buildSavePayload(fresh, { draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm }) {
   const payload = JSON.parse(JSON.stringify(fresh));
   const skippedFreeCount = applyDraftEdits(payload, draftDeployments);
   applyDeploymentModes(payload, deploymentMode, deploymentOwnerVm);
-  applyVirtualRouting(payload, draftVirtualRouting);
   applyRoutingStrategy(payload, draftRoutingVm);
   return { payload, skippedFreeCount };
 }
