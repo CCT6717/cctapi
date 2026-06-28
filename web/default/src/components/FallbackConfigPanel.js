@@ -77,14 +77,13 @@ const ModelEditor = ({ highlightDeployment }) => {
       if (!vm) return null;
       const pools = Array.isArray(vm.pools) ? vm.pools : [];
       let fallbackOrder;
-      // Use backend fallback_order if provided; otherwise derive from pools.
-      // ponytail: use fullDeploymentMap (includes free pool) for accurate counts.
-      const allDepIds = Object.keys(fullDeploymentMap).filter((id) => !isSeparatorKey(id));
+      // Use backend fallback_order if provided; otherwise derive from manual deployments.
+      const allDepIds = Object.keys(config.deployments || {}).filter((id) => !isSeparatorKey(id));
       if (Array.isArray(vm.fallback_order) && vm.fallback_order.length > 0) {
-        fallbackOrder = vm.fallback_order.filter((id) => fullDeploymentMap[id]);
+        fallbackOrder = vm.fallback_order.filter((id) => config.deployments?.[id]);
       } else {
         fallbackOrder = allDepIds.filter((id) => {
-          const dep = fullDeploymentMap[id];
+          const dep = config.deployments?.[id];
           return dep && pools.includes(dep.pool);
         });
       }
@@ -94,7 +93,7 @@ const ModelEditor = ({ highlightDeployment }) => {
         fallback_order: fallbackOrder,
       };
     }).filter(Boolean);
-  }, [config, fullDeploymentMap]);
+  }, [config]);
 
   const deploymentArray = useMemo(() => {
     if (!config?.deployments) return [];
@@ -106,15 +105,11 @@ const ModelEditor = ({ highlightDeployment }) => {
 
   const deploymentsById = useMemo(() => {
     const map = {};
-    // ponytail: merge fullDeploymentMap so fallback_order can resolve free pool deps
-    Object.entries(fullDeploymentMap).forEach(([id, dep]) => {
-      if (!isSeparatorKey(id)) map[id] = dep;
-    });
     deploymentArray.forEach((dep) => {
       map[dep.id] = dep;
     });
     return map;
-  }, [deploymentArray, fullDeploymentMap]);
+  }, [deploymentArray]);
 
   const channelNameMap = useMemo(() => {
     const map = {};
