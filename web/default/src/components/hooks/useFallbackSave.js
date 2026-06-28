@@ -32,8 +32,13 @@ export const useFallbackSave = ({ loadConfig, loadDeploymentStatuses }) => {
         return false;
       }
 
-      const payload = mutator(fresh);
-      if (payload === null) return false; // mutator 已弹错误
+      const mutatorResult = mutator(fresh);
+      if (mutatorResult === null) return false; // mutator 已弹错误
+      // mutator returns { payload, skippedFreeCount } (buildSavePayload) or a raw payload (legacy callers)
+      const { payload, skippedFreeCount = 0 } =
+        mutatorResult && typeof mutatorResult === 'object' && mutatorResult.payload
+          ? mutatorResult
+          : { payload: mutatorResult };
 
       let saveRes;
       try {
@@ -50,7 +55,15 @@ export const useFallbackSave = ({ loadConfig, loadDeploymentStatuses }) => {
         return false;
       }
 
-      setSaveMessage({ type: 'success', text: successMsg || '操作成功' });
+      // Warn if free deployment edits were silently dropped
+      if (skippedFreeCount > 0) {
+        setSaveMessage({
+          type: 'warning',
+          text: `保存成功，但 ${skippedFreeCount} 个免费部署的改动未保存（请在「免费模型池」面板编辑）`,
+        });
+      } else {
+        setSaveMessage({ type: 'success', text: successMsg || '操作成功' });
+      }
       onSaved?.();
       await Promise.all([loadConfig(), loadDeploymentStatuses()]);
       requestAnimationFrame(() => window.scrollTo(0, scrollY));
