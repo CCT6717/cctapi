@@ -105,7 +105,7 @@ func TestValidateConfigDataRejectsEmptyPools(t *testing.T) {
 	}
 }
 
-func TestValidateConfigDataRejectsPoolWithNoDeployments(t *testing.T) {
+func TestValidateConfigDataAllowsVMWithNoDeployments(t *testing.T) {
 	t.Cleanup(func() {
 		resetConfigForTest(nil)
 	})
@@ -122,8 +122,11 @@ func TestValidateConfigDataRejectsPoolWithNoDeployments(t *testing.T) {
 			"paid-1": {Enabled: true, ChannelID: 1, RealModel: "paid1", Pool: "paid_high"},
 		},
 	}
-	if err := validateConfigData(cfg); err == nil {
-		t.Fatalf("expected validateConfigData to reject pool with no deployments")
+	// Empty-pool VMs now log a warning instead of rejecting the save —
+	// this lets users bootstrap a config (e.g. cct/low with cheap/local/free
+	// before any cheap/local deployments exist).
+	if err := validateConfigData(cfg); err != nil {
+		t.Fatalf("expected validateConfigData to allow VM with no enabled deployments (warning only), got: %v", err)
 	}
 }
 

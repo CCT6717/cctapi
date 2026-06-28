@@ -226,7 +226,7 @@ func TestGatewayUpdateConfig_LegacyFieldsRejected(t *testing.T) {
 		legacyVal  string
 	}{
 		{"routing_mode", "routing_mode", `"weighted"`},
-		{"fallback_order", "fallback_order", `["dep-1"]`},
+		// fallback_order is no longer a legacy field — manual-config returns it legitimately.
 		{"fixed_deployment", "fixed_deployment", `"dep-1"`},
 	}
 
@@ -793,9 +793,9 @@ func TestContainsLegacyFields(t *testing.T) {
 			true,
 		},
 		{
-			"fallback_order nested",
+			"fallback_order nested (not legacy — manual-config returns it)",
 			`{"virtual_models":{"test/auto":{"fallback_order":["dep-1"]}}}`,
-			true,
+			false,
 		},
 		{
 			"fixed_deployment deeply nested",
