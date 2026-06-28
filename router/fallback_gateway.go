@@ -346,6 +346,24 @@ func updateManualConfig(c *gin.Context) {
 	merged := *current
 	merged.Enabled = payload.Enabled
 
+	// Deep-copy the three map fields so concurrent GetConfig() readers
+	// never see a half-merged state. Without this, merged.VirtualModels etc.
+	// share the live config's underlying map headers, and the delete/write
+	// loops below mutate the live map mid-merge. Matches updateGatewayConfig
+	// pattern (~L575).
+	merged.VirtualModels = make(map[string]fallback.VirtualModelConfig, len(current.VirtualModels))
+	for k, v := range current.VirtualModels {
+		merged.VirtualModels[k] = v
+	}
+	merged.Deployments = make(map[string]fallback.DeploymentConfig, len(current.Deployments))
+	for k, v := range current.Deployments {
+		merged.Deployments[k] = v
+	}
+	merged.FreeProviders = make(map[string]fallback.FreeProviderConfig, len(current.FreeProviders))
+	for k, v := range current.FreeProviders {
+		merged.FreeProviders[k] = v
+	}
+
 	// Virtual models: merge non-free, preserve cct/free
 	if merged.VirtualModels == nil {
 		merged.VirtualModels = make(map[string]fallback.VirtualModelConfig)

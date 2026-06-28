@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -1038,5 +1039,137 @@ func TestGatewayUpdateConfig_DeploymentWeightDefault(t *testing.T) {
 	dep := cfg.Deployments["dep-1"]
 	if dep.Weight != 100 {
 		t.Fatalf("expected default weight=100, got %d", dep.Weight)
+	}
+}
+
+// mapIdentical reports whether two maps share the same underlying header
+// (i.e. point to the same runtime map object). Used to verify that
+// updateManualConfig deep-copies the live config's maps rather than
+// mutating them in place. Comparing via reflect pointer avoids Go's
+// restriction against comparing maps directly.
+func mapIdentical(a, b interface{}) bool {
+	va := reflect.ValueOf(a)
+	vb := reflect.ValueOf(b)
+	if !va.IsValid() || !vb.IsValid() {
+		return va.IsValid() == vb.IsValid()
+	}
+	if va.Kind() != reflect.Map || vb.Kind() != reflect.Map {
+		return false
+	}
+	return va.Pointer() == vb.Pointer()
+}
+
+// manualConfigPUTJSON builds a v2 manual-config PUT payload that keeps the
+// existing `test/auto` VM and `dep-1` deployment but RENAMES both, so that
+// updateManualConfig's "remove deleted entries" loop will `delete()` the
+// original keys from merged.VirtualModels / merged.Deployments.
+//
+// Without deep-copy, merged.{VirtualModels,Deployments} share the live
+// config's map headers, so those deletes mutate the live map — observable
+// via a previously captured map reference.
+func manualConfigRenamePayloadJSON() string {
+	return `{
+		"enabled": true,
+		"virtual_models": {
+			"test/renamed": {
+				"enabled": true,
+				"strategy": "quality_first",
+				"pools": ["high"],
+				"fallback_order": ["dep-renamed"]
+			}
+		},
+		"deployments": {
+			"dep-renamed": {
+				"enabled": true,
+				"channel_id": 1,
+				"real_model": "gpt-4",
+				"pool": "high",
+				"quality_tier": "high",
+				"cost_tier": "paid"
+			}
+		}
+	}`
+}
+
+// callManualConfigPUT invokes the updateManualConfig handler with the given
+// JSON body string in an admin context and returns the recorder.
+func callManualConfigPUT(t *testing.T, jsonBody string) *httptest.ResponseRecorder {
+	t.Helper()
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	req := httptest.NewRequest(http.MethodPut, "/api/fallback/manual-config",
+		bytes.NewBufferString(jsonBody))
+	req.Header.Set("Content-Type", "application/json")
+	c.Request = req
+	c.Set("role", 100) // admin
+	updateManualConfig(c)
+	return w
+}
+
+// TestUpdateManualConfigDeepCopy verifies that updateManualConfig does not
+// mutate the live config's maps concurrently visible to GetConfig readers.
+//
+// The bug: `merged := *current` is a value copy, but VirtualModels /
+// Deployments / FreeProviders still share the live config's underlying map
+// headers. During the merge loop the handler `delete()`s entries from
+// merged.VirtualModels / merged.Deployments, which mutates the live map.
+// A goroutine that captured the live config pointer just before the merge
+// would see those mutations (partial state). After ReloadConfig the global
+// pointer is replaced, but the *old* map (still referenced by the captured
+// pointer) has been corrupted.
+//
+// Fix: deep-copy the three maps after `merged := *current`, matching the
+// pattern already used by updateGatewayConfig (~L575).
+func TestUpdateManualConfigDeepCopy(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigJSON)
+	defer cleanup()
+
+	// Capture the live config's underlying maps BEFORE the PUT.
+	origC := fallback.GetConfig()
+	origVM := origC.VirtualModels
+	origDep := origC.Deployments
+	origFp := origC.FreeProviders
+
+	// Sanity: pre-conditions
+	if _, ok := origVM["test/auto"]; !ok {
+		t.Fatalf("precondition: test/auto must exist in origVM")
+	}
+	if _, ok := origDep["dep-1"]; !ok {
+		t.Fatalf("precondition: dep-1 must exist in origDep")
+	}
+
+	w := callManualConfigPUT(t, manualConfigRenamePayloadJSON())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+
+	// After the PUT, the *old* map references (captured before the PUT) must
+	// NOT have been mutated: if they were, the deep-copy is missing and
+	// concurrent readers holding the old pointer saw partial state.
+	if _, stillThere := origVM["test/auto"]; !stillThere {
+		t.Fatalf("VirtualModels map shared with live config: origVM['test/auto'] deleted during merge — deep copy missing")
+	}
+	if _, stillThere := origDep["dep-1"]; !stillThere {
+		t.Fatalf("Deployments map shared with live config: origDep['dep-1'] deleted during merge — deep copy missing")
+	}
+
+	// And the maps' header identity must differ from the new live config
+	// (after ReloadConfig the global pointer is swapped to fresh maps).
+	freshC := fallback.GetConfig()
+	if mapIdentical(freshC.VirtualModels, origVM) {
+		t.Fatalf("VirtualModels map header identity unchanged after reload — expected fresh map")
+	}
+	if mapIdentical(freshC.Deployments, origDep) {
+		t.Fatalf("Deployments map header identity unchanged after reload — expected fresh map")
+	}
+	if origFp == nil {
+		// baseValidConfigJSON has no free_providers; FreeProviders may be nil
+		// or an empty map depending on loadConfigData normalization. Don't
+		// assert identity on nil to avoid false failures; the VM/Dep checks
+		// above already cover the deep-copy invariant.
+		return
+	}
+	if mapIdentical(freshC.FreeProviders, origFp) {
+		t.Fatalf("FreeProviders map header identity unchanged after reload — expected fresh map")
 	}
 }
