@@ -35,7 +35,16 @@ export const useFallbackSave = ({ loadConfig, loadDeploymentStatuses }) => {
       const payload = mutator(fresh);
       if (payload === null) return false; // mutator 已弹错误
 
-      const { success, message } = (await saveManualConfig(payload)).data || {};
+      let saveRes;
+      try {
+        saveRes = await saveManualConfig(payload);
+      } catch (saveErr) {
+        // Axios throws on non-2xx; extract server error message
+        const serverMsg = saveErr?.response?.data?.message || saveErr?.message || '保存请求失败';
+        setSaveMessage({ type: 'error', text: serverMsg });
+        return false;
+      }
+      const { success, message } = saveRes?.data || {};
       if (!success) {
         setSaveMessage({ type: 'error', text: message || '操作失败' });
         return false;

@@ -434,7 +434,10 @@ func validateConfigData(cfg *Config) error {
 			return fmt.Errorf("virtual model %s has empty pools", modelName)
 		}
 
-		// Verify at least one deployment exists for these pools
+		// Verify at least one deployment exists for these pools.
+		// Soft check: log warning but don't block saves. VMs may legitimately
+		// have empty pools during setup (e.g. cct/low with cheap/local/free
+		// where only free has deployments).
 		hasDeployment := false
 		for _, dep := range cfg.Deployments {
 			if !dep.Enabled {
@@ -451,7 +454,7 @@ func validateConfigData(cfg *Config) error {
 			}
 		}
 		if !hasDeployment {
-			return fmt.Errorf("virtual model %s has no enabled deployments in pools %v", modelName, vm.Pools)
+			logger.SysLogf("[config] warning: virtual model %s has no enabled deployments in pools %v", modelName, vm.Pools)
 		}
 	}
 
