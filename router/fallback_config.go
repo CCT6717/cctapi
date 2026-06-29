@@ -424,6 +424,22 @@ func normalizeFallbackEditorPayload(payload fallbackEditorConfig) ([]fallbackEdi
 			if vm.Enabled && !dep {
 				return nil, nil, fmt.Errorf("preferred deployment %s for virtual model %s is disabled", vm.PreferredDeployment, vm.Name)
 			}
+			fallbackSet := make(map[string]bool)
+			for _, id := range vm.FallbackOrder {
+				if !strings.HasPrefix(id, "---") {
+					fallbackSet[id] = true
+				}
+			}
+			for _, pool := range vm.Pools {
+				for _, dep := range deployments {
+					if dep.Pool == pool && !strings.HasPrefix(dep.ID, "---") {
+						fallbackSet[dep.ID] = true
+					}
+				}
+			}
+			if !fallbackSet[vm.PreferredDeployment] {
+				return nil, nil, fmt.Errorf("preferred deployment %s for virtual model %s is not in fallback order or pools", vm.PreferredDeployment, vm.Name)
+			}
 		}
 		// Verify each pool has at least one enabled deployment
 		if vm.Enabled {
@@ -615,8 +631,8 @@ func upsertFallbackEditorChannel(dep fallbackEditorDeployment) (int, error) {
 	}
 
 	// Determine whether to update the key:
-	// - Empty or masked (contains "***") → preserve existing key
-	// - Non-empty and not masked → it's a new key from the user
+	// - Empty or masked (contains "***") -> preserve existing key
+	// - Non-empty and not masked -> it's a new key from the user
 	rawKey := dep.Channel.KeyMasked
 	updateKey := rawKey != "" && !strings.Contains(rawKey, "***")
 

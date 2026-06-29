@@ -29,19 +29,18 @@ import {
 } from './utils/deploymentMeta';
 import './FallbackConfigPanel.css';
 
+const HIDDEN_VMS = [];
+
 const ModelEditor = ({ highlightDeployment }) => {
-  // Gateway config + deployment modes (modes initialised from config)
   const { config, allDeployments, loading, error, loadConfig, deploymentMode, setDeploymentMode } = useGatewayConfig();
-  // Runtime statuses (optional, silent fail)
   const { deploymentStatuses, loadDeploymentStatuses } = useDeploymentStatuses();
-  // Channels for the high/low model selector (optional, silent fail)
   const { channels, loadChannels } = useChannels('manual');
 
   const [expandedVirtualModels, setExpandedVirtualModels] = useState({});
   const [expandedDeployments, setExpandedDeployments] = useState({});
   const { execute, saving, saveMessage, setSaveMessage } = useFallbackSave({ loadConfig, loadDeploymentStatuses });
   const [draftDeployments, setDraftDeployments] = useState({});
-  const [draftRoutingVm, setDraftRoutingVm] = useState({}); // { [vmKey]: strategy }
+  const [draftRoutingVm, setDraftRoutingVm] = useState({});
   const [selectorState, setSelectorState] = useState({});
   const [healthTesting, setHealthTesting] = useState({});
   const [healthResults, setHealthResults] = useState({});
@@ -49,22 +48,14 @@ const ModelEditor = ({ highlightDeployment }) => {
   const [newVMName, setNewVMName] = useState('');
   const [newVMStrategy, setNewVMStrategy] = useState('quality_first');
   const [newVMPool, setNewVMPool] = useState('');
-  const [baseUrlModal, setBaseUrlModal] = useState(null); // { channelId, baseUrl, saving, error }
-  const [keyModal, setKeyModal] = useState(null); // { channelId, newKey, showPlain, saving, error }
+  const [baseUrlModal, setBaseUrlModal] = useState(null);
+  const [keyModal, setKeyModal] = useState(null);
 
-  const HIDDEN_VMS = [];
-
-  // Full deployment map (editor config) for pool→deployment matching; includes free pool.
   const fullDeploymentMap = useMemo(() => allDeployments || config?.deployments || {}, [allDeployments, config]);
 
   const visibleDeploymentIds = useMemo(() => {
     if (!config?.deployments) return [];
-    return Object.keys(config.deployments).filter(
-      (id) => {
-        if (isSeparatorKey(id)) return false;
-        return true;
-      }
-    );
+    return Object.keys(config.deployments).filter((id) => !isSeparatorKey(id));
   }, [config]);
 
   const vmArray = useMemo(() => {
@@ -72,26 +63,26 @@ const ModelEditor = ({ highlightDeployment }) => {
     return Object.keys(config.virtual_models)
       .filter((name) => !HIDDEN_VMS.includes(name))
       .map((name) => {
-      const vm = config.virtual_models[name];
-      if (!vm) return null;
-      const pools = Array.isArray(vm.pools) ? vm.pools : [];
-      let fallbackOrder;
-      // Use backend fallback_order if provided; otherwise derive from manual deployments.
-      const allDepIds = Object.keys(config.deployments || {}).filter((id) => !isSeparatorKey(id));
-      if (Array.isArray(vm.fallback_order) && vm.fallback_order.length > 0) {
-        fallbackOrder = vm.fallback_order.filter((id) => config.deployments?.[id]);
-      } else {
-        fallbackOrder = allDepIds.filter((id) => {
-          const dep = config.deployments?.[id];
-          return dep && pools.includes(dep.pool);
-        });
-      }
-      return {
-        name,
-        ...vm,
-        fallback_order: fallbackOrder,
-      };
-    }).filter(Boolean);
+        const vm = config.virtual_models[name];
+        if (!vm) return null;
+        const pools = Array.isArray(vm.pools) ? vm.pools : [];
+        let fallbackOrder;
+        const allDepIds = Object.keys(config.deployments || {}).filter((id) => !isSeparatorKey(id));
+        if (Array.isArray(vm.fallback_order) && vm.fallback_order.length > 0) {
+          fallbackOrder = vm.fallback_order.filter((id) => config.deployments?.[id]);
+        } else {
+          fallbackOrder = allDepIds.filter((id) => {
+            const dep = config.deployments?.[id];
+            return dep && pools.includes(dep.pool);
+          });
+        }
+        return {
+          name,
+          ...vm,
+          fallback_order: fallbackOrder,
+        };
+      })
+      .filter(Boolean);
   }, [config]);
 
   const deploymentArray = useMemo(() => {
@@ -144,11 +135,9 @@ const ModelEditor = ({ highlightDeployment }) => {
     }
   }, [loadDeploymentStatuses]);
 
-  // Existing (channel_id, real_model) pairs — per VM, scoped to current VM's pools
   const existingPairsByVm = useMemo(() => {
-    const map = {}; // vmKey → Set of "channel_id:real_model"
+    const map = {};
     if (!config?.deployments || !config?.virtual_models) return map;
-    // Build pool→vmKey map
     const poolToVm = {};
     Object.entries(config.virtual_models).forEach(([vmKey, vm]) => {
       (vm.pools || []).forEach((p) => { poolToVm[p] = vmKey; });
@@ -179,17 +168,17 @@ const ModelEditor = ({ highlightDeployment }) => {
     }));
   };
 
-  // { depId: vmKey } — which VM "owns" each deployment
   const deploymentOwnerVm = useMemo(() => {
     const map = {};
-    if (config?.virtual_models) {
+    if (config?.virtual_models && config?.deployments) {
       Object.entries(config.virtual_models).forEach(([vmKey, vm]) => {
         (vm.pools || []).forEach((pool) => {
-          if (config.deployments) {
-            Object.entries(config.deployments).forEach(([depId, dep]) => {
-              if (dep.pool === pool) map[depId] = vmKey;
-            });
-          }
+          Object.entries(config.deployments).forEach(([depId, dep]) => {
+            if (dep.pool === pool) {
+              map[depId] = Array.isArray(map[depId]) ? map[depId] : [];
+              if (!map[depId].includes(vmKey)) map[depId].push(vmKey);
+            }
+          });
         });
       });
     }
@@ -197,8 +186,6 @@ const ModelEditor = ({ highlightDeployment }) => {
   }, [config]);
 
   const handleModeChange = useCallback((depId, mode, vmKey) => {
-    // Guard: free deployments are managed by the free pool panel — mode
-    // changes here would silently mutate the owning VM's pools/degrade.
     const currentDep = config?.deployments?.[depId];
     if (isFreeDeployment(depId, currentDep)) {
       setSaveMessage({ type: 'error', text: '免费部署不可在模型编辑器中修改模式，请到「免费模型池」面板编辑' });
@@ -206,10 +193,13 @@ const ModelEditor = ({ highlightDeployment }) => {
     }
     setDeploymentMode((prev) => {
       const next = { ...prev, [depId]: mode };
-      if (mode === 'fixed') {
-        // un-fix other deployments in the same VM (only one fixed per VM)
+      if (mode === 'fixed' || mode === 'quota') {
+        const targetModes = mode === 'fixed' ? ['fixed'] : ['quota'];
         Object.keys(next).forEach((id) => {
-          if (id !== depId && next[id] === 'fixed' && deploymentOwnerVm[id] === vmKey) {
+          if (id === depId) return;
+          const ownerVms = deploymentOwnerVm[id];
+          const sameVm = Array.isArray(ownerVms) && ownerVms.includes(vmKey);
+          if (sameVm && targetModes.includes(next[id])) {
             next[id] = 'error';
           }
         });
@@ -244,11 +234,10 @@ const ModelEditor = ({ highlightDeployment }) => {
   }, [execute, draftDeployments, draftRoutingVm, deploymentMode, deploymentOwnerVm]);
 
   const handleAddDeployment = useCallback(async (channelId, model, pool, vmKey) => {
-    const ok = await execute(
+    await execute(
       (fresh) => {
         const payload = JSON.parse(JSON.stringify(fresh));
         if (!payload.deployments) payload.deployments = {};
-        // ponytail: only check duplicates within the target VM's pools
         const vmPools = new Set(config?.virtual_models?.[vmKey]?.pools || []);
         for (const [, dep] of Object.entries(payload.deployments)) {
           if (dep?.channel_id === channelId && dep?.real_model === model && vmPools.has(dep.pool)) {
@@ -264,7 +253,6 @@ const ModelEditor = ({ highlightDeployment }) => {
         let suffix = 1;
         while (payload.deployments[newId]) { newId = `${baseId}-${suffix}`; suffix++; }
         payload.deployments[newId] = { enabled: true, channel_id: channelId, real_model: model, pool, priority: 0, weight: 100 };
-        // Add to VM's fallback_order
         const vm = payload.virtual_models?.[vmKey];
         if (vm) {
           let order = Array.isArray(vm.fallback_order) ? [...vm.fallback_order] : [];
@@ -280,11 +268,11 @@ const ModelEditor = ({ highlightDeployment }) => {
         return payload;
       },
       {
-        successMsg: `已添加部署`,
+        successMsg: '已添加部署',
         onSaved: () => setSelectorState((prev) => ({ ...prev, [vmKey]: null })),
       }
     );
-  }, [execute, setSaveMessage]);
+  }, [config, execute, setSaveMessage]);
 
   const handleDeleteDeployment = useCallback(async (deploymentId, fromVmKey) => {
     if (!deploymentId || !fromVmKey) return;
@@ -305,7 +293,6 @@ const ModelEditor = ({ highlightDeployment }) => {
           setSaveMessage({ type: 'error', text: `虚拟模型 ${fromVmKey} 不存在` });
           return null;
         }
-        // Build fallback_order if VM doesn't have one yet (showing all pool deployments).
         let order = Array.isArray(vm.fallback_order) ? [...vm.fallback_order] : [];
         if (order.length === 0) {
           const pools = vm.pools || [];
@@ -313,13 +300,16 @@ const ModelEditor = ({ highlightDeployment }) => {
             .filter(([id, d]) => !id.startsWith('---') && d && pools.includes(d.pool))
             .map(([id]) => id);
         }
-        const newOrder = order.filter((id) => id !== deploymentId);
-        vm.fallback_order = newOrder;
+        vm.fallback_order = order.filter((id) => id !== deploymentId);
         return payload;
       },
       {
         successMsg: `已从 ${fromVmKey} 移除部署`,
-        onSaved: () => setDraftDeployments((prev) => { const next = { ...prev }; delete next[deploymentId]; return next; }),
+        onSaved: () => setDraftDeployments((prev) => {
+          const next = { ...prev };
+          delete next[deploymentId];
+          return next;
+        }),
       }
     );
   }, [config, execute, setSaveMessage]);
@@ -338,8 +328,11 @@ const ModelEditor = ({ highlightDeployment }) => {
         const payload = JSON.parse(JSON.stringify(fresh));
         if (!payload.virtual_models) payload.virtual_models = {};
         payload.virtual_models[name] = {
-          enabled: true, strategy: newVMStrategy, pools: [pool],
-          allow_degrade_to_low: false, allow_degrade_to_free: false,
+          enabled: true,
+          strategy: newVMStrategy,
+          pools: [pool],
+          allow_degrade_to_low: false,
+          allow_degrade_to_free: false,
         };
         return payload;
       },
@@ -368,26 +361,10 @@ const ModelEditor = ({ highlightDeployment }) => {
     );
   }, [execute, setSaveMessage]);
 
-  // eslint-disable-next-line no-unused-vars
-  const openBaseUrlEditor = useCallback(async (channelId) => {
-    try {
-      const res = await API.get(`/api/channel/${channelId}`);
-      const ch = res.data?.data;
-      if (ch) {
-        setBaseUrlModal({ channelId, baseUrl: ch.base_url || '', saving: false, error: '' });
-      } else {
-        setSaveMessage({ type: 'error', text: '获取渠道信息失败' });
-      }
-    } catch (e) {
-      setSaveMessage({ type: 'error', text: e.message || '获取渠道信息异常' });
-    }
-  }, []);
-
   const saveBaseUrl = useCallback(async () => {
     if (!baseUrlModal?.channelId) return;
     setBaseUrlModal((prev) => ({ ...prev, saving: true, error: '' }));
     try {
-      // strip trailing slash for consistency
       let baseUrl = (baseUrlModal.baseUrl || '').trim();
       if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
       const res = await API.put('/api/channel/', {
@@ -411,20 +388,11 @@ const ModelEditor = ({ highlightDeployment }) => {
         error: e.message || '保存异常',
       }));
     }
-  }, [baseUrlModal]);
-
-  // 编辑 key: GET /api/channel/:id 不返回原 key,只能用新值覆盖。
-  // 安全说明: 新 key 通过 HTTPS 以明文 PUT,会话已是 cookie-authed admin;
-  // 空输入不触发 PUT,避免误清空; 绝不留 "显示原 key" 入口 (服务端无此数据)。
-  // eslint-disable-next-line no-unused-vars
-  const openKeyEditor = useCallback((channelId) => {
-    setKeyModal({ channelId, newKey: '', showPlain: false, saving: false, error: '' });
-  }, []);
+  }, [baseUrlModal, setSaveMessage]);
 
   const saveKey = useCallback(async () => {
     if (!keyModal?.channelId) return;
     if (!keyModal.newKey) {
-      // 空输入:不发送 PUT,避免把现有 key 清空
       setKeyModal(null);
       return;
     }
@@ -451,7 +419,7 @@ const ModelEditor = ({ highlightDeployment }) => {
         error: e.message || '保存异常',
       }));
     }
-  }, [keyModal]);
+  }, [keyModal, setSaveMessage]);
 
   const saveChannelField = useCallback(async (channelId, fields, onDone) => {
     setSaveMessage(null);
@@ -468,7 +436,7 @@ const ModelEditor = ({ highlightDeployment }) => {
     } catch (e) {
       setSaveMessage({ type: 'error', text: e.message || '保存异常' });
     }
-  }, [loadChannels]);
+  }, [loadChannels, setSaveMessage]);
 
   useEffect(() => {
     loadConfig().then(() => {
@@ -570,9 +538,6 @@ const ModelEditor = ({ highlightDeployment }) => {
             || (vm.fallback_order || []).find(
               (depId) => deploymentMode[depId] === undefined && computeInitialMode(config, depId) === 'fixed'
             );
-          const routingMode = fixedDepId ? 'fixed' : (vm.routing_mode || 'fallback');
-          const preferredDeployment = fixedDepId || vm.preferred_deployment || '';
-
           return (
             <section className='fallback-virtual-panel' key={vmKey}>
               <div className='fallback-virtual-summary'>
@@ -606,9 +571,6 @@ const ModelEditor = ({ highlightDeployment }) => {
                     className='fallback-btn-test-all'
                     disabled={saving}
                     onClick={() => {
-                      // Skip free deployments — they're managed by the free
-                      // pool panel and often disabled; health-checking them
-                      // shows misleading red failures.
                       (vm.fallback_order || []).forEach((id) => {
                         const dep = config?.deployments?.[id] || fullDeploymentMap?.[id];
                         if (isFreeDeployment(id, dep)) return;
@@ -635,7 +597,6 @@ const ModelEditor = ({ highlightDeployment }) => {
 
               {vmExpanded && (
                 <div className='fallback-virtual-body'>
-                  {/* Model Selector */}
                   <div className='fallback-add-model'>
                     <div className='fallback-add-model-header'>
                       <Icon name='plus circle' />
@@ -679,21 +640,20 @@ const ModelEditor = ({ highlightDeployment }) => {
                             });
                             return opts;
                           })()}
-                        onChange={(_, { value }) => {
-                          if (!value || String(value).startsWith('__header_')) return;
-                          const [channelIdStr, ...modelParts] = String(value).split(':');
-                          const channelId = Number(channelIdStr);
-                          const model = modelParts.join(':');
-                          setSelectorState((prev) => ({
-                            ...prev,
-                            [vmKey]: { value, channelId, model, pool: vm.pools?.[0] || 'default' },
-                          }));
-                        }}
-                      />
+                          onChange={(_, { value }) => {
+                            if (!value || String(value).startsWith('__header_')) return;
+                            const [channelIdStr, ...modelParts] = String(value).split(':');
+                            const channelId = Number(channelIdStr);
+                            const model = modelParts.join(':');
+                            setSelectorState((prev) => ({
+                              ...prev,
+                              [vmKey]: { value, channelId, model, pool: vm.pools?.[0] || 'default' },
+                            }));
+                          }}
+                        />
                       )}
                     </div>
 
-                    {/* Preview card */}
                     {selectorState[vmKey] && (() => {
                       const sel = selectorState[vmKey];
                       return (
@@ -750,9 +710,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                       const ownerNames = getDeploymentOwnerNames(vmArray, deploymentId);
                       const ownerText = ownerNames.join(' / ');
                       const rowMode = deploymentMode[dep.id] || computeInitialMode(config, dep.id);
-                      const currentMode = routingMode === 'fixed'
-                        ? (preferredDeployment === dep.id && rowMode !== 'quota' ? 'fixed' : rowMode === 'quota' ? 'quota' : 'error')
-                        : rowMode;
+                      const currentMode = rowMode;
 
                       return (
                         <DeploymentRow
@@ -789,7 +747,6 @@ const ModelEditor = ({ highlightDeployment }) => {
         })}
       </div>
 
-      {/* Add Virtual Model */}
       <div style={{ marginTop: 16 }}>
         <AddVirtualModelPanel
           collapsed={!showAddVM}
@@ -806,7 +763,6 @@ const ModelEditor = ({ highlightDeployment }) => {
         />
       </div>
 
-      {/* Edit base_url Modal */}
       <BaseUrlModal
         state={baseUrlModal}
         onChange={(partial) => setBaseUrlModal((prev) => (prev ? { ...prev, ...partial } : prev))}
@@ -814,7 +770,6 @@ const ModelEditor = ({ highlightDeployment }) => {
         onSave={saveBaseUrl}
       />
 
-      {/* Edit key Modal */}
       <KeyModal
         state={keyModal}
         onChange={(partial) => setKeyModal((prev) => (prev ? { ...prev, ...partial } : prev))}

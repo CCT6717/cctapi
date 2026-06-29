@@ -294,6 +294,33 @@ func TestNormalizeFallbackEditorPayloadDefaultsRoutingModeToFallback(t *testing.
 	}
 }
 
+func TestNormalizeFallbackEditorPayloadRejectsPreferredDeploymentOutsidePools(t *testing.T) {
+	payload := fallbackEditorConfig{
+		Enabled: true,
+		VirtualModels: []fallbackEditorVirtualModel{
+			{
+				Name:                "cct/high",
+				Enabled:             true,
+				Strategy:            "quality_first",
+				Pools:               []string{"paid_high"},
+				RoutingMode:         "fixed",
+				PreferredDeployment: "dep-b",
+			},
+		},
+		Deployments: []fallbackEditorDeployment{
+			{ID: "dep-a", Enabled: true, ChannelID: 1, RealModel: "gpt-4", Pool: "paid_high"},
+			{ID: "dep-b", Enabled: true, ChannelID: 2, RealModel: "claude-3", Pool: "paid_low"},
+		},
+	}
+	_, _, err := normalizeFallbackEditorPayload(payload)
+	if err == nil {
+		t.Fatal("expected preferred deployment outside pools to be rejected")
+	}
+	if !strings.Contains(err.Error(), "not in fallback order or pools") {
+		t.Fatalf("expected pool membership error, got %v", err)
+	}
+}
+
 func TestBuildFallbackEditorChannel_NoFullKey(t *testing.T) {
 	channel := &dbmodel.Channel{
 		Id:   1,

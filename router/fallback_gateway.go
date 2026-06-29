@@ -11,7 +11,7 @@ import (
 	"github.com/songquanpeng/one-api/fallback"
 )
 
-// ── v2 gateway config response types ────────────────────────────────────────
+// v2 gateway config response types
 
 type gatewayV2Config struct {
 	Enabled       bool                             `json:"enabled"`
@@ -68,7 +68,7 @@ type gatewayV2LimitsOverride struct {
 	TPDLimit *int `json:"tpd_limit,omitempty"`
 }
 
-// ── v2 gateway config request types (PUT) ───────────────────────────────────
+// v2 gateway config request types (PUT)
 
 type gatewayV2ConfigInput struct {
 	Enabled       bool                                  `json:"enabled"`
@@ -397,6 +397,43 @@ func updateManualConfig(c *gin.Context) {
 		} else if existing, ok := current.VirtualModels[name]; ok {
 			mergedVM.FallbackOrder = append([]string{}, existing.FallbackOrder...)
 		}
+		if vm.PreferredDeployment != "" {
+			dep, ok := current.Deployments[vm.PreferredDeployment]
+			if !ok {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"message": fmt.Sprintf("preferred deployment %s for manual config %s does not exist", vm.PreferredDeployment, name),
+				})
+				return
+			}
+			if mergedVM.Enabled && !dep.Enabled {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"message": fmt.Sprintf("preferred deployment %s for manual config %s is disabled", vm.PreferredDeployment, name),
+				})
+				return
+			}
+			fallbackSet := make(map[string]bool)
+			for _, id := range mergedVM.FallbackOrder {
+				if !strings.HasPrefix(id, "---") {
+					fallbackSet[id] = true
+				}
+			}
+			for _, pool := range vm.Pools {
+				for id, dep := range current.Deployments {
+					if dep.Pool == pool && !strings.HasPrefix(id, "---") {
+						fallbackSet[id] = true
+					}
+				}
+			}
+			if !fallbackSet[vm.PreferredDeployment] {
+				c.JSON(http.StatusBadRequest, gin.H{
+					"success": false,
+					"message": fmt.Sprintf("preferred deployment %s for manual config %s is not in fallback order or pools", vm.PreferredDeployment, name),
+				})
+				return
+			}
+		}
 		merged.VirtualModels[name] = mergedVM
 	}
 
@@ -668,7 +705,48 @@ func updateGatewayConfig(c *gin.Context) {
 		merged.Deployments[id] = mergedDep
 	}
 
-	// Free providers: merge keys carefully — never overwrite real keys with
+	for name, vm := range merged.VirtualModels {
+		if vm.PreferredDeployment == "" {
+			continue
+		}
+		dep, ok := merged.Deployments[vm.PreferredDeployment]
+		if !ok {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"success": false,
+				"message": fmt.Sprintf("preferred deployment %s for gateway config %s does not exist", vm.PreferredDeployment, name),
+			})
+			return
+		}
+		if vm.Enabled && !dep.Enabled {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"success": false,
+				"message": fmt.Sprintf("preferred deployment %s for gateway config %s is disabled", vm.PreferredDeployment, name),
+			})
+			return
+		}
+		fallbackSet := make(map[string]bool)
+		for _, id := range vm.FallbackOrder {
+			if !strings.HasPrefix(id, "---") {
+				fallbackSet[id] = true
+			}
+		}
+		for _, pool := range vm.Pools {
+			for id, dep := range merged.Deployments {
+				if dep.Pool == pool && !strings.HasPrefix(id, "---") {
+					fallbackSet[id] = true
+				}
+			}
+		}
+		if !fallbackSet[vm.PreferredDeployment] {
+			c.JSON(http.StatusBadRequest, gin.H{
+				"success": false,
+				"message": fmt.Sprintf("preferred deployment %s for gateway config %s is not in fallback order or pools", vm.PreferredDeployment, name),
+			})
+			return
+		}
+	}
+
+	// Free providers: merge keys carefully 鈥?never overwrite real keys with
 	// masked or empty values.
 	if merged.FreeProviders == nil {
 		merged.FreeProviders = make(map[string]fallback.FreeProviderConfig)
@@ -683,14 +761,14 @@ func updateGatewayConfig(c *gin.Context) {
 			for _, k := range fpInput.Keys {
 				k = strings.TrimSpace(k)
 				if k == "" || strings.Contains(k, "*") {
-					continue // empty or masked — skip
+					continue // empty or masked 鈥?skip
 				}
 				freshKeys = append(freshKeys, k)
 			}
 			if len(freshKeys) > 0 {
 				keys = freshKeys // only replace when at least one real key provided
 			}
-			// Otherwise all keys were masked/empty — keep existing.
+			// Otherwise all keys were masked/empty 鈥?keep existing.
 		}
 
 		merged.FreeProviders[name] = fallback.FreeProviderConfig{
@@ -736,3 +814,4 @@ func updateGatewayConfig(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, response)
 }
+
