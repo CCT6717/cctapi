@@ -7,6 +7,7 @@ import { API, getLogo, getSystemName, isAdmin, isMobile, showError } from '../he
 import '../index.css';
 
 import {
+  IconBox,
   IconCalendarClock,
   IconComment,
   IconCreditCard,

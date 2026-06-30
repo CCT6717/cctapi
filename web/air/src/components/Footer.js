@@ -24,7 +24,7 @@ const Footer = () => {
       remainCheckTimes--;
       loadFooter();
     }, 200);
-    return () => clearTimeout(timer);
+    return () => clearInterval(timer);
   }, []);
 
   return (
@@ -40,15 +40,16 @@ const Footer = () => {
             <a
               href='https://github.com/songquanpeng/one-api'
               target='_blank'
+              rel='noreferrer'
             >
               {systemName} {process.env.REACT_APP_VERSION}{' '}
             </a>
             由{' '}
-            <a href='https://github.com/songquanpeng' target='_blank'>
+            <a href='https://github.com/songquanpeng' target='_blank' rel='noreferrer'>
               JustSong
             </a>{' '}
             构建，主题 air 来自{' '}
-            <a href='https://github.com/Calcium-Ion' target='_blank'>
+            <a href='https://github.com/Calcium-Ion' target='_blank' rel='noreferrer'>
               Calon
             </a>{' '}，源代码遵循{' '}
             <a href='https://opensource.org/licenses/mit-license.php'>

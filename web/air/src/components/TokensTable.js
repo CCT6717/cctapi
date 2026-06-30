@@ -281,9 +281,10 @@ const TokensTable = () => {
   };
 
   let pageData = tokens.slice((activePage - 1) * pageSize, activePage * pageSize);
-  const loadTokens = async (startIdx) => {
+  const loadTokens = async (startIdx, isMounted = true) => {
     setLoading(true);
-    const res = await API.get(`/api/token/?p=${startIdx}&size=${pageSize}&order=${orderBy}`);
+    const res = await API.get('/api/token/', { params: { p: startIdx, size: pageSize, order: orderBy } });
+    if (!isMounted) return;
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
@@ -303,7 +304,7 @@ const TokensTable = () => {
     (async () => {
       if (activePage === Math.ceil(tokens.length / pageSize) + 1) {
         // In this case we have to load more data and then append them.
-        await loadTokens(activePage - 1, orderBy);
+        await loadTokens(activePage - 1);
       }
       setActivePage(activePage);
     })();
@@ -409,11 +410,15 @@ const TokensTable = () => {
   };
 
   useEffect(() => {
-    loadTokens(0, orderBy)
+    let isMounted = true;
+    loadTokens(0, isMounted)
       .then()
       .catch((reason) => {
         showError(reason);
       });
+    return () => {
+      isMounted = false;
+    };
   }, [pageSize, orderBy]);
 
   const removeRecord = key => {
@@ -473,7 +478,7 @@ const TokensTable = () => {
       return;
     }
     setSearching(true);
-    const res = await API.get(`/api/token/search?keyword=${searchKeyword}&token=${searchToken}`);
+    const res = await API.get('/api/token/search', { params: { keyword: searchKeyword, token: searchToken } });
     const { success, message, data } = res.data;
     if (success) {
       setTokensFormat(data);

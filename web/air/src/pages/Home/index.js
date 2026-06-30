@@ -1,8 +1,9 @@
 import React, { useContext, useEffect, useState } from 'react';
-import { Card, Row } from '@douyinfe/semi-ui';
+import { Card, Col, Row } from '@douyinfe/semi-ui';
 import { API, showError, showNotice, timestamp2string } from '../../helpers';
 import { StatusContext } from '../../context/Status';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const Home = () => {
   const [statusState] = useContext(StatusContext);
@@ -31,7 +32,7 @@ const Home = () => {
     if (success) {
       let content = data;
       if (!data.startsWith('https://')) {
-        content = marked.parse(data);
+        content = DOMPurify.sanitize(marked.parse(data));
       }
       setHomePageContent(content);
       localStorage.setItem('home_page_content', content);
@@ -118,7 +119,7 @@ const Home = () => {
             {
               homePageContent.startsWith('https://') ?
                 <iframe src={homePageContent} style={{ width: '100%', height: '100vh', border: 'none' }} /> :
-                <div style={{ fontSize: 'larger' }} dangerouslySetInnerHTML={{ __html: homePageContent }}></div>
+                <div style={{ fontSize: 'larger' }} dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(homePageContent) }}></div>
             }
           </>
       }

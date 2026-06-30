@@ -1,10 +1,11 @@
 import { Toast } from '@douyinfe/semi-ui';
 import { toastConstants } from '../constants';
 import React from 'react';
-import {toast} from "react-toastify";
+import { toast } from 'react-toastify';
+import DOMPurify from 'dompurify';
 
 const HTMLToastContent = ({ htmlContent }) => {
-  return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+  return <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(htmlContent) }} />;
 };
 export default HTMLToastContent;
 export function isAdmin() {

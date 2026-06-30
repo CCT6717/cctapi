@@ -288,7 +288,7 @@ const ChannelsTable = () => {
 
   const loadChannels = async (startIdx, pageSize, idSort) => {
     setLoading(true);
-    const res = await API.get(`/api/channel/?p=${startIdx}&page_size=${pageSize}&id_sort=${idSort}`);
+    const res = await API.get('/api/channel/', { params: { p: startIdx, page_size: pageSize, id_sort: idSort } });
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
@@ -420,19 +420,29 @@ const ChannelsTable = () => {
       return;
     }
     setSearching(true);
-    const res = await API.get(`/api/channel/search?keyword=${searchKeyword}&group=${searchGroup}&model=${searchModel}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setChannels(data);
-      setActivePage(1);
-    } else {
-      showError(message);
+    try {
+      const res = await API.get('/api/channel/search', {
+        params: {
+          keyword: searchKeyword,
+          group: searchGroup,
+          model: searchModel
+        }
+      });
+      const { success, message, data } = res.data;
+      if (success) {
+        setChannels(data);
+        setActivePage(1);
+      } else {
+        showError(message);
+      }
+    } catch (error) {
+      // error is already shown by axios interceptor
     }
     setSearching(false);
   };
 
   const testChannel = async (record, model) => {
-    const res = await API.get(`/api/channel/test/${record.id}?model=${model}`);
+    const res = await API.get(`/api/channel/test/${record.id}`, { params: { model } });
     const { success, message, time } = res.data;
     if (success) {
       record.response_time = time * 1000;
@@ -444,7 +454,7 @@ const ChannelsTable = () => {
   };
 
   const testChannels = async (scope) => {
-    const res = await API.get(`/api/channel/test?scope=${scope}`);
+    const res = await API.get('/api/channel/test', { params: { scope } });
     const { success, message } = res.data;
     if (success) {
       showInfo('已成功开始测试渠道，请刷新页面查看结果。');

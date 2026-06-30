@@ -25,6 +25,7 @@ const Detail = (props) => {
     const {username, model_name, start_timestamp, end_timestamp, channel} = inputs;
     const isAdminUser = isAdmin();
     const initialized = useRef(false)
+    const chartRefs = useRef({ line: null, pie: null });
     const [modelDataChart, setModelDataChart] = useState(null);
     const [modelDataPieChart, setModelDataPieChart] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -167,18 +168,22 @@ const Detail = (props) => {
         }
     };
 
-    const loadQuotaData = async (lineChart, pieChart) => {
+    const loadQuotaData = async (lineChart, pieChart, isMounted) => {
         setLoading(true);
 
-        let url = '';
         let localStartTimestamp = Date.parse(start_timestamp) / 1000;
         let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+        let url = isAdminUser ? '/api/data/' : '/api/data/self/';
+        let params = {
+            start_timestamp: localStartTimestamp,
+            end_timestamp: localEndTimestamp,
+            default_time: dataExportDefaultTime
+        };
         if (isAdminUser) {
-            url = `/api/data/?username=${username}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
-        } else {
-            url = `/api/data/self/?start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&default_time=${dataExportDefaultTime}`;
+            params.username = username;
         }
-        const res = await API.get(url);
+        const res = await API.get(url, { params });
+        if (!isMounted) return;
         const {success, message, data} = res.data;
         if (success) {
             setQuotaData(data);
@@ -208,24 +213,26 @@ const Detail = (props) => {
     };
 
     const refresh = async () => {
-        await loadQuotaData(modelDataChart, modelDataPieChart);
+        await loadQuotaData(modelDataChart, modelDataPieChart, true);
     };
 
-    const initChart = async () => {
-        let lineChart = modelDataChart
-        if (!modelDataChart) {
+    const initChart = async (isMounted) => {
+        let lineChart = chartRefs.current.line;
+        if (!lineChart) {
             lineChart = new VChart(spec_line, {dom: 'model_data'});
+            chartRefs.current.line = lineChart;
             setModelDataChart(lineChart);
             lineChart.renderAsync();
         }
-        let pieChart = modelDataPieChart
-        if (!modelDataPieChart) {
+        let pieChart = chartRefs.current.pie;
+        if (!pieChart) {
             pieChart = new VChart(spec_pie, {dom: 'model_pie'});
+            chartRefs.current.pie = pieChart;
             setModelDataPieChart(pieChart);
             pieChart.renderAsync();
         }
         console.log('init vchart');
-        await loadQuotaData(lineChart, pieChart)
+        await loadQuotaData(lineChart, pieChart, isMounted)
     }
 
     const updateChart = (lineChart, pieChart, data) => {
@@ -284,17 +291,22 @@ const Detail = (props) => {
     }
 
     useEffect(() => {
-        // setDataExportDefaultTime(localStorage.getItem('data_export_default_time'));
-        // if (dataExportDefaultTime === 'day') {
-        //     // 设置开始时间为7天前
-        //     let st = timestamp2string(now.getTime() / 1000 - 86400 * 7)
-        //     inputs.start_timestamp = st;
-        //     formRef.current.formApi.setValue('start_timestamp', st);
-        // }
+        let isMounted = true;
         if (!initialized.current) {
             initialized.current = true;
-            initChart();
+            initChart(isMounted);
         }
+        return () => {
+            isMounted = false;
+            if (chartRefs.current.line) {
+                chartRefs.current.line.release();
+                chartRefs.current.line = null;
+            }
+            if (chartRefs.current.pie) {
+                chartRefs.current.pie.release();
+                chartRefs.current.pie = null;
+            }
+        };
     }, []);
 
     return (

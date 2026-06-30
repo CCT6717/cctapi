@@ -186,7 +186,7 @@ const RedemptionsTable = () => {
   };
 
   const loadRedemptions = async (startIdx) => {
-    const res = await API.get(`/api/redemption/?p=${startIdx}`);
+    const res = await API.get('/api/redemption/', { params: { p: startIdx } });
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
@@ -286,7 +286,7 @@ const RedemptionsTable = () => {
       return;
     }
     setSearching(true);
-    const res = await API.get(`/api/redemption/search?keyword=${searchKeyword}`);
+    const res = await API.get('/api/redemption/search', { params: { keyword: searchKeyword } });
     const { success, message, data } = res.data;
     if (success) {
       setRedemptions(data);

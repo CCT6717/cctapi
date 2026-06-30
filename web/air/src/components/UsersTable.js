@@ -164,7 +164,7 @@ const UsersTable = () => {
   };
 
   const loadUsers = async (startIdx) => {
-    const res = await API.get(`/api/user/?p=${startIdx}&order=${orderBy}`);
+    const res = await API.get('/api/user/', { params: { p: startIdx, order: orderBy } });
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
@@ -245,7 +245,7 @@ const UsersTable = () => {
       return;
     }
     setSearching(true);
-    const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
+    const res = await API.get('/api/user/search', { params: { keyword: searchKeyword } });
     const { success, message, data } = res.data;
     if (success) {
       setUsers(data);

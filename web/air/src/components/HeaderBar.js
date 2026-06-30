@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/User';
 
@@ -42,6 +42,8 @@ const HeaderBar = () => {
   // enable fireworks on new year(1.1 and 2.9-2.24)
   const isNewYear = (currentDate.getMonth() === 0 && currentDate.getDate() === 1) || (currentDate.getMonth() === 1 && currentDate.getDate() >= 9 && currentDate.getDate() <= 24);
 
+  const timerRefs = useRef({ stop: null, reload: null });
+
   async function logout() {
     setShowSidebar(false);
     await API.get('/api/user/logout');
@@ -54,9 +56,9 @@ const HeaderBar = () => {
   const handleNewYearClick = () => {
     fireworks.init('root', {});
     fireworks.start();
-    setTimeout(() => {
+    timerRefs.current.stop = setTimeout(() => {
       fireworks.stop();
-      setTimeout(() => {
+      timerRefs.current.reload = setTimeout(() => {
         window.location.reload();
       }, 10000);
     }, 3000);
@@ -69,6 +71,14 @@ const HeaderBar = () => {
     if (isNewYear) {
       console.log('Happy New Year!');
     }
+    return () => {
+      if (timerRefs.current.stop) {
+        clearTimeout(timerRefs.current.stop);
+      }
+      if (timerRefs.current.reload) {
+        clearTimeout(timerRefs.current.reload);
+      }
+    };
   }, []);
 
   const switchMode = (model) => {

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Button, Divider, Form, Grid, Header, Message, Modal } from 'semantic-ui-react';
 import { API, showError, showSuccess } from '../helpers';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 import { Link } from 'react-router-dom';
 
 const OtherSetting = () => {
@@ -103,7 +104,7 @@ const OtherSetting = () => {
     } else {
       setUpdateData({
         tag_name: tag_name,
-        content: marked.parse(body)
+        content: DOMPurify.sanitize(marked.parse(body))
       });
       setShowUpdateModal(true);
     }

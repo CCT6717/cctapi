@@ -173,7 +173,7 @@ const LogsTable = () => {
   const getLogSelfStat = async () => {
     let localStartTimestamp = Date.parse(start_timestamp) / 1000;
     let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-    let res = await API.get(`/api/log/self/stat?type=${logType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`);
+    let res = await API.get('/api/log/self/stat', { params: { type: logType, token_name, model_name, start_timestamp: localStartTimestamp, end_timestamp: localEndTimestamp } });
     const { success, message, data } = res.data;
     if (success) {
       setStat(data);
@@ -185,7 +185,7 @@ const LogsTable = () => {
   const getLogStat = async () => {
     let localStartTimestamp = Date.parse(start_timestamp) / 1000;
     let localEndTimestamp = Date.parse(end_timestamp) / 1000;
-    let res = await API.get(`/api/log/stat?type=${logType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}`);
+    let res = await API.get('/api/log/stat', { params: { type: logType, username, token_name, model_name, start_timestamp: localStartTimestamp, end_timestamp: localEndTimestamp, channel } });
     const { success, message, data } = res.data;
     if (success) {
       setStat(data);
@@ -242,12 +242,15 @@ const LogsTable = () => {
     let url = '';
     let localStartTimestamp = Date.parse(start_timestamp) / 1000;
     let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+    let params = { p: startIdx, page_size: pageSize, type: logType, token_name, model_name, start_timestamp: localStartTimestamp, end_timestamp: localEndTimestamp };
     if (isAdminUser) {
-      url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${logType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}`;
+      url = '/api/log/';
+      params.username = username;
+      params.channel = channel;
     } else {
-      url = `/api/log/self/?p=${startIdx}&page_size=${pageSize}&type=${logType}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
+      url = '/api/log/self/';
     }
-    const res = await API.get(url);
+    const res = await API.get(url, { params });
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
@@ -319,7 +322,7 @@ const LogsTable = () => {
       return;
     }
     setSearching(true);
-    const res = await API.get(`/api/log/self/search?keyword=${searchKeyword}`);
+    const res = await API.get('/api/log/self/search', { params: { keyword: searchKeyword } });
     const { success, message, data } = res.data;
     if (success) {
       setLogs(data);

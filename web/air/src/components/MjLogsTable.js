@@ -330,12 +330,14 @@ const LogsTable = () => {
     let url = '';
     let localStartTimestamp = Date.parse(start_timestamp);
     let localEndTimestamp = Date.parse(end_timestamp);
+    let params = { p: startIdx, mj_id, start_timestamp: localStartTimestamp, end_timestamp: localEndTimestamp };
     if (isAdminUser) {
-      url = `/api/mj/?p=${startIdx}&channel_id=${channel_id}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
+      url = '/api/mj/';
+      params.channel_id = channel_id;
     } else {
-      url = `/api/mj/self/?p=${startIdx}&mj_id=${mj_id}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}`;
+      url = '/api/mj/self/';
     }
-    const res = await API.get(url);
+    const res = await API.get(url, { params });
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {

@@ -435,7 +435,7 @@ const SystemSetting = () => {
             配置 GitHub OAuth App
             <Header.Subheader>
               用以支持通过 GitHub 进行登录注册，
-              <a href='https://github.com/settings/developers' target='_blank'>
+              <a href='https://github.com/settings/developers' target='_blank' rel='noreferrer'>
                 点击此处
               </a>
               管理你的 GitHub OAuth App
@@ -476,6 +476,7 @@ const SystemSetting = () => {
               <a
                 href='https://github.com/songquanpeng/wechat-server'
                 target='_blank'
+                rel='noreferrer'
               >
                 点击此处
               </a>
@@ -520,6 +521,7 @@ const SystemSetting = () => {
               <a
                 href='https://github.com/songquanpeng/message-pusher'
                 target='_blank'
+                rel='noreferrer'
               >
                 点击此处
               </a>
@@ -553,7 +555,7 @@ const SystemSetting = () => {
             配置 Turnstile
             <Header.Subheader>
               用以支持用户校验，
-              <a href='https://dash.cloudflare.com/' target='_blank'>
+              <a href='https://dash.cloudflare.com/' target='_blank' rel='noreferrer'>
                 点击此处
               </a>
               管理你的 Turnstile Sites，推荐选择 Invisible Widget Type
