@@ -17,7 +17,7 @@ const Home = () => {
     if (success) {
       let oldNotice = localStorage.getItem('notice');
       if (data !== oldNotice && data !== '') {
-        const htmlNotice = marked(data);
+        const htmlNotice = DOMPurify.sanitize(marked.parse(data));
         showNotice(htmlNotice, true);
         localStorage.setItem('notice', data);
       }
