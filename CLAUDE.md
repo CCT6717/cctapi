@@ -18,6 +18,7 @@ Last locally checked state:
 
 - Project path: `D:\project\cctapi`.
 - Default port: `3008`.
+- Current frontend theme: `air` (`THEME=air`).
 - Local service helpers exist:
   - `scripts\start-cctapi.ps1`
   - `scripts\stop-cctapi.ps1`
@@ -34,7 +35,12 @@ powershell -ExecutionPolicy Bypass -File scripts\stop-cctapi.ps1
 ```
 
 - `http://localhost:3008` was checked locally and returned HTTP 200 while a process was listening on port `3008`.
-- The repository was not clean at the last check: `web/build/default` generated assets were modified and `one-api-check.exe` was untracked. Treat these as likely build/check artifacts unless the user says otherwise.
+- Latest frontend build for `air` theme is committed to `web/build/air/`.
+- The repository has uncommitted changes outside the `air` theme that are not part of the current task:
+  - `web/build/default` generated assets are modified (pre-existing default-theme build artifacts).
+  - `web/default/src/components/FallbackConfigPanel.js` and related utils have pre-existing modifications.
+  - `.mcp.json`, `one-api.exe.bak`, `one-api.exe.prev`, `tmp_deploymentrow_utf8_check.txt` are untracked local artifacts.
+  - Treat these as likely build/check artifacts unless the user says otherwise.
 
 Recently verified feature locations:
 
@@ -48,6 +54,7 @@ Recently verified feature locations:
 - Doubao 24-hour cooldown: relay code calls `MarkDeploymentCooldownForDuration(..., 24*time.Hour)` for Doubao quota/limit skip paths.
 - Real routed model logging: `model.Log.RealModelName`, `relay/controller/helper.go`, and `web/default/src/components/LogsTable.js`.
 - Default frontend fallback panel: `web/default/src/pages/Fallback/`.
+- Air-theme frontend hardening: `web/air/src/helpers/utils.js`, `web/air/src/components/Footer.js`, `web/air/src/components/TokensTable.js`.
 
 Priority observation points during trial use:
 
@@ -98,7 +105,19 @@ The local service was restarted on port `3008`, `http://localhost:3008` returned
 
 ## Build And Run
 
-Always rebuild the default frontend before rebuilding the Go binary, because the Go server serves the generated `web/build/default` assets.
+Always rebuild the active frontend theme before rebuilding the Go binary, because the Go server embeds the generated `web/build/<theme>` assets.
+
+For the current `air` theme:
+
+```powershell
+cd D:\project\cctapi\web\air
+npm run build
+
+cd D:\project\cctapi
+go build -o one-api-new.exe .
+```
+
+For the `default` theme:
 
 ```powershell
 cd D:\project\cctapi\web\default
@@ -108,15 +127,18 @@ cd D:\project\cctapi
 go build -o one-api-new.exe .
 ```
 
-To replace the running local server on port `3008`, stop the process on that port, move `one-api-new.exe` over `one-api.exe`, then start with `PORT=3008`.
+To replace the running local server on port `3008`, stop the process on that port, move `one-api-new.exe` over `one-api.exe`, then start with `PORT=3008` (or `THEME=air` when testing the air theme).
 
-Important: this repository embeds `web/build/default` into the Go binary. If the user says a frontend change is not visible, verify the page is loading the latest hashed JS/CSS from `web/build/default/index.html`, rebuild the Go binary, replace the running `one-api.exe`, and restart the `3008` server.
+Important: this repository embeds `web/build/<theme>` into the Go binary. If the user says a frontend change is not visible, verify the page is loading the latest hashed JS/CSS from `web/build/<theme>/index.html`, rebuild the Go binary, replace the running `one-api.exe`, and restart the `3008` server.
+
+The `air` theme build script (`web/air/package.json`) uses a cross-platform Node script at `web/air/scripts/build.js` to move `build/` to `../build/air`. The old Unix `mv` command has been replaced so the build works on Windows without WSL.
 
 Useful checks:
 
 ```powershell
 go build ./...
 go test ./fallback
+cd D:\project\cctapi\web\air; npm run build
 cd D:\project\cctapi\web\default; npm run build
 ```
 
@@ -267,18 +289,21 @@ Most settings are controlled via `.env` at the project root:
 
 Three themes available, toggled via `THEME` env or admin settings:
 
-| Theme | Framework | Source |
-|---|---|---|
-| `default` | Semantic UI React | `web/default/` |
-| `air` | Semi UI (ByteDance) | `web/air/` |
-| `berry` | MUI (Material) | `web/berry/` |
+| Theme | Framework | Source | Build output |
+|---|---|---|---|
+| `default` | Semantic UI React | `web/default/` | `web/build/default/` |
+| `air` | Semi UI (ByteDance) | `web/air/` | `web/build/air/` |
+| `berry` | MUI (Material) | `web/berry/` | `web/build/berry/` |
 
 To build a specific theme:
+
 ```powershell
 cd D:\project\cctapi\web\<theme>
 npm run build
 # Result goes to web/build/<theme>/
 ```
+
+The `air` theme build uses `web/air/scripts/build.js` (called from `npm run build`) to move the React output to `web/build/air/`. This script works on both Windows and Unix.
 
 ## Router Structure (Gin)
 
@@ -369,6 +394,61 @@ One API is built by JustSong and licensed under MIT.
 ```
 
 Do not remove upstream One API / JustSong / MIT attribution.
+
+## Frontend Security & Quality Fixes (2026-07-01)
+
+Two rounds of frontend hardening were applied to the `air` theme and deployed locally.
+
+### Round 1 — Defensive Hardening (commit `f3afc11`)
+
+- `web/air/src/helpers/api.js`: axios error interceptor now rejects with `Promise.reject(error)` so callers can catch failures.
+- `web/air/src/pages/Home/index.js`, `web/air/src/pages/OtherSetting.js`, `web/air/src/components/HTMLToast.js`: all `dangerouslySetInnerHTML` usages now sanitize with `DOMPurify`.
+- `web/air/src/components/ChannelsTable.js`: channel search now passes parameters through axios `params` instead of manual URL string concatenation.
+- URL parameter encoding migrated from manual string building to axios `params` / `URLSearchParams` in `LogsTable`, `UsersTable`, `TokensTable`, `RedemptionsTable`, `MjLogsTable`, `GitHubOAuth`, and `Detail`.
+- Side-effect cleanup added in `Detail`, `HeaderBar`, `Footer`, `GitHubOAuth`, and `TokensTable`.
+- `target="_blank"` links now include `rel="noreferrer"` in `Footer`, `SystemSetting`, and `EditChannel`.
+- Fixed missing imports (`IconBox`, `Col`) and a leftover recursive function in `GitHubOAuth`.
+
+### Round 2 — Low-Priority Audit Fixes (commit `235f07c`)
+
+- `web/air/src/helpers/utils.js`:
+  - `showError` guards against `null`/`undefined` input.
+  - `openPage` opens links with `noopener,noreferrer`.
+- `web/air/src/components/Footer.js`: admin-configured `custom-footer` HTML is sanitized with `DOMPurify`.
+- `web/air/src/components/TokensTable.js` and `web/air/src/pages/TopUp/index.js`: `window.open` calls include `noopener,noreferrer`.
+- `web/air/src/components/utils.js`: GitHub OAuth popup includes `noopener,noreferrer`.
+- React quality:
+  - Fixed `useEffect` dependency warnings in `App.js`, `GitHubOAuth.js`, `HeaderBar.js`, `LoginForm.js`, `RegisterForm.js`, `PasswordResetConfirm.js`, `PersonalSetting.js`.
+  - Replaced stale-closure-prone plain variables with `useRef` where appropriate.
+  - Added real `isMounted` guards to async data loaders in `ChannelsTable`, `LogsTable`, `UsersTable`, `RedemptionsTable`, `SiderBar`, `SystemSetting`, `OtherSetting`, `OperationSetting`, `Home`, `About`, `TopUp`, `Channel/EditChannel`, `User/EditUser`, `Token/EditToken`, `Redemption/EditRedemption`, and `PersonalSetting`.
+- Code style:
+  - Added `web/air/src/constants/common.constant.js` with `EXTERNAL_URLS`.
+  - Replaced 18 hard-coded external URLs across 9 files with constant references.
+  - Added stable `key` props to array renders in `helpers/render.js`.
+- Build:
+  - Replaced Unix `mv` in `web/air/package.json` with cross-platform `web/air/scripts/build.js`.
+
+### Verification
+
+```powershell
+cd D:\project\cctapi\web\air
+npm run build
+
+cd D:\project\cctapi
+go build -o one-api-new.exe .
+# stop existing one-api.exe, replace, then restart
+THEME=air .\one-api.exe --log-dir .\logs
+```
+
+Local checks passed:
+
+- `http://localhost:3008/` → 200
+- `http://localhost:3008/login` → 200
+- `http://localhost:3008/register` → 200
+- `http://localhost:3008/channel` (unauthenticated) → redirects to `/login`
+- `http://localhost:3008/detail` (unauthenticated) → redirects to `/login`
+- Browser console: 0 errors, 0 warnings
+- Page loads latest hashed bundle (`main.531879b2.js`) from `web/build/air/`.
 
 ## Implementation Notes
 
