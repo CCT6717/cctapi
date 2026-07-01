@@ -185,14 +185,15 @@ const RedemptionsTable = () => {
     }
   };
 
-  const loadRedemptions = async (startIdx) => {
+  const loadRedemptions = async (startIdx, isMounted = true) => {
     const res = await API.get('/api/redemption/', { params: { p: startIdx } });
+    if (!isMounted) return;
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
         setRedemptionFormat(data);
       } else {
-        let newRedemptions = redemptions;
+        let newRedemptions = [...redemptions];
         newRedemptions.push(...data);
         setRedemptionFormat(newRedemptions);
       }
@@ -227,7 +228,7 @@ const RedemptionsTable = () => {
     (async () => {
       if (activePage === Math.ceil(redemptions.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
-        await loadRedemptions(activePage - 1);
+        await loadRedemptions(activePage - 1, true);
       }
       setActivePage(activePage);
     })();
@@ -235,7 +236,7 @@ const RedemptionsTable = () => {
 
   useEffect(() => {
     let isMounted = true;
-    loadRedemptions(0)
+    loadRedemptions(0, isMounted)
       .then()
       .catch((reason) => {
         if (isMounted) {
@@ -248,7 +249,7 @@ const RedemptionsTable = () => {
   }, []);
 
   const refresh = async () => {
-    await loadRedemptions(activePage - 1);
+    await loadRedemptions(activePage - 1, true);
   };
 
   const manageRedemption = async (id, action, record) => {
@@ -276,7 +277,10 @@ const RedemptionsTable = () => {
       if (action === 'delete') {
 
       } else {
-        record.status = redemption.status;
+        const idx = newRedemptions.findIndex(r => r.id === record.id);
+        if (idx > -1) {
+          newRedemptions[idx] = { ...record, status: redemption.status };
+        }
       }
       setRedemptions(newRedemptions);
     } else {
@@ -287,7 +291,7 @@ const RedemptionsTable = () => {
   const searchRedemptions = async () => {
     if (searchKeyword === '') {
       // if keyword is blank, load files instead.
-      await loadRedemptions(0);
+      await loadRedemptions(0, true);
       setActivePage(1);
       return;
     }
@@ -325,7 +329,7 @@ const RedemptionsTable = () => {
     setActivePage(page);
     if (page === Math.ceil(redemptions.length / ITEMS_PER_PAGE) + 1) {
       // In this case we have to load more data and then append them.
-      loadRedemptions(page - 1).then(r => {
+      loadRedemptions(page - 1, true).then(r => {
       });
     }
   };

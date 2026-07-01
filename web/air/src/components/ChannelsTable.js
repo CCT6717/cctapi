@@ -263,33 +263,33 @@ const ChannelsTable = () => {
   };
 
   const setChannelFormat = (channels) => {
-    for (let i = 0; i < channels.length; i++) {
-      channels[i].key = '' + channels[i].id;
-      let test_models = [];
-      channels[i].models.split(',').forEach((item, index) => {
-        test_models.push({
-          node: 'item',
-          name: item,
-          onClick: () => {
-            testChannel(channels[i], item);
-          }
-        });
-      });
-      channels[i].test_models = test_models;
-    }
-    // data.key = '' + data.id
-    setChannels(channels);
-    if (channels.length >= pageSize) {
-      setChannelCount(channels.length + pageSize);
+    const newChannels = channels.map((ch) => ({
+      ...ch,
+      key: '' + ch.id,
+      test_models: ch.models.split(',').map((item) => ({
+        node: 'item',
+        name: item,
+        onClick: () => {
+          testChannel(ch, item);
+        }
+      }))
+    }));
+    setChannels(newChannels);
+    if (newChannels.length >= pageSize) {
+      setChannelCount(newChannels.length + pageSize);
     } else {
-      setChannelCount(channels.length);
+      setChannelCount(newChannels.length);
     }
   };
 
-  const loadChannels = async (startIdx, pageSize, idSort) => {
+  const loadChannels = async (startIdx, pageSize, idSort, isMounted = true) => {
     setLoading(true);
     const res = await API.get('/api/channel/', { params: { p: startIdx, page_size: pageSize, id_sort: idSort } });
     const { success, message, data } = res.data;
+    if (!isMounted) {
+      setLoading(false);
+      return;
+    }
     if (success) {
       if (startIdx === 0) {
         setChannelFormat(data);
@@ -305,7 +305,7 @@ const ChannelsTable = () => {
   };
 
   const refresh = async () => {
-    await loadChannels(activePage - 1, pageSize, idSort);
+    await loadChannels(activePage - 1, pageSize, idSort, true);
   };
 
   useEffect(() => {
@@ -316,8 +316,10 @@ const ChannelsTable = () => {
     setPageSize(localPageSize);
     let isMounted = true;
     const run = async () => {
-      await loadChannels(0, localPageSize, localIdSort);
-      await fetchGroups();
+      await loadChannels(0, localPageSize, localIdSort, isMounted);
+      if (isMounted) {
+        await fetchGroups();
+      }
     };
     run().catch((reason) => {
       if (isMounted) {
@@ -422,7 +424,7 @@ const ChannelsTable = () => {
   const searchChannels = async (searchKeyword, searchGroup, searchModel) => {
     if (searchKeyword === '' && searchGroup === '' && searchModel === '') {
       // if keyword is blank, load files instead.
-      await loadChannels(0, pageSize, idSort);
+      await loadChannels(0, pageSize, idSort, true);
       setActivePage(1);
       return;
     }
@@ -543,7 +545,7 @@ const ChannelsTable = () => {
     setActivePage(page);
     if (page === Math.ceil(channels.length / pageSize) + 1) {
       // In this case we have to load more data and then append them.
-      loadChannels(page - 1, pageSize, idSort).then(r => {
+      loadChannels(page - 1, pageSize, idSort, true).then(r => {
       });
     }
   };
@@ -552,7 +554,7 @@ const ChannelsTable = () => {
     localStorage.setItem('page-size', size + '');
     setPageSize(size);
     setActivePage(1);
-    loadChannels(0, size, idSort)
+    loadChannels(0, size, idSort, true)
       .then()
       .catch((reason) => {
         showError(reason);

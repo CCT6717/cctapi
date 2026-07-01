@@ -163,15 +163,16 @@ const UsersTable = () => {
     }
   };
 
-  const loadUsers = async (startIdx) => {
+  const loadUsers = async (startIdx, isMounted = true) => {
     const res = await API.get('/api/user/', { params: { p: startIdx, order: orderBy } });
+    if (!isMounted) return;
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
         setUsers(data);
         setCount(data);
       } else {
-        let newUsers = users;
+        let newUsers = [...users];
         newUsers.push(...data);
         setUsers(newUsers);
         setCount(newUsers);
@@ -186,7 +187,7 @@ const UsersTable = () => {
     (async () => {
       if (activePage === Math.ceil(users.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
-        await loadUsers(activePage - 1);
+        await loadUsers(activePage - 1, true);
       }
       setActivePage(activePage);
     })();
@@ -194,7 +195,7 @@ const UsersTable = () => {
 
   useEffect(() => {
     let isMounted = true;
-    loadUsers(0)
+    loadUsers(0, isMounted)
       .then()
       .catch((reason) => {
         if (isMounted) {
@@ -218,8 +219,10 @@ const UsersTable = () => {
       if (action === 'delete') {
 
       } else {
-        record.status = user.status;
-        record.role = user.role;
+        const idx = newUsers.findIndex(u => u.id === record.id);
+        if (idx > -1) {
+          newUsers[idx] = { ...record, status: user.status, role: user.role };
+        }
       }
       setUsers(newUsers);
     } else {
@@ -245,7 +248,7 @@ const UsersTable = () => {
   const searchUsers = async () => {
     if (searchKeyword === '') {
       // if keyword is blank, load files instead.
-      await loadUsers(0);
+      await loadUsers(0, true);
       setActivePage(1);
       setOrderBy('');
       return;
@@ -284,7 +287,7 @@ const UsersTable = () => {
     setActivePage(page);
     if (page === Math.ceil(users.length / ITEMS_PER_PAGE) + 1) {
       // In this case we have to load more data and then append them.
-      loadUsers(page - 1).then(r => {
+      loadUsers(page - 1, true).then(r => {
       });
     }
   };
@@ -304,7 +307,7 @@ const UsersTable = () => {
 
   const refresh = async () => {
     if (searchKeyword === '') {
-      await loadUsers(activePage - 1);
+      await loadUsers(activePage - 1, true);
     } else {
       await searchUsers();
     }

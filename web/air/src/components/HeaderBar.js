@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useRef, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { UserContext } from '../context/User';
 
@@ -11,25 +11,26 @@ import { IconHelpCircle, IconKey, IconUser } from '@douyinfe/semi-icons';
 import { Avatar, Dropdown, Layout, Nav, Switch } from '@douyinfe/semi-ui';
 import { stringToColor } from '../helpers/render';
 
-// HeaderBar Buttons
-let headerButtons = [
-  {
-    text: '关于',
-    itemKey: 'about',
-    to: '/about',
-    icon: <IconHelpCircle />
-  }
-];
-
-if (localStorage.getItem('chat_link')) {
-  headerButtons.splice(1, 0, {
-    name: '聊天',
-    to: '/chat',
-    icon: 'comments'
-  });
-}
-
 const HeaderBar = () => {
+  const headerButtons = useMemo(() => {
+    const buttons = [
+      {
+        text: '关于',
+        itemKey: 'about',
+        to: '/about',
+        icon: <IconHelpCircle />
+      }
+    ];
+    if (localStorage.getItem('chat_link')) {
+      buttons.splice(1, 0, {
+        name: '聊天',
+        to: '/chat',
+        icon: 'comments'
+      });
+    }
+    return buttons;
+  }, []);
+
   const [userState, userDispatch] = useContext(UserContext);
   const navigate = useNavigate();
 
@@ -41,6 +42,7 @@ const HeaderBar = () => {
   const isNewYear = (currentDate.getMonth() === 0 && currentDate.getDate() === 1) || (currentDate.getMonth() === 1 && currentDate.getDate() >= 9 && currentDate.getDate() <= 24);
 
   const timerRefs = useRef({ stop: null, reload: null });
+  const fireworksRef = useRef(null);
 
   async function logout() {
     setShowSidebar(false);
@@ -54,6 +56,7 @@ const HeaderBar = () => {
   const handleNewYearClick = () => {
     fireworks.init('root', {});
     fireworks.start();
+    fireworksRef.current = fireworks;
     timerRefs.current.stop = setTimeout(() => {
       fireworks.stop();
       timerRefs.current.reload = setTimeout(() => {
@@ -76,6 +79,9 @@ const HeaderBar = () => {
       }
       if (timerRefs.current.reload) {
         clearTimeout(timerRefs.current.reload);
+      }
+      if (fireworksRef.current) {
+        fireworksRef.current.stop();
       }
     };
   }, []);

@@ -3,6 +3,7 @@ import { Header, Segment } from 'semantic-ui-react';
 import { API, showError } from '../../helpers';
 import { EXTERNAL_URLS } from '../../constants';
 import { marked } from 'marked';
+import DOMPurify from 'dompurify';
 
 const About = () => {
   const [about, setAbout] = useState('');
@@ -16,7 +17,7 @@ const About = () => {
     if (success) {
       let aboutContent = data;
       if (!data.startsWith('https://')) {
-        aboutContent = marked.parse(data);
+        aboutContent = DOMPurify.sanitize(marked.parse(data));
       }
       setAbout(aboutContent);
       localStorage.setItem('about', aboutContent);

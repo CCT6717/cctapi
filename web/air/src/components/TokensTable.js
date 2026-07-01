@@ -445,12 +445,13 @@ const TokensTable = () => {
       showSuccess('操作成功完成！');
       let token = res.data.data;
       let newTokens = [...tokens];
-      // let realIdx = (activePage - 1) * ITEMS_PER_PAGE + idx;
       if (action === 'delete') {
 
       } else {
-        record.status = token.status;
-        // newTokens[realIdx].status = token.status;
+        const idx = newTokens.findIndex(t => t.id === record.id);
+        if (idx > -1) {
+          newTokens[idx] = { ...record, status: token.status };
+        }
       }
       setTokensFormat(newTokens);
     } else {

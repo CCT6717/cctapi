@@ -314,14 +314,13 @@ const LogsTable = () => {
 
 
   const setLogsFormat = (logs) => {
-    for (let i = 0; i < logs.length; i++) {
-      logs[i].timestamp2string = timestamp2string(logs[i].created_at);
-      logs[i].key = '' + logs[i].id;
-    }
-    // data.key = '' + data.id
-    setLogs(logs);
-    setLogCount(logs.length + ITEMS_PER_PAGE);
-    // console.log(logCount);
+    const newLogs = logs.map((log) => ({
+      ...log,
+      timestamp2string: timestamp2string(log.created_at),
+      key: '' + log.id
+    }));
+    setLogs(newLogs);
+    setLogCount(newLogs.length + ITEMS_PER_PAGE);
   };
 
   const loadLogs = async (startIdx) => {

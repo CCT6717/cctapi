@@ -232,7 +232,8 @@ const Detail = (props) => {
             pieChart.renderAsync();
         }
         console.log('init vchart');
-        await loadQuotaData(lineChart, pieChart, isMounted)
+        await loadQuotaData(lineChart, pieChart, isMounted);
+        if (!isMounted) return;
     }
 
     const updateChart = (lineChart, pieChart, data) => {
