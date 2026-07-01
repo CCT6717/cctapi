@@ -27,23 +27,48 @@ export const slugModelName = (name) =>
  * - pool 以 _fixed_ 开头 -> 'fixed'
  * - 否则 -> 'error'
  */
-export const computeInitialMode = (data, depId) => {
+export const computeInitialMode = (data, depId, vmKey) => {
   const dep = data?.deployments?.[depId];
   if (!dep) return 'error';
-  const vms = data?.virtual_models || {};
+  const vm = vmKey ? data?.virtual_models?.[vmKey] : null;
   if (
-    Object.values(vms).some(
-      (vm) =>
-        (vm.fallback_order || []).includes(depId) &&
-        vm?.routing_mode === 'fixed' &&
-        vm?.preferred_deployment === depId
-    )
+    vm &&
+    (vm.fallback_order || []).includes(depId) &&
+    vm?.preferred_deployment === depId
   ) {
     return 'fixed';
   }
   if (dep.daily_limit_tokens > 0) return 'quota';
-  if (dep.pool && dep.pool.startsWith('_fixed_')) return 'fixed';
   return 'error';
+};
+
+export const getVirtualModelDeploymentIds = (vm, deployments) => {
+  if (!vm || !deployments) return [];
+  if (Array.isArray(vm.fallback_order) && vm.fallback_order.length > 0) {
+    return vm.fallback_order.filter((id) => deployments[id] && !isSeparatorKey(id));
+  }
+  const pools = Array.isArray(vm.pools) ? vm.pools : [];
+  return Object.keys(deployments).filter((id) => {
+    if (isSeparatorKey(id)) return false;
+    const dep = deployments[id];
+    return dep && pools.includes(dep.pool);
+  });
+};
+
+export const applyVmModeSelection = ({ previousModes, depId, mode, vmKey, data }) => {
+  const next = { ...(previousModes || {}), [depId]: mode };
+  if (mode !== 'fixed' && mode !== 'quota') return next;
+  const vm = data?.virtual_models?.[vmKey];
+  const deploymentIds = getVirtualModelDeploymentIds(vm, data?.deployments || {});
+  const targetModes = mode === 'fixed' ? ['fixed'] : ['quota'];
+  deploymentIds.forEach((id) => {
+    if (id === depId) return;
+    const currentMode = next[id] !== undefined ? next[id] : computeInitialMode(data, id, vmKey);
+    if (targetModes.includes(currentMode)) {
+      next[id] = 'error';
+    }
+  });
+  return next;
 };
 
 export const formatStatusTime = (value) => {

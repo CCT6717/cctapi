@@ -40,10 +40,13 @@ function applyDeploymentModes(payload, deploymentMode, deploymentOwnerVm) {
       if (!payload.virtual_models[vmKey]) return;
       const vm = payload.virtual_models[vmKey];
       if (mode === 'fixed') {
-        vm.routing_mode = 'fixed';
+        vm.routing_mode = 'fallback';
         vm.preferred_deployment = depId;
         vm.allow_degrade_to_low = false;
         vm.allow_degrade_to_free = false;
+        if (payload.deployments[depId]) {
+          payload.deployments[depId].daily_limit_tokens = 0;
+        }
       } else if (mode === 'quota') {
         vm.routing_mode = 'fallback';
         vm.preferred_deployment = depId;

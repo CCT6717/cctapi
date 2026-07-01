@@ -24,6 +24,8 @@ import {
   isFreeDeployment,
   slugModelName,
   computeInitialMode,
+  getVirtualModelDeploymentIds,
+  applyVmModeSelection,
   getDeploymentStatusMeta,
   getDeploymentOwnerNames,
 } from './utils/deploymentMeta';
@@ -65,17 +67,7 @@ const ModelEditor = ({ highlightDeployment }) => {
       .map((name) => {
         const vm = config.virtual_models[name];
         if (!vm) return null;
-        const pools = Array.isArray(vm.pools) ? vm.pools : [];
-        let fallbackOrder;
-        const allDepIds = Object.keys(config.deployments || {}).filter((id) => !isSeparatorKey(id));
-        if (Array.isArray(vm.fallback_order) && vm.fallback_order.length > 0) {
-          fallbackOrder = vm.fallback_order.filter((id) => config.deployments?.[id]);
-        } else {
-          fallbackOrder = allDepIds.filter((id) => {
-            const dep = config.deployments?.[id];
-            return dep && pools.includes(dep.pool);
-          });
-        }
+        const fallbackOrder = getVirtualModelDeploymentIds(vm, config.deployments || {});
         return {
           name,
           ...vm,
@@ -138,20 +130,16 @@ const ModelEditor = ({ highlightDeployment }) => {
   const existingPairsByVm = useMemo(() => {
     const map = {};
     if (!config?.deployments || !config?.virtual_models) return map;
-    const poolToVm = {};
     Object.entries(config.virtual_models).forEach(([vmKey, vm]) => {
-      (vm.pools || []).forEach((p) => { poolToVm[p] = vmKey; });
-    });
-    Object.entries(config.deployments).forEach(([id, dep]) => {
-      if (isSeparatorKey(id)) return;
-      if (isFreeDeployment(id, dep)) return;
-      if (dep?.channel_id && dep?.real_model) {
-        const vmKey = poolToVm[dep.pool];
-        if (vmKey) {
+      getVirtualModelDeploymentIds(vm, config.deployments).forEach((id) => {
+        const dep = config.deployments[id];
+        if (isSeparatorKey(id)) return;
+        if (isFreeDeployment(id, dep)) return;
+        if (dep?.channel_id && dep?.real_model) {
           if (!map[vmKey]) map[vmKey] = new Set();
           map[vmKey].add(`${dep.channel_id}:${dep.real_model}`);
         }
-      }
+      });
     });
     return map;
   }, [config]);
@@ -172,13 +160,9 @@ const ModelEditor = ({ highlightDeployment }) => {
     const map = {};
     if (config?.virtual_models && config?.deployments) {
       Object.entries(config.virtual_models).forEach(([vmKey, vm]) => {
-        (vm.pools || []).forEach((pool) => {
-          Object.entries(config.deployments).forEach(([depId, dep]) => {
-            if (dep.pool === pool) {
-              map[depId] = Array.isArray(map[depId]) ? map[depId] : [];
-              if (!map[depId].includes(vmKey)) map[depId].push(vmKey);
-            }
-          });
+        getVirtualModelDeploymentIds(vm, config.deployments).forEach((depId) => {
+          map[depId] = Array.isArray(map[depId]) ? map[depId] : [];
+          if (!map[depId].includes(vmKey)) map[depId].push(vmKey);
         });
       });
     }
@@ -192,19 +176,13 @@ const ModelEditor = ({ highlightDeployment }) => {
       return;
     }
     setDeploymentMode((prev) => {
-      const next = { ...prev, [depId]: mode };
-      if (mode === 'fixed' || mode === 'quota') {
-        const targetModes = mode === 'fixed' ? ['fixed'] : ['quota'];
-        Object.keys(next).forEach((id) => {
-          if (id === depId) return;
-          const ownerVms = deploymentOwnerVm[id];
-          const sameVm = Array.isArray(ownerVms) && ownerVms.includes(vmKey);
-          if (sameVm && targetModes.includes(next[id])) {
-            next[id] = 'error';
-          }
-        });
-      }
-      return next;
+      return applyVmModeSelection({
+        previousModes: prev,
+        depId,
+        mode,
+        vmKey,
+        data: config,
+      });
     });
     if (mode === 'quota') {
       setDraftDeployments((prev) => {
@@ -221,7 +199,7 @@ const ModelEditor = ({ highlightDeployment }) => {
         [depId]: { ...(prev[depId] || {}), daily_limit_tokens: 0 },
       }));
     }
-  }, [config, deploymentOwnerVm, setDeploymentMode, setDraftDeployments, setSaveMessage]);
+  }, [config, setDeploymentMode, setDraftDeployments, setSaveMessage]);
 
   const handleSave = useCallback(async () => {
     await execute(
@@ -536,7 +514,7 @@ const ModelEditor = ({ highlightDeployment }) => {
           const modelCount = (vm.fallback_order || []).length;
           const fixedDepId = (vm.fallback_order || []).find((depId) => deploymentMode[depId] === 'fixed')
             || (vm.fallback_order || []).find(
-              (depId) => deploymentMode[depId] === undefined && computeInitialMode(config, depId) === 'fixed'
+              (depId) => deploymentMode[depId] === undefined && computeInitialMode(config, depId, vmKey) === 'fixed'
             );
           return (
             <section className='fallback-virtual-panel' key={vmKey}>
@@ -709,7 +687,7 @@ const ModelEditor = ({ highlightDeployment }) => {
                       const statusMeta = getDeploymentStatusMeta(deploymentStatus);
                       const ownerNames = getDeploymentOwnerNames(vmArray, deploymentId);
                       const ownerText = ownerNames.join(' / ');
-                      const rowMode = deploymentMode[dep.id] || computeInitialMode(config, dep.id);
+                      const rowMode = deploymentMode[dep.id] || computeInitialMode(config, dep.id, vmKey);
                       const currentMode = rowMode;
 
                       return (

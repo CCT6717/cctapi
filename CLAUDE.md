@@ -18,7 +18,7 @@ Last locally checked state:
 
 - Project path: `D:\project\cctapi`.
 - Default port: `3008`.
-- Current frontend theme: `air` (`THEME=air`).
+- Current frontend theme most recently used for fallback/gateway verification: `default`.
 - Local service helpers exist:
   - `scripts\start-cctapi.ps1`
   - `scripts\stop-cctapi.ps1`
@@ -35,11 +35,12 @@ powershell -ExecutionPolicy Bypass -File scripts\stop-cctapi.ps1
 ```
 
 - `http://localhost:3008` was checked locally and returned HTTP 200 while a process was listening on port `3008`.
-- Latest frontend build for `air` theme is committed to `web/build/air/`.
-- The repository has uncommitted changes outside the `air` theme that are not part of the current task:
-  - `web/build/default` generated assets are modified (pre-existing default-theme build artifacts).
-  - `web/default/src/components/FallbackConfigPanel.js` and related utils have pre-existing modifications.
-  - `.mcp.json`, `one-api.exe.bak`, `one-api.exe.prev`, `tmp_deploymentrow_utf8_check.txt` are untracked local artifacts.
+- Latest frontend build for the currently verified fallback editor path is in `web/build/default/`.
+- The repository has active local fallback-editor work and generated artifacts:
+  - `web/build/default` generated assets are modified.
+  - `web/default/src/components/FallbackConfigPanel.js`, `web/default/src/components/utils/deploymentMeta.js`, and `web/default/src/components/utils/savePipeline.js` have active local modifications.
+  - `web/default/src/components/utils/deploymentMeta.test.js` and `web/default/src/components/utils/savePipeline.test.js` are new local regression tests.
+  - `.mcp.json`, `one-api.exe.bak`, `one-api.exe.prev`, `one-api.exe.prev2`, `tmp_deploymentrow_utf8_check.txt` are untracked local artifacts.
   - Treat these as likely build/check artifacts unless the user says otherwise.
 
 Recently verified feature locations:
@@ -54,6 +55,7 @@ Recently verified feature locations:
 - Doubao 24-hour cooldown: relay code calls `MarkDeploymentCooldownForDuration(..., 24*time.Hour)` for Doubao quota/limit skip paths.
 - Real routed model logging: `model.Log.RealModelName`, `relay/controller/helper.go`, and `web/default/src/components/LogsTable.js`.
 - Default frontend fallback panel: `web/default/src/pages/Fallback/`.
+- Default-theme gateway editor fallback behavior and ownership cleanup: `web/default/src/components/FallbackConfigPanel.js`, `web/default/src/components/utils/deploymentMeta.js`, and `web/default/src/components/utils/savePipeline.js`.
 - Air-theme frontend hardening: `web/air/src/helpers/utils.js`, `web/air/src/components/Footer.js`, `web/air/src/components/TokensTable.js`.
 
 Priority observation points during trial use:
@@ -63,6 +65,34 @@ Priority observation points during trial use:
 - OpenRouter/free deployments should not be blocked by local daily quota logic.
 - Fixed routing should stay pinned to the selected deployment and not drift to another deployment.
 - If the virtual model list only shows one model, inspect `data/fallback.json`, fallback config normalization, API filtering, and frontend rendering conditions first.
+
+## Gateway Editor Notes (2026-07-01)
+
+The default-theme gateway editor at `/fallback/gateway` now intentionally uses "preferred start deployment" semantics for the `固定` button.
+
+- When the user clicks `固定` in the gateway editor, the saved VM state should be:
+  - `routing_mode = "fallback"`
+  - `preferred_deployment = <selected deployment>`
+- This means the selected deployment is tried first, but the VM must still fallback to other deployments in the same VM when upstream failure occurs.
+- Do not change the gateway editor back to storing `routing_mode = "fixed"` for this interaction unless the user explicitly asks for true no-fallback behavior.
+
+Two important frontend fixes were applied for this editor:
+
+1. Deployment ownership in the gateway editor must be derived from `fallback_order` first, with `pools` only as a fallback when `fallback_order` is empty.
+2. Selecting a new `fixed` or `quota` deployment inside one VM must clear both:
+   - existing draft selections, and
+   - config-derived initial `fixed` / `quota` states in that same VM.
+
+This avoids the previous bug where some rows appeared under one VM but were controlled by another ownership calculation, and the bug where multiple rows in one VM could stay highlighted as `固定` at the same time.
+
+Latest local verification for this gateway-editor work:
+
+- targeted tests passed:
+  - `src/components/utils/deploymentMeta.test.js`
+  - `src/components/utils/savePipeline.test.js`
+- `web/default` build passed with existing unrelated ESLint warnings
+- `go build -o one-api-new.exe .` passed
+- local `3008` was rebuilt and replaced after the gateway-editor fixes
 
 ## Recent SenseNova Fix
 

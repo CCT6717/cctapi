@@ -73,7 +73,11 @@ Important additions over upstream One API:
 
 - Virtual models: one exposed model name maps to multiple real upstream deployments.
 - Weighted routing, sequential routing, and fixed routing.
-- Fixed routing pins a virtual model to one selected real deployment through `fixed_deployment`; runtime upstream errors do not rotate to another deployment unless the administrator changes the fixed target.
+- The current default-theme gateway editor at `/fallback/gateway` uses "preferred start deployment" semantics for the `固定` button:
+  - it saves `routing_mode = fallback`
+  - it sets `preferred_deployment`
+  - runtime upstream failure should still fallback to other deployments inside the same VM
+- True backend fixed routing still exists, but do not assume the gateway editor's `固定` button means no-fallback fixed routing.
 - Per-deployment token quota, soft limit, hard limit, and concurrency limit.
 - Manual cooldown and recover actions.
 - Smart score trend chart for deployment ordering.
@@ -140,5 +144,6 @@ Do not remove upstream One API / JustSong / MIT attribution.
 - Keep fallback admin features in `/fallback/status` unless there is a strong reason to expose them elsewhere.
 - Prefer existing project patterns and Semantic UI React for the default theme.
 - Do not add another standalone connectivity-test panel; extend the existing virtual model config module instead.
-- Fixed-route virtual models must keep `fixed_deployment` bound to an enabled deployment in that virtual model's `fallback_order`.
+- In the gateway editor, deployment ownership and per-VM mode control should be derived from `fallback_order` first, with `pools` only as a fallback when no explicit `fallback_order` exists.
+- In the gateway editor, selecting a new `fixed` or `quota` deployment inside one VM must clear any existing config-derived or draft `fixed` / `quota` selection in that same VM, so the UI never shows multiple active rows for the same exclusive mode.
 - Top failure model/channel in the runtime panel is currently derived from switch logs. It is approximate. Exact failure ranking would require a backend deployment-attempt event table or a dedicated health aggregation endpoint.
