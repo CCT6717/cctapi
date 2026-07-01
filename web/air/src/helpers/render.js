@@ -15,16 +15,17 @@ export function renderGroup(group) {
     let groups = group.split(',');
     groups.sort();
     return <>
-        {groups.map((group) => {
+        {groups.map((group, index) => {
+            // group names are unique strings, using index as fallback since group itself is a stable unique identifier
             if (group === 'vip' || group === 'pro') {
-                return <Tag size='large' color='yellow'>{group}</Tag>;
+                return <Tag key={group} size='large' color='yellow'>{group}</Tag>;
             } else if (group === 'svip' || group === 'premium') {
-                return <Tag size='large' color='red'>{group}</Tag>;
+                return <Tag key={group} size='large' color='red'>{group}</Tag>;
             }
             if (group === 'default') {
-                return <Tag size='large'>{group}</Tag>;
+                return <Tag key={group} size='large'>{group}</Tag>;
             } else {
-                return <Tag size='large' color={stringToColor(group)}>{group}</Tag>;
+                return <Tag key={group} size='large' color={stringToColor(group)}>{group}</Tag>;
             }
         })}
     </>;

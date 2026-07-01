@@ -53,7 +53,7 @@ const TopUp = () => {
             showError('超级管理员未设置充值链接！');
             return;
         }
-        window.open(topUpLink, '_blank');
+        window.open(topUpLink, '_blank', 'noopener,noreferrer');
     };
 
     const preTopUp = async (payment) => {
@@ -126,8 +126,9 @@ const TopUp = () => {
         }
     }
 
-    const getUserQuota = async () => {
+    const getUserQuota = async (isMounted) => {
         let res = await API.get(`/api/user/self`);
+        if (!isMounted) return;
         const {success, message, data} = res.data;
         if (success) {
             setUserQuota(data.quota);
@@ -150,7 +151,14 @@ const TopUp = () => {
                 setEnableOnlineTopUp(status.enable_online_topup);
             }
         }
-        getUserQuota().then();
+        let isMounted = true;
+        getUserQuota(isMounted).then(() => {
+            // mounted check handled inside getUserQuota
+        });
+        return () => {
+            isMounted = false;
+        };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const renderAmount = () => {

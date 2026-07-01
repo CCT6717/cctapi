@@ -75,9 +75,13 @@ if (isMobile()) {
 
 export function showError(error) {
   console.error(error);
+  if (!error) {
+    Toast.error('错误：未知错误');
+    return;
+  }
   if (error.message) {
     if (error.name === 'AxiosError') {
-      switch (error.response.status) {
+      switch (error?.response?.status) {
         case 401:
           // toast.error('错误：未登录或登录已过期，请重新登录！', showErrorOptions);
           window.location.href = '/login?expired=true';
@@ -123,7 +127,7 @@ export function showNotice(message, isHTML = false) {
 }
 
 export function openPage(url) {
-  window.open(url);
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 export function removeTrailingSlash(url) {

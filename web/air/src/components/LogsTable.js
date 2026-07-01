@@ -307,11 +307,17 @@ const LogsTable = () => {
     // console.log('default effect')
     const localPageSize = parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
     setPageSize(localPageSize);
+    let isMounted = true;
     loadLogs(0, localPageSize)
       .then()
       .catch((reason) => {
-        showError(reason);
+        if (isMounted) {
+          showError(reason);
+        }
       });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const searchLogs = async () => {

@@ -186,18 +186,24 @@ const UsersTable = () => {
     (async () => {
       if (activePage === Math.ceil(users.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
-        await loadUsers(activePage - 1, orderBy);
+        await loadUsers(activePage - 1);
       }
       setActivePage(activePage);
     })();
   };
 
   useEffect(() => {
-    loadUsers(0, orderBy)
+    let isMounted = true;
+    loadUsers(0)
       .then()
       .catch((reason) => {
-        showError(reason);
+        if (isMounted) {
+          showError(reason);
+        }
       });
+    return () => {
+      isMounted = false;
+    };
   }, [orderBy]);
 
   const manageUser = async (username, action, record) => {

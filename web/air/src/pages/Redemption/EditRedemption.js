@@ -42,11 +42,15 @@ const EditRedemption = (props) => {
 
   useEffect(() => {
     if (isEdit) {
-      loadRedemption().then(
-        () => {
+      let isMounted = true;
+      loadRedemption().then(() => {
+        if (isMounted) {
           // console.log(inputs);
         }
-      );
+      });
+      return () => {
+        isMounted = false;
+      };
     } else {
       setInputs(originInputs);
     }

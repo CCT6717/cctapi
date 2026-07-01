@@ -234,11 +234,17 @@ const RedemptionsTable = () => {
   };
 
   useEffect(() => {
+    let isMounted = true;
     loadRedemptions(0)
       .then()
       .catch((reason) => {
-        showError(reason);
+        if (isMounted) {
+          showError(reason);
+        }
       });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const refresh = async () => {

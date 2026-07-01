@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from 'react';
 import { Card, Col, Row } from '@douyinfe/semi-ui';
 import { API, showError, showNotice, timestamp2string } from '../../helpers';
 import { StatusContext } from '../../context/Status';
+import { EXTERNAL_URLS } from '../../constants';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
@@ -49,8 +50,18 @@ const Home = () => {
   };
 
   useEffect(() => {
-    displayNotice().then();
-    displayHomePageContent().then();
+    let isMounted = true;
+    const run = async () => {
+      await displayNotice();
+      if (isMounted) {
+        await displayHomePageContent();
+      }
+    };
+    run();
+    return () => {
+      isMounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
     <>
@@ -74,10 +85,10 @@ const Home = () => {
                     <p>
                       源码：
                       <a
-                        href='https://github.com/songquanpeng/one-api'
+                        href={EXTERNAL_URLS.GITHUB_REPO}
                         target='_blank' rel='noreferrer'
                       >
-                        https://github.com/songquanpeng/one-api
+                        {EXTERNAL_URLS.GITHUB_REPO}
                       </a>
                     </p>
                     <p>启动时间：{getStartTimeString()}</p>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Button, Form, Grid, Header, Image, Message, Segment } from 'semantic-ui-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { API, getLogo, showError, showInfo, showSuccess } from '../helpers';
@@ -19,12 +19,15 @@ const RegisterForm = () => {
   const [turnstileToken, setTurnstileToken] = useState('');
   const [loading, setLoading] = useState(false);
   const logo = getLogo();
-  let affCode = new URLSearchParams(window.location.search).get('aff');
-  if (affCode) {
-    localStorage.setItem('aff', affCode);
-  }
+  const navigate = useNavigate();
+  const affCodeRef = useRef(null);
 
   useEffect(() => {
+    let affCode = new URLSearchParams(window.location.search).get('aff');
+    if (affCode) {
+      localStorage.setItem('aff', affCode);
+      affCodeRef.current = affCode;
+    }
     let status = localStorage.getItem('status');
     if (status) {
       status = JSON.parse(status);
@@ -34,9 +37,7 @@ const RegisterForm = () => {
         setTurnstileSiteKey(status.turnstile_site_key);
       }
     }
-  });
-
-  let navigate = useNavigate();
+  }, []);
 
   function handleChange(e) {
     const { name, value } = e.target;
@@ -59,6 +60,7 @@ const RegisterForm = () => {
         return;
       }
       setLoading(true);
+      let affCode = affCodeRef.current;
       if (!affCode) {
         affCode = localStorage.getItem('aff');
       }

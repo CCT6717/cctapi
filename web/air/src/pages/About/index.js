@@ -1,15 +1,17 @@
 import React, { useEffect, useState } from 'react';
 import { Header, Segment } from 'semantic-ui-react';
 import { API, showError } from '../../helpers';
+import { EXTERNAL_URLS } from '../../constants';
 import { marked } from 'marked';
 
 const About = () => {
   const [about, setAbout] = useState('');
   const [aboutLoaded, setAboutLoaded] = useState(false);
 
-  const displayAbout = async () => {
+  const displayAbout = async (isMounted) => {
     setAbout(localStorage.getItem('about') || '');
     const res = await API.get('/api/about');
+    if (!isMounted) return;
     const { success, message, data } = res.data;
     if (success) {
       let aboutContent = data;
@@ -26,7 +28,15 @@ const About = () => {
   };
 
   useEffect(() => {
-    displayAbout().then();
+    let isMounted = true;
+    const run = async (isMounted) => {
+      await displayAbout(isMounted);
+    };
+    run(isMounted);
+    return () => {
+      isMounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -37,8 +47,8 @@ const About = () => {
             <Header as='h3'>关于</Header>
             <p>可在设置页面设置关于内容，支持 HTML & Markdown</p>
             项目仓库地址：
-            <a href='https://github.com/songquanpeng/one-api'>
-              https://github.com/songquanpeng/one-api
+            <a href={EXTERNAL_URLS.GITHUB_REPO}>
+              {EXTERNAL_URLS.GITHUB_REPO}
             </a>
           </Segment>
         </> : <>

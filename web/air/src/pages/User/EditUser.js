@@ -58,10 +58,17 @@ const EditUser = (props) => {
   };
 
   useEffect(() => {
-    loadUser().then();
-    if (userId) {
-      fetchGroups().then();
-    }
+    let isMounted = true;
+    const run = async () => {
+      await loadUser();
+      if (userId && isMounted) {
+        await fetchGroups();
+      }
+    };
+    run();
+    return () => {
+      isMounted = false;
+    };
   }, [props.editingUser.id]);
 
   const submit = async () => {

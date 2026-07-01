@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { API, copy, showError, showSuccess, timestamp2string } from '../helpers';
 
-import { ITEMS_PER_PAGE } from '../constants';
+import { ITEMS_PER_PAGE, EXTERNAL_URLS } from '../constants';
 import { renderQuota } from '../helpers/render';
 import { Button, Dropdown, Form, Modal, Popconfirm, Popover, SplitButtonGroup, Table, Tag } from '@douyinfe/semi-ui';
 
@@ -300,16 +300,6 @@ const TokensTable = () => {
     setLoading(false);
   };
 
-  const onPaginationChange = (e, { activePage }) => {
-    (async () => {
-      if (activePage === Math.ceil(tokens.length / pageSize) + 1) {
-        // In this case we have to load more data and then append them.
-        await loadTokens(activePage - 1);
-      }
-      setActivePage(activePage);
-    })();
-  };
-
   const refresh = async () => {
     await loadTokens(activePage - 1);
   };
@@ -332,7 +322,7 @@ const TokensTable = () => {
     if (nextLink) {
       nextUrl = nextLink + `/#/?settings={"key":"sk-${key}","url":"${serverAddress}"}`;
     } else {
-      nextUrl = `https://app.nextchat.dev/#/?settings={"key":"sk-${key}","url":"${serverAddress}"}`;
+      nextUrl = `${EXTERNAL_URLS.NEXTCHAT_DEFAULT}/#/?settings={"key":"sk-${key}","url":"${serverAddress}"}`;
     }
 
     let url;
@@ -341,7 +331,7 @@ const TokensTable = () => {
         url = mjLink + `/#/?settings={"key":"sk-${key}","url":"${serverAddress}"}`;
         break;
       case 'opencat':
-        url = `opencat://team/join?domain=${encodedServerAddress}&token=sk-${key}`;
+        url = `${EXTERNAL_URLS.OPENCAT_JOIN}?domain=${encodedServerAddress}&token=sk-${key}`;
         break;
       case 'next':
         url = nextUrl;
@@ -390,7 +380,7 @@ const TokensTable = () => {
         url = `ama://set-api-key?server=${encodedServerAddress}&key=sk-${key}`;
         break;
       case 'opencat':
-        url = `opencat://team/join?domain=${encodedServerAddress}&token=sk-${key}`;
+        url = `${EXTERNAL_URLS.OPENCAT_JOIN}?domain=${encodedServerAddress}&token=sk-${key}`;
         break;
       case 'next-mj':
         url = mjLink + `/#/?settings={"key":"sk-${key}","url":"${serverAddress}"}`;
@@ -406,7 +396,7 @@ const TokensTable = () => {
         url = defaultUrl;
     }
 
-    window.open(url, '_blank');
+    window.open(url, '_blank', 'noopener,noreferrer');
   };
 
   useEffect(() => {

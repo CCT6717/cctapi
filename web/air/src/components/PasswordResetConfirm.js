@@ -25,7 +25,7 @@ const PasswordResetConfirm = () => {
       token,
       email
     });
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     let countdownInterval = null;

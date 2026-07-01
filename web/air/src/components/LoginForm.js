@@ -25,7 +25,7 @@ const LoginForm = () => {
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
-  let navigate = useNavigate();
+  const navigate = useNavigate();
   const [status, setStatus] = useState({});
   const logo = getLogo();
 
@@ -42,7 +42,7 @@ const LoginForm = () => {
         setTurnstileSiteKey(status.turnstile_site_key);
       }
     }
-  }, []);
+  }, [searchParams]);
 
   const [showWeChatLoginModal, setShowWeChatLoginModal] = useState(false);
 

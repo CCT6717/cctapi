@@ -30,7 +30,7 @@ const SiderBar = () => {
   const [statusState, statusDispatch] = useContext(StatusContext);
   const defaultIsCollapsed = isMobile() || localStorage.getItem('default_collapse_sidebar') === 'true';
 
-  let navigate = useNavigate();
+  const navigate = useNavigate();
   const [selectedKeys, setSelectedKeys] = useState(['home']);
   const systemName = getSystemName();
   const logo = getLogo();
@@ -190,9 +190,17 @@ const SiderBar = () => {
   };
 
   useEffect(() => {
-    loadStatus().then(() => {
-      setIsCollapsed(isMobile() || localStorage.getItem('default_collapse_sidebar') === 'true');
-    });
+    let isMounted = true;
+    const run = async () => {
+      await loadStatus();
+      if (isMounted) {
+        setIsCollapsed(isMobile() || localStorage.getItem('default_collapse_sidebar') === 'true');
+      }
+    };
+    run();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return (

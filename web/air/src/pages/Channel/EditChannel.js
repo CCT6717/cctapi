@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {useNavigate, useParams} from 'react-router-dom';
 import {API, isMobile, showError, showInfo, showSuccess, verifyJSON} from '../../helpers';
-import {CHANNEL_OPTIONS} from '../../constants';
+import {CHANNEL_OPTIONS, EXTERNAL_URLS} from '../../constants';
 import Title from "@douyinfe/semi-ui/lib/es/typography/title";
 import {SideSheet, Space, Spin, Button, Input, Typography, Select, TextArea, Checkbox, Banner} from "@douyinfe/semi-ui";
 
@@ -199,17 +199,20 @@ const EditChannel = (props) => {
     }, [originModelOptions, inputs.models]);
 
     useEffect(() => {
-        fetchModels().then();
-        fetchGroups().then();
-        if (isEdit) {
-            loadChannel().then(
-                () => {
-
-                }
-            );
-        } else {
-            setInputs(originInputs)
-        }
+        let isMounted = true;
+        const run = async () => {
+            await fetchModels();
+            await fetchGroups();
+            if (isEdit && isMounted) {
+                await loadChannel();
+            } else if (isMounted) {
+                setInputs(originInputs)
+            }
+        };
+        run();
+        return () => {
+            isMounted = false;
+        };
     }, [props.editingChannel.id]);
 
 
@@ -325,7 +328,7 @@ const EditChannel = (props) => {
                                         注意，<strong>模型部署名称必须和模型名称保持一致</strong>，因为 One API 会把请求体中的
                                         model
                                         参数替换为你的部署名称（模型名称中的点会被剔除），<a target='_blank' rel='noreferrer'
-                                                                                          href='https://github.com/songquanpeng/one-api/issues/133?notification_referrer_id=NT_kwDOAmJSYrM2NjIwMzI3NDgyOjM5OTk4MDUw#issuecomment-1571602271'>图片演示</a>。
+                                                                                          href={EXTERNAL_URLS.GITHUB_ISSUE_DEMO}>图片演示</a>。
                                     </>
                                 }>
                                 </Banner>

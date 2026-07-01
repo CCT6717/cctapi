@@ -31,15 +31,13 @@ if (localStorage.getItem('chat_link')) {
 
 const HeaderBar = () => {
   const [userState, userDispatch] = useContext(UserContext);
-  let navigate = useNavigate();
+  const navigate = useNavigate();
 
   const [showSidebar, setShowSidebar] = useState(false);
   const [dark, setDark] = useState(false);
   const systemName = getSystemName();
   const logo = getLogo();
-  var themeMode = localStorage.getItem('theme-mode');
   const currentDate = new Date();
-  // enable fireworks on new year(1.1 and 2.9-2.24)
   const isNewYear = (currentDate.getMonth() === 0 && currentDate.getDate() === 1) || (currentDate.getMonth() === 1 && currentDate.getDate() >= 9 && currentDate.getDate() <= 24);
 
   const timerRefs = useRef({ stop: null, reload: null });
@@ -65,6 +63,7 @@ const HeaderBar = () => {
   };
 
   useEffect(() => {
+    const themeMode = localStorage.getItem('theme-mode');
     if (themeMode === 'dark') {
       switchMode(true);
     }

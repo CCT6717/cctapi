@@ -11,7 +11,7 @@ const GitHubOAuth = () => {
   const [prompt, setPrompt] = useState('处理中...');
   const [processing, setProcessing] = useState(true);
 
-  let navigate = useNavigate();
+  const navigate = useNavigate();
 
   useEffect(() => {
     let isMounted = true;
@@ -41,7 +41,7 @@ const GitHubOAuth = () => {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [searchParams, navigate]);
 
   return (
     <Segment style={{ minHeight: '300px' }}>

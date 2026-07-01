@@ -1,4 +1,5 @@
 import { API, showError } from '../helpers';
+import { EXTERNAL_URLS } from '../constants';
 
 export async function getOAuthState() {
   const res = await API.get('/api/oauth/state');
@@ -15,6 +16,8 @@ export async function onGitHubOAuthClicked(github_client_id) {
   const state = await getOAuthState();
   if (!state) return;
   window.open(
-    `https://github.com/login/oauth/authorize?client_id=${github_client_id}&state=${state}&scope=user:email`
+    `${EXTERNAL_URLS.GITHUB_OAUTH_AUTHORIZE}?client_id=${github_client_id}&state=${state}&scope=user:email`,
+    '_blank',
+    'noopener,noreferrer'
   );
 }

@@ -29,8 +29,9 @@ const OperationSetting = () => {
   let [loading, setLoading] = useState(false);
   let [historyTimestamp, setHistoryTimestamp] = useState(timestamp2string(now.getTime() / 1000 - 30 * 24 * 3600)); // a month ago
 
-  const getOptions = async () => {
+  const getOptions = async (isMounted) => {
     const res = await API.get('/api/option/');
+    if (!isMounted) return;
     const { success, message, data } = res.data;
     if (success) {
       let newInputs = {};
@@ -51,7 +52,14 @@ const OperationSetting = () => {
   };
 
   useEffect(() => {
-    getOptions().then();
+    let isMounted = true;
+    getOptions(isMounted).then(() => {
+      // component mounted check handled inside getOptions
+    });
+    return () => {
+      isMounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateOption = async (key, value) => {

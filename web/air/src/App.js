@@ -31,15 +31,14 @@ function App() {
   const [userState, userDispatch] = useContext(UserContext);
   // const [statusState, statusDispatch] = useContext(StatusContext);
 
-  const loadUser = () => {
-    let user = localStorage.getItem('user');
-    if (user) {
-      let data = JSON.parse(user);
-      userDispatch({ type: 'login', payload: data });
-    }
-  };
-
   useEffect(() => {
+    const loadUser = () => {
+      let user = localStorage.getItem('user');
+      if (user) {
+        let data = JSON.parse(user);
+        userDispatch({ type: 'login', payload: data });
+      }
+    };
     loadUser();
     let systemName = getSystemName();
     if (systemName) {

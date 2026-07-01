@@ -1,12 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 import { Container, Segment } from 'semantic-ui-react';
 import { getFooterHTML, getSystemName } from '../helpers';
+import { EXTERNAL_URLS } from '../constants';
+import DOMPurify from 'dompurify';
 
 const Footer = () => {
   const systemName = getSystemName();
   const [footer, setFooter] = useState(getFooterHTML());
-  let remainCheckTimes = 5;
+  const remainCheckTimesRef = useRef(5);
 
   const loadFooter = () => {
     let footer_html = localStorage.getItem('footer_html');
@@ -17,11 +19,11 @@ const Footer = () => {
 
   useEffect(() => {
     const timer = setInterval(() => {
-      if (remainCheckTimes <= 0) {
+      if (remainCheckTimesRef.current <= 0) {
         clearInterval(timer);
         return;
       }
-      remainCheckTimes--;
+      remainCheckTimesRef.current--;
       loadFooter();
     }, 200);
     return () => clearInterval(timer);
@@ -33,26 +35,26 @@ const Footer = () => {
         {footer ? (
           <div
             className='custom-footer'
-            dangerouslySetInnerHTML={{ __html: footer }}
+            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(footer) }}
           ></div>
         ) : (
           <div className='custom-footer'>
             <a
-              href='https://github.com/songquanpeng/one-api'
+              href={EXTERNAL_URLS.GITHUB_REPO}
               target='_blank'
               rel='noreferrer'
             >
               {systemName} {process.env.REACT_APP_VERSION}{' '}
             </a>
             由{' '}
-            <a href='https://github.com/songquanpeng' target='_blank' rel='noreferrer'>
+            <a href={EXTERNAL_URLS.GITHUB_JUSTSONG} target='_blank' rel='noreferrer'>
               JustSong
             </a>{' '}
             构建，主题 air 来自{' '}
-            <a href='https://github.com/Calcium-Ion' target='_blank' rel='noreferrer'>
+            <a href={EXTERNAL_URLS.GITHUB_CALON} target='_blank' rel='noreferrer'>
               Calon
             </a>{' '}，源代码遵循{' '}
-            <a href='https://opensource.org/licenses/mit-license.php'>
+            <a href={EXTERNAL_URLS.MIT_LICENSE}>
               MIT 协议
             </a>
           </div>

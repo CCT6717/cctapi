@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Divider, Form, Grid, Header, Message, Modal } from 'semantic-ui-react';
 import { API, showError, showSuccess } from '../helpers';
+import { EXTERNAL_URLS } from '../constants';
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 import { Link } from 'react-router-dom';
@@ -22,8 +23,9 @@ const OtherSetting = () => {
     content: ''
   });
 
-  const getOptions = async () => {
+  const getOptions = async (isMounted) => {
     const res = await API.get('/api/option/');
+    if (!isMounted) return;
     const { success, message, data } = res.data;
     if (success) {
       let newInputs = {};
@@ -39,7 +41,14 @@ const OtherSetting = () => {
   };
 
   useEffect(() => {
-    getOptions().then();
+    let isMounted = true;
+    getOptions(isMounted).then(() => {
+      // component mounted check handled inside getOptions
+    });
+    return () => {
+      isMounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateOption = async (key, value) => {
@@ -90,14 +99,11 @@ const OtherSetting = () => {
   };
 
   const openGitHubRelease = () => {
-    window.location =
-      'https://github.com/songquanpeng/one-api/releases/latest';
+    window.location = EXTERNAL_URLS.GITHUB_RELEASES;
   };
 
   const checkUpdate = async () => {
-    const res = await API.get(
-      'https://api.github.com/repos/songquanpeng/one-api/releases/latest'
-    );
+    const res = await API.get(EXTERNAL_URLS.GITHUB_API_LATEST_RELEASE);
     const { tag_name, body } = res.data;
     if (tag_name === process.env.REACT_APP_VERSION) {
       showSuccess(`已是最新版本：${tag_name}`);
@@ -142,7 +148,7 @@ const OtherSetting = () => {
           <Form.Group widths='equal'>
             <Form.Input
               label={<label>主题名称（<Link
-                to='https://github.com/songquanpeng/one-api/blob/main/web/README.md'>当前可用主题</Link>）</label>}
+                to={EXTERNAL_URLS.GITHUB_THEMES}>当前可用主题</Link>）</label>}
               placeholder='请输入主题名称'
               value={inputs.Theme}
               name='Theme'

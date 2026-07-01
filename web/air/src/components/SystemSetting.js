@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Button, Divider, Form, Grid, Header, Modal, Message } from 'semantic-ui-react';
 import { API, removeTrailingSlash, showError } from '../helpers';
+import { EXTERNAL_URLS } from '../constants';
 
 const SystemSetting = () => {
   let [inputs, setInputs] = useState({
@@ -37,8 +38,9 @@ const SystemSetting = () => {
   const [restrictedDomainInput, setRestrictedDomainInput] = useState('');
   const [showPasswordWarningModal, setShowPasswordWarningModal] = useState(false);
 
-  const getOptions = async () => {
+  const getOptions = async (isMounted) => {
     const res = await API.get('/api/option/');
+    if (!isMounted) return;
     const { success, message, data } = res.data;
     if (success) {
       let newInputs = {};
@@ -57,10 +59,17 @@ const SystemSetting = () => {
     } else {
       showError(message);
     }
-  };
+};
 
   useEffect(() => {
-    getOptions().then();
+    let isMounted = true;
+    getOptions(isMounted).then(() => {
+      // component mounted check handled inside getOptions
+    });
+    return () => {
+      isMounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateOption = async (key, value) => {
@@ -435,7 +444,7 @@ const SystemSetting = () => {
             配置 GitHub OAuth App
             <Header.Subheader>
               用以支持通过 GitHub 进行登录注册，
-              <a href='https://github.com/settings/developers' target='_blank' rel='noreferrer'>
+              <a href={EXTERNAL_URLS.GITHUB_SETTINGS_DEVELOPERS} target='_blank' rel='noreferrer'>
                 点击此处
               </a>
               管理你的 GitHub OAuth App
@@ -474,7 +483,7 @@ const SystemSetting = () => {
             <Header.Subheader>
               用以支持通过微信进行登录注册，
               <a
-                href='https://github.com/songquanpeng/wechat-server'
+                href={EXTERNAL_URLS.GITHUB_WECHAT_SERVER}
                 target='_blank'
                 rel='noreferrer'
               >
@@ -519,7 +528,7 @@ const SystemSetting = () => {
             <Header.Subheader>
               用以推送报警信息，
               <a
-                href='https://github.com/songquanpeng/message-pusher'
+                href={EXTERNAL_URLS.GITHUB_MESSAGE_PUSHER}
                 target='_blank'
                 rel='noreferrer'
               >
@@ -555,7 +564,7 @@ const SystemSetting = () => {
             配置 Turnstile
             <Header.Subheader>
               用以支持用户校验，
-              <a href='https://dash.cloudflare.com/' target='_blank' rel='noreferrer'>
+              <a href={EXTERNAL_URLS.CLOUDFLARE_TURNSTILE} target='_blank' rel='noreferrer'>
                 点击此处
               </a>
               管理你的 Turnstile Sites，推荐选择 Invisible Widget Type

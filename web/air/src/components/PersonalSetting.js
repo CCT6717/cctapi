@@ -24,7 +24,7 @@ import TelegramLoginButton from 'react-telegram-login';
 
 const PersonalSetting = () => {
   const [userState, userDispatch] = useContext(UserContext);
-  let navigate = useNavigate();
+  const navigate = useNavigate();
 
   const [inputs, setInputs] = useState({
     wechat_verification_code: '',
@@ -52,12 +52,6 @@ const PersonalSetting = () => {
   const [transferAmount, setTransferAmount] = useState(0);
 
   useEffect(() => {
-    // let user = localStorage.getItem('user');
-    // if (user) {
-    //   userDispatch({ type: 'login', payload: user });
-    // }
-    // console.log(localStorage.getItem('user'))
-
     let status = localStorage.getItem('status');
     if (status) {
       status = JSON.parse(status);
@@ -67,14 +61,21 @@ const PersonalSetting = () => {
         setTurnstileSiteKey(status.turnstile_site_key);
       }
     }
-    getUserData().then(
-      (res) => {
+    let isMounted = true;
+    const run = async () => {
+      await getUserData();
+      await loadModels();
+      await getAffLink();
+    };
+    run().then(() => {
+      if (isMounted) {
         console.log(userState);
       }
-    );
-    loadModels().then();
-    getAffLink().then();
+    });
     setTransferAmount(getQuotaPerUnit());
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -262,7 +263,7 @@ const PersonalSetting = () => {
     if (success) {
       showSuccess('邮箱账户绑定成功！');
       setShowEmailBindModal(false);
-      userState.user.email = inputs.email;
+      userDispatch({ type: 'login', payload: { ...userState.user, email: inputs.email } });
     } else {
       showError(message);
     }

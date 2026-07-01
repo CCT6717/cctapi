@@ -100,11 +100,15 @@ const EditToken = (props) => {
     if (!isEdit) {
       setInputs(originInputs);
     } else {
-      loadToken().then(
-        () => {
+      let isMounted = true;
+      loadToken().then(() => {
+        if (isMounted) {
           // console.log(inputs);
         }
-      );
+      });
+      return () => {
+        isMounted = false;
+      };
     }
     // loadModels();
   }, [isEdit]);

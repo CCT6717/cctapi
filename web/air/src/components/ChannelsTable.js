@@ -314,12 +314,19 @@ const ChannelsTable = () => {
     const localPageSize = parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
     setIdSort(localIdSort);
     setPageSize(localPageSize);
-    loadChannels(0, localPageSize, localIdSort)
-      .then()
-      .catch((reason) => {
+    let isMounted = true;
+    const run = async () => {
+      await loadChannels(0, localPageSize, localIdSort);
+      await fetchGroups();
+    };
+    run().catch((reason) => {
+      if (isMounted) {
         showError(reason);
-      });
-    fetchGroups().then();
+      }
+    });
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const manageChannel = async (id, action, record, value) => {
