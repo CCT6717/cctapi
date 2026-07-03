@@ -9,6 +9,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/alibailian"
 	"github.com/songquanpeng/one-api/relay/adaptor/baiduv2"
@@ -78,6 +79,9 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 		req.Header.Set("HTTP-Referer", "https://github.com/songquanpeng/one-api")
 		req.Header.Set("X-Title", "One API")
 	}
+	if quirks := freeProviderQuirksFromContext(c); quirks != nil && quirks.DefaultUserAgent != "" {
+		req.Header.Set("User-Agent", quirks.DefaultUserAgent)
+	}
 	return nil
 }
 
@@ -87,6 +91,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 	if a.ChannelType == channeltype.OpenAICompatible {
 		sanitizeOpenAICompatibleRequest(request)
+		ApplyFreeProviderRequestQuirks(c, request)
 	}
 	if request.Stream {
 		// always return usage in stream mode
@@ -96,6 +101,90 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		request.StreamOptions.IncludeUsage = true
 	}
 	return request, nil
+}
+
+type freeProviderRequestQuirks struct {
+	ForceParallelToolCalls *bool
+	DefaultUserAgent       string
+	DisableStream          bool
+	MaxOutputTokens        int
+	DropStop               bool
+}
+
+var forceParallelToolCallsFalseForRequest = false
+
+var freeProviderRequestQuirksByProvider = map[string]freeProviderRequestQuirks{
+	"nvidia": {
+		ForceParallelToolCalls: &forceParallelToolCallsFalseForRequest,
+	},
+	"routeway": {
+		DefaultUserAgent: "cctapi-free-pool/1.0",
+	},
+	"aihorde": {
+		DisableStream:   true,
+		MaxOutputTokens: 1024,
+		DropStop:        true,
+	},
+}
+
+func freeProviderQuirksFromContext(c *gin.Context) *freeProviderRequestQuirks {
+	if c == nil {
+		return nil
+	}
+	channelName := c.GetString(ctxkey.ChannelName)
+	providerName := freeProviderNameFromAutoChannelName(channelName)
+	if providerName == "" {
+		return nil
+	}
+	quirks, ok := freeProviderRequestQuirksByProvider[providerName]
+	if !ok {
+		return nil
+	}
+	return &quirks
+}
+
+func freeProviderNameFromAutoChannelName(channelName string) string {
+	const prefix = "[CCT Auto] "
+	if !strings.HasPrefix(channelName, prefix) {
+		return ""
+	}
+	rest := strings.TrimPrefix(channelName, prefix)
+	for providerName := range freeProviderRequestQuirksByProvider {
+		if strings.HasPrefix(rest, providerName+"-") {
+			return providerName
+		}
+	}
+	return ""
+}
+
+func ApplyFreeProviderRequestQuirks(c *gin.Context, request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+	quirks := freeProviderQuirksFromContext(c)
+	if quirks == nil {
+		return
+	}
+	if quirks.ForceParallelToolCalls != nil {
+		value := *quirks.ForceParallelToolCalls
+		request.ParallelTooCalls = &value
+	}
+	if quirks.DisableStream {
+		request.Stream = false
+		request.StreamOptions = nil
+	}
+	if quirks.MaxOutputTokens > 0 {
+		if request.MaxTokens > quirks.MaxOutputTokens {
+			request.MaxTokens = quirks.MaxOutputTokens
+		}
+		if request.MaxCompletionTokens != nil && *request.MaxCompletionTokens > quirks.MaxOutputTokens {
+			value := quirks.MaxOutputTokens
+			request.MaxCompletionTokens = &value
+		}
+	}
+	if quirks.DropStop {
+		request.Stop = nil
+	}
 }
 
 func sanitizeOpenAICompatibleRequest(request *model.GeneralOpenAIRequest) {

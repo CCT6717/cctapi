@@ -39,6 +39,9 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 	if isClaude, _ := c.Get("claude_format"); isClaude == true {
 		meta.RequestURLPath = "/chat/completions"
 	}
+	if meta.ChannelType == channeltype.OpenAICompatible {
+		openai.ApplyFreeProviderRequestQuirks(c, textRequest)
+	}
 	meta.IsStream = textRequest.Stream
 
 	// map model name

@@ -522,6 +522,21 @@ func IsAutoChannelName(name string) bool {
 	return false
 }
 
+func FreeProviderMetaFromAutoChannelName(name string) (FreeProviderMeta, bool) {
+	for providerName, meta := range BuiltinFreeProviders {
+		prefix := autoChannelPrefix + providerName + "-"
+		if !strings.HasPrefix(name, prefix) {
+			continue
+		}
+		suffix := strings.TrimPrefix(name, prefix)
+		if !isAutoDeploymentSuffix(suffix) {
+			return FreeProviderMeta{}, false
+		}
+		return meta, true
+	}
+	return FreeProviderMeta{}, false
+}
+
 func ValidateFreeProviderName(name string) error {
 	if _, ok := BuiltinFreeProviders[name]; !ok {
 		known := make([]string, 0, len(BuiltinFreeProviders))

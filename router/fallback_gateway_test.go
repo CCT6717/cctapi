@@ -242,6 +242,29 @@ func TestGatewayGetConfig_Success(t *testing.T) {
 	}
 }
 
+func TestGatewayGetConfig_DoesNotExposeFreeProviderKeys(t *testing.T) {
+	setupGatewayConfigReadOnly(t, baseValidConfigWithFreeProviderJSON)
+
+	w := callGatewayGET(t)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+	if searchString(w.Body.String(), "gsk_original_test_key_not_real_12345") {
+		t.Fatalf("gateway GET response must not expose raw free provider keys: %s", w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	data, _ := resp["data"].(map[string]interface{})
+	fps, _ := data["free_providers"].(map[string]interface{})
+	groq, _ := fps["groq"].(map[string]interface{})
+	if groq["key_count"] != float64(1) {
+		t.Fatalf("expected key_count=1, got %v", groq["key_count"])
+	}
+	if _, exists := groq["keys"]; exists {
+		t.Fatalf("free provider response must not include keys field")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test 2-4: Legacy field rejection (fixed_deployment)
 // ---------------------------------------------------------------------------
