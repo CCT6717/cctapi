@@ -1031,6 +1031,16 @@ func TestBuildGatewayV2Config_ProjectsCorrectly(t *testing.T) {
 	if googleCatalog.Enabled {
 		t.Fatalf("expected unconfigured google catalog entry to be disabled")
 	}
+	var nvidiaCatalog *fallback.FreeProviderCatalogEntry
+	for i := range v2.FreeProviderCatalog {
+		if v2.FreeProviderCatalog[i].Name == "nvidia" {
+			nvidiaCatalog = &v2.FreeProviderCatalog[i]
+			break
+		}
+	}
+	if nvidiaCatalog == nil || nvidiaCatalog.Quirks == nil || nvidiaCatalog.Quirks.ForceParallelToolCalls == nil || *nvidiaCatalog.Quirks.ForceParallelToolCalls {
+		t.Fatalf("expected nvidia quirk in gateway catalog, got %+v", nvidiaCatalog)
+	}
 }
 
 // ---------------------------------------------------------------------------

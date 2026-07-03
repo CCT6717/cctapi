@@ -1085,6 +1085,32 @@ func TestBuildFreeProviderCatalogProjectsSafeMetadata(t *testing.T) {
 	}
 }
 
+func TestBuiltinFreeProviderRegistry_FreeLLMAPIQuirks(t *testing.T) {
+	nvidia := BuiltinFreeProviders["nvidia"]
+	if nvidia.Quirks == nil || nvidia.Quirks.ForceParallelToolCalls == nil || *nvidia.Quirks.ForceParallelToolCalls {
+		t.Fatalf("expected nvidia quirk to force parallel_tool_calls=false, got %+v", nvidia.Quirks)
+	}
+
+	routeway := BuiltinFreeProviders["routeway"]
+	if routeway.Quirks == nil || routeway.Quirks.DefaultUserAgent == "" {
+		t.Fatalf("expected routeway quirk to expose a default user-agent hint, got %+v", routeway.Quirks)
+	}
+
+	aihorde := BuiltinFreeProviders["aihorde"]
+	if aihorde.Quirks == nil {
+		t.Fatal("expected aihorde quirks")
+	}
+	if !aihorde.Quirks.DisableStream {
+		t.Fatalf("expected aihorde quirk to disable stream, got %+v", aihorde.Quirks)
+	}
+	if aihorde.Quirks.MaxOutputTokens <= 0 {
+		t.Fatalf("expected aihorde max output token constraint, got %+v", aihorde.Quirks)
+	}
+	if !aihorde.Quirks.DropStop {
+		t.Fatalf("expected aihorde quirk to drop stop sequences, got %+v", aihorde.Quirks)
+	}
+}
+
 func TestParseOpenAICompatModels_Basic(t *testing.T) {
 	body := []byte(`{"data":[
 		{"id":"gpt-oss-20b","object":"model"},

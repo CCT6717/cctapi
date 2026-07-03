@@ -57,26 +57,27 @@ type gatewayV2Deployment struct {
 }
 
 type gatewayV2FreeProvider struct {
-	Enabled        bool                     `json:"enabled"`
-	KeyCount       int                      `json:"key_count"`
-	Models         []string                 `json:"models,omitempty"`
-	ProviderID     string                   `json:"provider_id,omitempty"`
-	ChannelType    int                      `json:"channel_type,omitempty"`
-	DefaultBaseURL string                   `json:"default_base_url,omitempty"`
-	DefaultModels  []string                 `json:"default_models,omitempty"`
-	DefaultRPM     int                      `json:"default_rpm,omitempty"`
-	DefaultRPD     int                      `json:"default_rpd,omitempty"`
-	DefaultTPM     int                      `json:"default_tpm,omitempty"`
-	DefaultTPD     int                      `json:"default_tpd,omitempty"`
-	ContextLength  int                      `json:"context_length,omitempty"`
-	SupportsVision bool                     `json:"supports_vision"`
-	SupportsStream bool                     `json:"supports_stream"`
-	SupportsTools  bool                     `json:"supports_tools"`
-	SupportsJSON   bool                     `json:"supports_json"`
-	RequiresKey    bool                     `json:"requires_key"`
-	Keyless        bool                     `json:"keyless"`
-	ModelFetchMode string                   `json:"model_fetch_mode,omitempty"`
-	LimitsOverride *gatewayV2LimitsOverride `json:"limits_override,omitempty"`
+	Enabled        bool                         `json:"enabled"`
+	KeyCount       int                          `json:"key_count"`
+	Models         []string                     `json:"models,omitempty"`
+	ProviderID     string                       `json:"provider_id,omitempty"`
+	ChannelType    int                          `json:"channel_type,omitempty"`
+	DefaultBaseURL string                       `json:"default_base_url,omitempty"`
+	DefaultModels  []string                     `json:"default_models,omitempty"`
+	DefaultRPM     int                          `json:"default_rpm,omitempty"`
+	DefaultRPD     int                          `json:"default_rpd,omitempty"`
+	DefaultTPM     int                          `json:"default_tpm,omitempty"`
+	DefaultTPD     int                          `json:"default_tpd,omitempty"`
+	ContextLength  int                          `json:"context_length,omitempty"`
+	SupportsVision bool                         `json:"supports_vision"`
+	SupportsStream bool                         `json:"supports_stream"`
+	SupportsTools  bool                         `json:"supports_tools"`
+	SupportsJSON   bool                         `json:"supports_json"`
+	RequiresKey    bool                         `json:"requires_key"`
+	Keyless        bool                         `json:"keyless"`
+	ModelFetchMode string                       `json:"model_fetch_mode,omitempty"`
+	Quirks         *fallback.FreeProviderQuirks `json:"quirks,omitempty"`
+	LimitsOverride *gatewayV2LimitsOverride     `json:"limits_override,omitempty"`
 }
 
 type gatewayV2LimitsOverride struct {
@@ -228,6 +229,7 @@ func buildGatewayV2FreeProviders(freeProviders map[string]fallback.FreeProviderC
 			gfp.RequiresKey = meta.RequiresKey
 			gfp.Keyless = meta.Keyless
 			gfp.ModelFetchMode = meta.ModelFetchMode
+			gfp.Quirks = cloneGatewayFreeProviderQuirks(meta.Quirks)
 		}
 		if fp.LimitsOverride != nil {
 			gfp.LimitsOverride = &gatewayV2LimitsOverride{
@@ -240,6 +242,18 @@ func buildGatewayV2FreeProviders(freeProviders map[string]fallback.FreeProviderC
 		fps[name] = gfp
 	}
 	return fps
+}
+
+func cloneGatewayFreeProviderQuirks(src *fallback.FreeProviderQuirks) *fallback.FreeProviderQuirks {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	if src.ForceParallelToolCalls != nil {
+		value := *src.ForceParallelToolCalls
+		dst.ForceParallelToolCalls = &value
+	}
+	return &dst
 }
 
 // buildGatewayV2Config projects the full fallback.Config into the simplified v2 view.
