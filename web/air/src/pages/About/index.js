@@ -3,7 +3,7 @@ import { Header, Segment } from 'semantic-ui-react';
 import { API, showError } from '../../helpers';
 import { EXTERNAL_URLS } from '../../constants';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
+import { sanitizeHtml } from '../../helpers/sanitize';
 
 const About = () => {
   const [about, setAbout] = useState('');
@@ -17,7 +17,7 @@ const About = () => {
     if (success) {
       let aboutContent = data;
       if (!data.startsWith('https://')) {
-        aboutContent = DOMPurify.sanitize(marked.parse(data));
+        aboutContent = sanitizeHtml(marked.parse(data));
       }
       setAbout(aboutContent);
       localStorage.setItem('about', aboutContent);
@@ -57,7 +57,7 @@ const About = () => {
             about.startsWith('https://') ? <iframe
               src={about}
               style={{ width: '100%', height: '100vh', border: 'none' }}
-            /> : <div style={{ fontSize: 'larger' }} dangerouslySetInnerHTML={{ __html: about }}></div>
+            /> : <div style={{ fontSize: 'larger' }} dangerouslySetInnerHTML={{ __html: sanitizeHtml(about) }}></div>
           }
         </>
       }
