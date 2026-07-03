@@ -426,6 +426,17 @@ func TestGatewayUpdateConfig_SaveSuccess(t *testing.T) {
 	}
 }
 
+func TestFallbackExampleConfigIsValidJSON(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "data", "fallback.json.example"))
+	if err != nil {
+		t.Fatalf("failed to read example config: %v", err)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("fallback.json.example must be valid JSON: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test 6: key_masked not written back as real key
 // ---------------------------------------------------------------------------
@@ -905,6 +916,18 @@ func TestBuildGatewayV2Config_ProjectsCorrectly(t *testing.T) {
 	}
 	if fp.KeyCount != 2 {
 		t.Fatalf("expected key_count=2, got %d", fp.KeyCount)
+	}
+	if fp.DefaultBaseURL != "https://api.groq.com/openai" {
+		t.Fatalf("expected groq default_base_url, got %q", fp.DefaultBaseURL)
+	}
+	if !fp.RequiresKey {
+		t.Fatal("expected groq requires_key=true")
+	}
+	if fp.Keyless {
+		t.Fatal("expected groq keyless=false")
+	}
+	if fp.ModelFetchMode != fallback.ModelFetchStatic {
+		t.Fatalf("expected groq model_fetch_mode=%s, got %s", fallback.ModelFetchStatic, fp.ModelFetchMode)
 	}
 	if fp.LimitsOverride == nil || fp.LimitsOverride.RPMLimit == nil {
 		t.Fatal("expected limits_override.rpm_limit")

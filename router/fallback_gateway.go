@@ -58,6 +58,22 @@ type gatewayV2Deployment struct {
 type gatewayV2FreeProvider struct {
 	Enabled        bool                     `json:"enabled"`
 	KeyCount       int                      `json:"key_count"`
+	ProviderID     string                   `json:"provider_id,omitempty"`
+	ChannelType    int                      `json:"channel_type,omitempty"`
+	DefaultBaseURL string                   `json:"default_base_url,omitempty"`
+	DefaultModels  []string                 `json:"default_models,omitempty"`
+	DefaultRPM     int                      `json:"default_rpm,omitempty"`
+	DefaultRPD     int                      `json:"default_rpd,omitempty"`
+	DefaultTPM     int                      `json:"default_tpm,omitempty"`
+	DefaultTPD     int                      `json:"default_tpd,omitempty"`
+	ContextLength  int                      `json:"context_length,omitempty"`
+	SupportsVision bool                     `json:"supports_vision"`
+	SupportsStream bool                     `json:"supports_stream"`
+	SupportsTools  bool                     `json:"supports_tools"`
+	SupportsJSON   bool                     `json:"supports_json"`
+	RequiresKey    bool                     `json:"requires_key"`
+	Keyless        bool                     `json:"keyless"`
+	ModelFetchMode string                   `json:"model_fetch_mode,omitempty"`
 	LimitsOverride *gatewayV2LimitsOverride `json:"limits_override,omitempty"`
 }
 
@@ -125,6 +141,44 @@ func toFreeProviderLimits(v *gatewayV2LimitsOverride) *fallback.FreeProviderLimi
 	}
 }
 
+func buildGatewayV2FreeProviders(freeProviders map[string]fallback.FreeProviderConfig) map[string]gatewayV2FreeProvider {
+	fps := make(map[string]gatewayV2FreeProvider, len(freeProviders))
+	for name, fp := range freeProviders {
+		gfp := gatewayV2FreeProvider{
+			Enabled:  fp.Enabled,
+			KeyCount: len(fp.Keys),
+		}
+		if meta, ok := fallback.BuiltinFreeProviders[name]; ok {
+			gfp.ProviderID = meta.ProviderID
+			gfp.ChannelType = meta.ChannelType
+			gfp.DefaultBaseURL = meta.DefaultBaseURL
+			gfp.DefaultModels = append([]string{}, meta.DefaultModels...)
+			gfp.DefaultRPM = meta.DefaultRPM
+			gfp.DefaultRPD = meta.DefaultRPD
+			gfp.DefaultTPM = meta.DefaultTPM
+			gfp.DefaultTPD = meta.DefaultTPD
+			gfp.ContextLength = meta.ContextLength
+			gfp.SupportsVision = meta.SupportsVision
+			gfp.SupportsStream = meta.SupportsStream
+			gfp.SupportsTools = meta.SupportsTools
+			gfp.SupportsJSON = meta.SupportsJSON
+			gfp.RequiresKey = meta.RequiresKey
+			gfp.Keyless = meta.Keyless
+			gfp.ModelFetchMode = meta.ModelFetchMode
+		}
+		if fp.LimitsOverride != nil {
+			gfp.LimitsOverride = &gatewayV2LimitsOverride{
+				RPMLimit: fp.LimitsOverride.RPMLimit,
+				RPDLimit: fp.LimitsOverride.RPDLimit,
+				TPMLimit: fp.LimitsOverride.TPMLimit,
+				TPDLimit: fp.LimitsOverride.TPDLimit,
+			}
+		}
+		fps[name] = gfp
+	}
+	return fps
+}
+
 // buildGatewayV2Config projects the full fallback.Config into the simplified v2 view.
 func buildGatewayV2Config(cfg *fallback.Config) gatewayV2Config {
 	vms := make(map[string]gatewayV2VirtualModel, len(cfg.VirtualModels))
@@ -168,28 +222,11 @@ func buildGatewayV2Config(cfg *fallback.Config) gatewayV2Config {
 		}
 	}
 
-	fps := make(map[string]gatewayV2FreeProvider, len(cfg.FreeProviders))
-	for name, fp := range cfg.FreeProviders {
-		gfp := gatewayV2FreeProvider{
-			Enabled:  fp.Enabled,
-			KeyCount: len(fp.Keys),
-		}
-		if fp.LimitsOverride != nil {
-			gfp.LimitsOverride = &gatewayV2LimitsOverride{
-				RPMLimit: fp.LimitsOverride.RPMLimit,
-				RPDLimit: fp.LimitsOverride.RPDLimit,
-				TPMLimit: fp.LimitsOverride.TPMLimit,
-				TPDLimit: fp.LimitsOverride.TPDLimit,
-			}
-		}
-		fps[name] = gfp
-	}
-
 	return gatewayV2Config{
 		Enabled:       cfg.Enabled,
 		VirtualModels: vms,
 		Deployments:   deps,
-		FreeProviders: fps,
+		FreeProviders: buildGatewayV2FreeProviders(cfg.FreeProviders),
 	}
 }
 
@@ -267,28 +304,11 @@ func buildManualConfig(cfg *fallback.Config) gatewayV2Config {
 		}
 	}
 
-	fps := make(map[string]gatewayV2FreeProvider, len(cfg.FreeProviders))
-	for name, fp := range cfg.FreeProviders {
-		gfp := gatewayV2FreeProvider{
-			Enabled:  fp.Enabled,
-			KeyCount: len(fp.Keys),
-		}
-		if fp.LimitsOverride != nil {
-			gfp.LimitsOverride = &gatewayV2LimitsOverride{
-				RPMLimit: fp.LimitsOverride.RPMLimit,
-				RPDLimit: fp.LimitsOverride.RPDLimit,
-				TPMLimit: fp.LimitsOverride.TPMLimit,
-				TPDLimit: fp.LimitsOverride.TPDLimit,
-			}
-		}
-		fps[name] = gfp
-	}
-
 	return gatewayV2Config{
 		Enabled:       cfg.Enabled,
 		VirtualModels: vms,
 		Deployments:   deps,
-		FreeProviders: fps,
+		FreeProviders: buildGatewayV2FreeProviders(cfg.FreeProviders),
 	}
 }
 
