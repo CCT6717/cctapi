@@ -1007,6 +1007,30 @@ func TestBuildGatewayV2Config_ProjectsCorrectly(t *testing.T) {
 	if *fp.LimitsOverride.RPMLimit != 25 {
 		t.Fatalf("expected rpm_limit=25, got %d", *fp.LimitsOverride.RPMLimit)
 	}
+
+	if len(v2.FreeProviderCatalog) != len(fallback.BuiltinFreeProviders) {
+		t.Fatalf("expected free_provider_catalog to include all builtin providers, got %d want %d",
+			len(v2.FreeProviderCatalog), len(fallback.BuiltinFreeProviders))
+	}
+	var groqCatalog *fallback.FreeProviderCatalogEntry
+	var googleCatalog *fallback.FreeProviderCatalogEntry
+	for i := range v2.FreeProviderCatalog {
+		switch v2.FreeProviderCatalog[i].Name {
+		case "groq":
+			groqCatalog = &v2.FreeProviderCatalog[i]
+		case "google":
+			googleCatalog = &v2.FreeProviderCatalog[i]
+		}
+	}
+	if groqCatalog == nil || googleCatalog == nil {
+		t.Fatalf("expected groq and google in free_provider_catalog")
+	}
+	if !groqCatalog.Enabled || groqCatalog.KeyCount != 2 {
+		t.Fatalf("expected groq catalog enabled with two keys, got %+v", groqCatalog)
+	}
+	if googleCatalog.Enabled {
+		t.Fatalf("expected unconfigured google catalog entry to be disabled")
+	}
 }
 
 // ---------------------------------------------------------------------------

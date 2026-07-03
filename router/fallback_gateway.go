@@ -14,10 +14,11 @@ import (
 // v2 gateway config response types
 
 type gatewayV2Config struct {
-	Enabled       bool                             `json:"enabled"`
-	VirtualModels map[string]gatewayV2VirtualModel `json:"virtual_models"`
-	Deployments   map[string]gatewayV2Deployment   `json:"deployments"`
-	FreeProviders map[string]gatewayV2FreeProvider `json:"free_providers"`
+	Enabled             bool                                `json:"enabled"`
+	VirtualModels       map[string]gatewayV2VirtualModel    `json:"virtual_models"`
+	Deployments         map[string]gatewayV2Deployment      `json:"deployments"`
+	FreeProviders       map[string]gatewayV2FreeProvider    `json:"free_providers"`
+	FreeProviderCatalog []fallback.FreeProviderCatalogEntry `json:"free_provider_catalog"`
 }
 
 type gatewayV2VirtualModel struct {
@@ -285,10 +286,11 @@ func buildGatewayV2Config(cfg *fallback.Config) gatewayV2Config {
 	}
 
 	return gatewayV2Config{
-		Enabled:       cfg.Enabled,
-		VirtualModels: vms,
-		Deployments:   deps,
-		FreeProviders: buildGatewayV2FreeProviders(cfg.FreeProviders),
+		Enabled:             cfg.Enabled,
+		VirtualModels:       vms,
+		Deployments:         deps,
+		FreeProviders:       buildGatewayV2FreeProviders(cfg.FreeProviders),
+		FreeProviderCatalog: fallback.BuildFreeProviderCatalog(cfg),
 	}
 }
 
@@ -367,10 +369,11 @@ func buildManualConfig(cfg *fallback.Config) gatewayV2Config {
 	}
 
 	return gatewayV2Config{
-		Enabled:       cfg.Enabled,
-		VirtualModels: vms,
-		Deployments:   deps,
-		FreeProviders: buildGatewayV2FreeProviders(cfg.FreeProviders),
+		Enabled:             cfg.Enabled,
+		VirtualModels:       vms,
+		Deployments:         deps,
+		FreeProviders:       buildGatewayV2FreeProviders(cfg.FreeProviders),
+		FreeProviderCatalog: fallback.BuildFreeProviderCatalog(cfg),
 	}
 }
 

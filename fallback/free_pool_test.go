@@ -1011,6 +1011,80 @@ func TestKnownFreeProvidersMatchesBuiltinRegistry(t *testing.T) {
 	}
 }
 
+func TestBuildFreeProviderCatalogProjectsSafeMetadata(t *testing.T) {
+	rpmOverride := 11
+	cfg := &Config{
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {
+				Enabled: true,
+				Keys:    []string{"gsk_secret_one", "gsk_secret_two"},
+				Models:  []string{"custom-free-model"},
+				LimitsOverride: &FreeProviderLimits{
+					RPMLimit: &rpmOverride,
+				},
+			},
+		},
+	}
+
+	catalog := BuildFreeProviderCatalog(cfg)
+	if len(catalog) != len(BuiltinFreeProviders) {
+		t.Fatalf("expected catalog to include all builtin providers, got %d want %d", len(catalog), len(BuiltinFreeProviders))
+	}
+
+	var groqEntry *FreeProviderCatalogEntry
+	var googleEntry *FreeProviderCatalogEntry
+	for i := range catalog {
+		switch catalog[i].Name {
+		case "groq":
+			groqEntry = &catalog[i]
+		case "google":
+			googleEntry = &catalog[i]
+		}
+	}
+	if groqEntry == nil {
+		t.Fatal("expected groq in catalog")
+	}
+	if googleEntry == nil {
+		t.Fatal("expected google in catalog even when not configured")
+	}
+	if !groqEntry.Enabled {
+		t.Fatal("expected configured groq enabled=true")
+	}
+	if googleEntry.Enabled {
+		t.Fatal("expected unconfigured google enabled=false")
+	}
+	if groqEntry.KeyCount != 2 {
+		t.Fatalf("expected key_count=2, got %d", groqEntry.KeyCount)
+	}
+	if len(groqEntry.Models) != 1 || groqEntry.Models[0] != "custom-free-model" {
+		t.Fatalf("expected configured models to be projected, got %v", groqEntry.Models)
+	}
+	if groqEntry.DefaultModelCount != len(BuiltinFreeProviders["groq"].DefaultModels) {
+		t.Fatalf("expected default_model_count to match registry, got %d", groqEntry.DefaultModelCount)
+	}
+	if groqEntry.RPMLimit != rpmOverride {
+		t.Fatalf("expected rpm limit override %d, got %d", rpmOverride, groqEntry.RPMLimit)
+	}
+	if groqEntry.TPMLimit != BuiltinFreeProviders["groq"].DefaultTPM {
+		t.Fatalf("expected default tpm limit %d, got %d", BuiltinFreeProviders["groq"].DefaultTPM, groqEntry.TPMLimit)
+	}
+	if !groqEntry.SupportsTools || !groqEntry.SupportsJSON || !groqEntry.RequiresKey || groqEntry.Keyless {
+		t.Fatalf("unexpected groq capability/auth metadata: %+v", groqEntry)
+	}
+	if groqEntry.ModelFetchMode != ModelFetchStatic {
+		t.Fatalf("expected model fetch mode %s, got %s", ModelFetchStatic, groqEntry.ModelFetchMode)
+	}
+	rendered := strings.Join([]string{
+		groqEntry.Name,
+		groqEntry.ProviderID,
+		strings.Join(groqEntry.Models, ","),
+		strings.Join(groqEntry.DefaultModels, ","),
+	}, "|")
+	if strings.Contains(rendered, "gsk_secret") {
+		t.Fatalf("catalog must not expose raw keys: %s", rendered)
+	}
+}
+
 func TestParseOpenAICompatModels_Basic(t *testing.T) {
 	body := []byte(`{"data":[
 		{"id":"gpt-oss-20b","object":"model"},
