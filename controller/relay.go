@@ -368,7 +368,7 @@ func relayWithFallback(c *gin.Context) {
 			// Success - report to monitor and record for smart sorting
 			monitor.Emit(dep.ChannelID, true)
 			if !relayModeRecordsFallbackUsage(relayMode) {
-				fallback.RecordDeploymentSuccess(dep.ID, fallback.UsageInfo{})
+				fallback.RecordFallbackDeploymentSuccess(dep.ID, dep.RealModel, fallback.UsageInfo{})
 			}
 			// Record runtime usage for RPM/RPD/TPM/TPD tracking.
 			// Use estimated tokens when upstream usage isn't reported via UsageInfo path.

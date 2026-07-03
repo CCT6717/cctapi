@@ -86,3 +86,36 @@ func TestRecordFreeProviderUsageIgnoresManualFreeDeploymentIDs(t *testing.T) {
 		t.Fatalf("expected record not found for ignored manual deployment, got %v", err)
 	}
 }
+
+func TestRecordFallbackDeploymentSuccessUpdatesDeploymentStateAndFreeProviderLedger(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+
+	if err := InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	usage := UsageInfo{PromptTokens: 12, CompletionTokens: 8, TotalTokens: 20}
+	if err := RecordFallbackDeploymentSuccess("free:groq-001122ff", "llama-3.1-free", usage); err != nil {
+		t.Fatalf("RecordFallbackDeploymentSuccess failed: %v", err)
+	}
+
+	stats, requestCount, errorCount, err := GetDeploymentStats("free:groq-001122ff")
+	if err != nil {
+		t.Fatalf("GetDeploymentStats failed: %v", err)
+	}
+	if requestCount != 1 || errorCount != 0 {
+		t.Fatalf("unexpected deployment counters: requests=%d errors=%d", requestCount, errorCount)
+	}
+	if stats.PromptTokens != 12 || stats.CompletionTokens != 8 || stats.TotalTokens != 20 {
+		t.Fatalf("unexpected deployment stats: %+v", stats)
+	}
+
+	row, err := GetFreeProviderUsage("groq", "001122ff", "llama-3.1-free", todayString())
+	if err != nil {
+		t.Fatalf("GetFreeProviderUsage failed: %v", err)
+	}
+	if row.RequestCount != 1 || row.TotalTokens != 20 {
+		t.Fatalf("unexpected ledger row: %+v", row)
+	}
+}

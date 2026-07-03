@@ -249,6 +249,13 @@ func RecordDeploymentSuccess(deploymentID string, usage UsageInfo) error {
 		Error
 }
 
+func RecordFallbackDeploymentSuccess(deploymentID string, modelName string, usage UsageInfo) error {
+	if err := RecordDeploymentSuccess(deploymentID, usage); err != nil {
+		return err
+	}
+	return RecordFreeProviderUsage(deploymentID, modelName, usage)
+}
+
 // RecordDeploymentError records deployment error
 func RecordDeploymentError(deploymentID string, originalErr error) error {
 	state, dbErr := EnsureDeploymentState(deploymentID, todayString())
