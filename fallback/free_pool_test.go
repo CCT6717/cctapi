@@ -1016,9 +1016,12 @@ func TestBuildFreeProviderCatalogProjectsSafeMetadata(t *testing.T) {
 	cfg := &Config{
 		FreeProviders: map[string]FreeProviderConfig{
 			"groq": {
-				Enabled: true,
-				Keys:    []string{"gsk_secret_one", "gsk_secret_two"},
-				Models:  []string{"custom-free-model"},
+				Enabled:    true,
+				Keys:       []string{"gsk_secret_one", "gsk_secret_two"},
+				Models:     []string{"custom-free-model"},
+				DefaultRPD: 222,
+				DefaultTPM: 3333,
+				DefaultTPD: 4444,
 				LimitsOverride: &FreeProviderLimits{
 					RPMLimit: &rpmOverride,
 				},
@@ -1065,8 +1068,9 @@ func TestBuildFreeProviderCatalogProjectsSafeMetadata(t *testing.T) {
 	if groqEntry.RPMLimit != rpmOverride {
 		t.Fatalf("expected rpm limit override %d, got %d", rpmOverride, groqEntry.RPMLimit)
 	}
-	if groqEntry.TPMLimit != BuiltinFreeProviders["groq"].DefaultTPM {
-		t.Fatalf("expected default tpm limit %d, got %d", BuiltinFreeProviders["groq"].DefaultTPM, groqEntry.TPMLimit)
+	if groqEntry.RPDLimit != 222 || groqEntry.TPMLimit != 3333 || groqEntry.TPDLimit != 4444 {
+		t.Fatalf("expected configured default limits to project, got rpd=%d tpm=%d tpd=%d",
+			groqEntry.RPDLimit, groqEntry.TPMLimit, groqEntry.TPDLimit)
 	}
 	if !groqEntry.SupportsTools || !groqEntry.SupportsJSON || !groqEntry.RequiresKey || groqEntry.Keyless {
 		t.Fatalf("unexpected groq capability/auth metadata: %+v", groqEntry)

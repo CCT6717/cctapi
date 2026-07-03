@@ -46,7 +46,7 @@ func BuildFreeProviderCatalog(cfg *Config) []FreeProviderCatalogEntry {
 		if configured != nil {
 			fp = configured[name]
 		}
-		rpm, rpd, tpm, tpd := ApplyLimitsOverride(meta.DefaultRPM, meta.DefaultRPD, meta.DefaultTPM, meta.DefaultTPD, fp.LimitsOverride)
+		rpm, rpd, tpm, tpd := ResolveFreeProviderLimits(meta, fp)
 		catalog = append(catalog, FreeProviderCatalogEntry{
 			Name:              name,
 			Enabled:           fp.Enabled,

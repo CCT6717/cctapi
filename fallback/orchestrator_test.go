@@ -82,6 +82,41 @@ func TestPrepareDeploymentsAppliesCapabilityFilter(t *testing.T) {
 	}
 }
 
+func TestPrepareDeploymentsKeepsAIHordeForStreamRequests(t *testing.T) {
+	aihorde := BuiltinFreeProviders["aihorde"]
+	resetFallbackPlanningStateForTest(t, &Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/free": {
+				Enabled:  true,
+				Strategy: StrategyFreeFirst,
+				Pools:    []string{"free"},
+			},
+		},
+		Deployments: map[string]DeploymentConfig{
+			"free:aihorde-001122ff": {
+				ID:             "free:aihorde-001122ff",
+				Enabled:        true,
+				Pool:           "free",
+				RealModel:      "aihorde/free",
+				Priority:       1,
+				SupportsStream: aihorde.SupportsStream,
+			},
+		},
+	})
+
+	plan, err := PrepareDeploymentPlanForRequest("cct/free", RequestCapabilities{Stream: true})
+	if err != nil {
+		t.Fatalf("PrepareDeploymentPlanForRequest failed: %v", err)
+	}
+	if plan.CapabilityBefore != 1 || plan.CapabilityAfter != 1 {
+		t.Fatalf("expected aihorde to survive stream capability filter, got %d -> %d", plan.CapabilityBefore, plan.CapabilityAfter)
+	}
+	if len(plan.Deployments) != 1 || plan.Deployments[0].ID != "free:aihorde-001122ff" {
+		t.Fatalf("expected aihorde deployment candidate, got %#v", plan.Deployments)
+	}
+}
+
 func TestPrepareDeploymentsPreservesStickyWhenNoPreferred(t *testing.T) {
 	resetFallbackPlanningStateForTest(t, &Config{
 		Enabled: true,

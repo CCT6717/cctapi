@@ -13,10 +13,10 @@ import (
 
 type FreeProviderUsageLedger struct {
 	ID               int       `json:"id" gorm:"primaryKey"`
-	Provider         string    `json:"provider" gorm:"uniqueIndex:idx_free_provider_usage_period;index"`
-	KeyHash          string    `json:"key_hash" gorm:"uniqueIndex:idx_free_provider_usage_period;index"`
-	ModelName        string    `json:"model_name" gorm:"uniqueIndex:idx_free_provider_usage_period;index"`
-	Period           string    `json:"period" gorm:"uniqueIndex:idx_free_provider_usage_period;index"`
+	Provider         string    `json:"provider" gorm:"size:64;uniqueIndex:idx_free_provider_usage_period;index"`
+	KeyHash          string    `json:"key_hash" gorm:"size:16;uniqueIndex:idx_free_provider_usage_period;index"`
+	ModelName        string    `json:"model_name" gorm:"size:191;uniqueIndex:idx_free_provider_usage_period;index"`
+	Period           string    `json:"period" gorm:"size:16;uniqueIndex:idx_free_provider_usage_period;index"`
 	PromptTokens     int64     `json:"prompt_tokens" gorm:"default:0"`
 	CompletionTokens int64     `json:"completion_tokens" gorm:"default:0"`
 	TotalTokens      int64     `json:"total_tokens" gorm:"default:0"`

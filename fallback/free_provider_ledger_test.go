@@ -2,6 +2,8 @@ package fallback
 
 import (
 	"errors"
+	"reflect"
+	"strings"
 	"testing"
 
 	dbmodel "github.com/songquanpeng/one-api/model"
@@ -59,6 +61,20 @@ func TestRecordFreeProviderUsageAggregatesByProviderKeyModelAndPeriod(t *testing
 	}
 	if count != 1 {
 		t.Fatalf("expected one aggregate row, got %d", count)
+	}
+}
+
+func TestFreeProviderUsageLedgerIndexedStringFieldsHaveSizes(t *testing.T) {
+	typ := reflect.TypeOf(FreeProviderUsageLedger{})
+	for _, fieldName := range []string{"Provider", "KeyHash", "ModelName", "Period"} {
+		field, ok := typ.FieldByName(fieldName)
+		if !ok {
+			t.Fatalf("missing field %s", fieldName)
+		}
+		tag := string(field.Tag.Get("gorm"))
+		if !strings.Contains(tag, "size:") {
+			t.Fatalf("indexed field %s must declare a size to keep MySQL composite indexes safe, tag=%q", fieldName, tag)
+		}
 	}
 }
 

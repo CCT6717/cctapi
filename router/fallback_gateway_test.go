@@ -962,8 +962,10 @@ func TestBuildGatewayV2Config_ProjectsCorrectly(t *testing.T) {
 		},
 		FreeProviders: map[string]fallback.FreeProviderConfig{
 			"groq": {
-				Enabled: true,
-				Keys:    []string{"key-1", "key-2"},
+				Enabled:    true,
+				Keys:       []string{"key-1", "key-2"},
+				DefaultRPM: 12,
+				DefaultTPM: 3456,
 				LimitsOverride: &fallback.FreeProviderLimits{
 					RPMLimit: &rpmOverride,
 				},
@@ -1015,6 +1017,9 @@ func TestBuildGatewayV2Config_ProjectsCorrectly(t *testing.T) {
 	if fp.DefaultBaseURL != "https://api.groq.com/openai" {
 		t.Fatalf("expected groq default_base_url, got %q", fp.DefaultBaseURL)
 	}
+	if fp.DefaultRPM != 12 || fp.DefaultTPM != 3456 {
+		t.Fatalf("expected configured default limits in free provider projection, got rpm=%d tpm=%d", fp.DefaultRPM, fp.DefaultTPM)
+	}
 	if !fp.RequiresKey {
 		t.Fatal("expected groq requires_key=true")
 	}
@@ -1050,6 +1055,10 @@ func TestBuildGatewayV2Config_ProjectsCorrectly(t *testing.T) {
 	}
 	if !groqCatalog.Enabled || groqCatalog.KeyCount != 2 {
 		t.Fatalf("expected groq catalog enabled with two keys, got %+v", groqCatalog)
+	}
+	if groqCatalog.RPMLimit != 25 || groqCatalog.TPMLimit != 3456 {
+		t.Fatalf("expected groq catalog to reflect configured defaults plus override, got rpm=%d tpm=%d",
+			groqCatalog.RPMLimit, groqCatalog.TPMLimit)
 	}
 	if googleCatalog.Enabled {
 		t.Fatalf("expected unconfigured google catalog entry to be disabled")

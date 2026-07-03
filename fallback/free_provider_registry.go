@@ -345,7 +345,7 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		DefaultModels:  []string{},
 		DefaultRPM:     2,
 		ContextLength:  8192,
-		SupportsStream: false,
+		SupportsStream: true,
 		Keyless:        true,
 		ModelFetchMode: ModelFetchOpenAIModels,
 		Quirks: &FreeProviderQuirks{
@@ -568,6 +568,31 @@ func ApplyLimitsOverride(rpm, rpd, tpm, tpd int, override *FreeProviderLimits) (
 		tpd = *override.TPDLimit
 	}
 	return rpm, rpd, tpm, tpd
+}
+
+func MergeFreeProviderDefaultLimits(meta FreeProviderMeta, fp FreeProviderConfig) (int, int, int, int) {
+	rpm := fp.DefaultRPM
+	if rpm <= 0 {
+		rpm = meta.DefaultRPM
+	}
+	rpd := fp.DefaultRPD
+	if rpd <= 0 {
+		rpd = meta.DefaultRPD
+	}
+	tpm := fp.DefaultTPM
+	if tpm <= 0 {
+		tpm = meta.DefaultTPM
+	}
+	tpd := fp.DefaultTPD
+	if tpd <= 0 {
+		tpd = meta.DefaultTPD
+	}
+	return rpm, rpd, tpm, tpd
+}
+
+func ResolveFreeProviderLimits(meta FreeProviderMeta, fp FreeProviderConfig) (int, int, int, int) {
+	rpm, rpd, tpm, tpd := MergeFreeProviderDefaultLimits(meta, fp)
+	return ApplyLimitsOverride(rpm, rpd, tpm, tpd, fp.LimitsOverride)
 }
 
 // ValidateFreeProviderLimits checks that all limits_override values are >= 0.

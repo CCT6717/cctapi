@@ -213,14 +213,15 @@ func buildGatewayV2FreeProviders(freeProviders map[string]fallback.FreeProviderC
 			Models:   append([]string{}, fp.Models...),
 		}
 		if meta, ok := fallback.BuiltinFreeProviders[name]; ok {
+			rpm, rpd, tpm, tpd := fallback.MergeFreeProviderDefaultLimits(meta, fp)
 			gfp.ProviderID = meta.ProviderID
 			gfp.ChannelType = meta.ChannelType
 			gfp.DefaultBaseURL = meta.DefaultBaseURL
 			gfp.DefaultModels = append([]string{}, meta.DefaultModels...)
-			gfp.DefaultRPM = meta.DefaultRPM
-			gfp.DefaultRPD = meta.DefaultRPD
-			gfp.DefaultTPM = meta.DefaultTPM
-			gfp.DefaultTPD = meta.DefaultTPD
+			gfp.DefaultRPM = rpm
+			gfp.DefaultRPD = rpd
+			gfp.DefaultTPM = tpm
+			gfp.DefaultTPD = tpd
 			gfp.ContextLength = meta.ContextLength
 			gfp.SupportsVision = meta.SupportsVision
 			gfp.SupportsStream = meta.SupportsStream
