@@ -1,0 +1,88 @@
+package fallback
+
+import (
+	"errors"
+	"testing"
+
+	dbmodel "github.com/songquanpeng/one-api/model"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
+
+func setupFreeProviderLedgerTestDB(t *testing.T) func() {
+	t.Helper()
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open in-memory DB: %v", err)
+	}
+	dbmodel.DB = db
+	return func() {
+		dbmodel.DB = originalDB
+	}
+}
+
+func TestRecordFreeProviderUsageAggregatesByProviderKeyModelAndPeriod(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("InitFreeProviderLedgerStore failed: %v", err)
+	}
+
+	usageA := UsageInfo{PromptTokens: 100, CompletionTokens: 25, TotalTokens: 125}
+	usageB := UsageInfo{PromptTokens: 40, CompletionTokens: 10, TotalTokens: 50}
+	if err := RecordFreeProviderUsage("free:groq-001122ff", "llama-3.1-free", usageA); err != nil {
+		t.Fatalf("first RecordFreeProviderUsage failed: %v", err)
+	}
+	if err := RecordFreeProviderUsage("free:groq-001122ff", "llama-3.1-free", usageB); err != nil {
+		t.Fatalf("second RecordFreeProviderUsage failed: %v", err)
+	}
+
+	row, err := GetFreeProviderUsage("groq", "001122ff", "llama-3.1-free", todayString())
+	if err != nil {
+		t.Fatalf("GetFreeProviderUsage failed: %v", err)
+	}
+	if row.Provider != "groq" || row.KeyHash != "001122ff" || row.ModelName != "llama-3.1-free" || row.Period != todayString() {
+		t.Fatalf("unexpected usage identity: %+v", row)
+	}
+	if row.RequestCount != 2 || row.SuccessCount != 2 {
+		t.Fatalf("expected two requests and successes, got requests=%d successes=%d", row.RequestCount, row.SuccessCount)
+	}
+	if row.PromptTokens != 140 || row.CompletionTokens != 35 || row.TotalTokens != 175 {
+		t.Fatalf("unexpected token totals: prompt=%d completion=%d total=%d", row.PromptTokens, row.CompletionTokens, row.TotalTokens)
+	}
+
+	var count int64
+	if err := dbmodel.DB.Model(&FreeProviderUsageLedger{}).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count ledger rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one aggregate row, got %d", count)
+	}
+}
+
+func TestRecordFreeProviderUsageIgnoresManualFreeDeploymentIDs(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("InitFreeProviderLedgerStore failed: %v", err)
+	}
+	if err := RecordFreeProviderUsage("free:custom-manual", "manual-model", UsageInfo{TotalTokens: 100}); err != nil {
+		t.Fatalf("manual free deployment should be ignored without error: %v", err)
+	}
+
+	var count int64
+	if err := dbmodel.DB.Model(&FreeProviderUsageLedger{}).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count ledger rows: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no rows for manual free deployment, got %d", count)
+	}
+
+	_, err := GetFreeProviderUsage("custom", "manual", "manual-model", todayString())
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("expected record not found for ignored manual deployment, got %v", err)
+	}
+}

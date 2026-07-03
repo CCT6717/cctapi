@@ -67,7 +67,10 @@ func InitStateStore() error {
 	if err := InitAlertHistoryStore(); err != nil {
 		return err
 	}
-	return InitScoreHistoryStore()
+	if err := InitScoreHistoryStore(); err != nil {
+		return err
+	}
+	return InitFreeProviderLedgerStore()
 }
 
 // MigrateStateStore cleans duplicate records and ensures DB unique constraint.
