@@ -274,6 +274,9 @@ func SyncFreePool(cfg *Config) error {
 			logger.SysWarn(fmt.Sprintf("[free_pool] skipping deployment %s with no channel", id))
 			continue
 		}
+		if existing, ok := cfg.Deployments[id]; ok {
+			dep = preserveDeploymentRealModelOverride(existing, dep, id, providerNameForAutoDeploymentID(id))
+		}
 		cfg.Deployments[id] = dep
 	}
 
@@ -302,6 +305,46 @@ func deploymentUsesAutoChannel(dep DeploymentConfig, autoChannelIDs map[int]bool
 		return false
 	}
 	return autoChannelIDs[dep.ChannelID]
+}
+
+func preserveDeploymentRealModelOverride(existing DeploymentConfig, generated DeploymentConfig, deploymentID string, providerName string) DeploymentConfig {
+	if isDeploymentRealModelOverride(existing.RealModel, generated.RealModel, providerName) {
+		generated.RealModel = strings.TrimSpace(existing.RealModel)
+		logger.SysLog(fmt.Sprintf("[free_pool] preserved real_model override for %s: %s", deploymentID, generated.RealModel))
+	}
+	return generated
+}
+
+func isDeploymentRealModelOverride(currentRealModel string, generatedRealModel string, providerName string) bool {
+	currentRealModel = strings.TrimSpace(currentRealModel)
+	generatedRealModel = strings.TrimSpace(generatedRealModel)
+	if currentRealModel == "" {
+		return false
+	}
+	if currentRealModel == generatedRealModel {
+		return false
+	}
+	if providerName != "" && currentRealModel == providerName+"/free" {
+		return false
+	}
+	return true
+}
+
+func shouldSyncDeploymentRealModel(deploymentID string, generatedRealModel string, providerName string) bool {
+	dep, ok := CloneDeployment(deploymentID)
+	if !ok {
+		return true
+	}
+	return !isDeploymentRealModelOverride(dep.RealModel, generatedRealModel, providerName)
+}
+
+func providerNameForAutoDeploymentID(id string) string {
+	for providerName := range knownFreeProviders {
+		if strings.HasPrefix(id, "free:"+providerName+"-") {
+			return providerName
+		}
+	}
+	return ""
 }
 
 // StaleCleanupReport describes auto-generated resources that exist but no longer
@@ -454,7 +497,7 @@ func syncAllProviderModels(cfg *Config) {
 			// keyless 供应商只有一个 channel,用空 key 的 hash
 			keyHash := SafeKeyHash("")
 			depID := deploymentID(providerName, keyHash)
-			if UpdateDeploymentRealModel(depID, models[0]) {
+			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
 				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
 			}
 			name := channelName(providerName, keyHash)
@@ -493,7 +536,7 @@ func syncAllProviderModels(cfg *Config) {
 				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models for %s (keeping static default)", providerName, depID))
 				continue
 			}
-			if UpdateDeploymentRealModel(depID, models[0]) {
+			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
 				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
 			}
 			// Update channel.Models so the admin UI and channel abilities see the

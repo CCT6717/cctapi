@@ -17,7 +17,7 @@ func setupFreePoolTestDB(t *testing.T) func() {
 	if err != nil {
 		t.Fatalf("failed to open in-memory DB: %v", err)
 	}
-	if err := db.AutoMigrate(&dbmodel.Channel{}); err != nil {
+	if err := db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.Ability{}); err != nil {
 		t.Fatalf("failed to migrate channel table: %v", err)
 	}
 	dbmodel.DB = db
@@ -242,6 +242,83 @@ func TestSyncAllProviderModelsKeepsConfiguredModelOverride(t *testing.T) {
 	}
 	if refreshed.Models != "custom-model" {
 		t.Fatalf("expected channel models to keep configured override, got %q", refreshed.Models)
+	}
+}
+
+func TestSyncFreePoolPreservesDeploymentRealModelOverride(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	key := "gsk-test-deployment-override"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name:   channelName("groq", keyHash),
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: BuiltinFreeProviders["groq"].DefaultModels[0],
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create channel: %v", err)
+	}
+
+	depID := deploymentID("groq", keyHash)
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "manual-real-model", Pool: "free"},
+		},
+	}
+
+	if err := SyncFreePool(cfg); err != nil {
+		t.Fatalf("SyncFreePool failed: %v", err)
+	}
+	dep := cfg.Deployments[depID]
+	if dep.RealModel != "manual-real-model" {
+		t.Fatalf("expected SyncFreePool to preserve deployment real_model override, got %q", dep.RealModel)
+	}
+}
+
+func TestSyncAllProviderModelsKeepsDeploymentRealModelOverride(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	key := "gsk-test-dynamic-override"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name:   channelName("groq", keyHash),
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: BuiltinFreeProviders["groq"].DefaultModels[0],
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create channel: %v", err)
+	}
+
+	depID := deploymentID("groq", keyHash)
+	resetConfigForTest(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "manual-real-model", Pool: "free"},
+		},
+	})
+
+	syncAllProviderModels(GetConfig())
+
+	dep, ok := CloneDeployment(depID)
+	if !ok {
+		t.Fatalf("expected deployment %s to exist", depID)
+	}
+	if dep.RealModel != "manual-real-model" {
+		t.Fatalf("expected dynamic model sync to preserve deployment real_model override, got %q", dep.RealModel)
 	}
 }
 
