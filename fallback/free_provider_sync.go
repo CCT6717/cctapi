@@ -22,8 +22,10 @@ func SyncFreePool(cfg *Config) error {
 		return fmt.Errorf("failed to query auto channels: %w", err)
 	}
 	existingByName := map[string]*model.Channel{}
+	existingAutoChannelIDs := map[int]bool{}
 	for _, ch := range existing {
 		existingByName[ch.Name] = ch
+		existingAutoChannelIDs[ch.Id] = true
 	}
 
 	// 2. Compute desired channels and collect deployments
@@ -277,9 +279,12 @@ func SyncFreePool(cfg *Config) error {
 
 	// 6. Clean up stale auto deployments: remove from cfg.Deployments any auto
 	// deployment that no longer has a corresponding enabled channel.
-	for id := range cfg.Deployments {
+	for id, dep := range cfg.Deployments {
 		if !IsAutoDeploymentID(id) {
 			continue // skip user-created deployments
+		}
+		if !deploymentUsesAutoChannel(dep, existingAutoChannelIDs) {
+			continue
 		}
 		if _, active := autoDeployments[id]; !active {
 			// Stale: either the provider was disabled or the key was removed.
@@ -290,6 +295,13 @@ func SyncFreePool(cfg *Config) error {
 	}
 
 	return nil
+}
+
+func deploymentUsesAutoChannel(dep DeploymentConfig, autoChannelIDs map[int]bool) bool {
+	if dep.ChannelID <= 0 {
+		return false
+	}
+	return autoChannelIDs[dep.ChannelID]
 }
 
 // StaleCleanupReport describes auto-generated resources that exist but no longer
@@ -375,11 +387,18 @@ func DryRunCleanStale() (*StaleCleanupReport, error) {
 			})
 		}
 	}
+	autoChannelIDs := make(map[int]bool, len(dbChannels))
+	for _, ch := range dbChannels {
+		autoChannelIDs[ch.Id] = true
+	}
 
 	// Scan config deployments for auto deployments that no longer have a matching key
 	if cfg.Deployments != nil {
 		for id, dep := range cfg.Deployments {
 			if !IsAutoDeploymentID(id) {
+				continue
+			}
+			if !deploymentUsesAutoChannel(dep, autoChannelIDs) {
 				continue
 			}
 			if !expectedDeployments[id] {
@@ -415,6 +434,10 @@ func syncAllProviderModels(cfg *Config) {
 	}
 	for providerName, fp := range cfg.FreeProviders {
 		if !fp.Enabled {
+			continue
+		}
+		if len(fp.Models) > 0 {
+			logger.SysLog(fmt.Sprintf("[free-pool] %s has configured models, skipping dynamic model sync", providerName))
 			continue
 		}
 		// keyless 供应商:用空 key 调一次 fetchModels

@@ -58,6 +58,7 @@ type gatewayV2Deployment struct {
 type gatewayV2FreeProvider struct {
 	Enabled        bool                     `json:"enabled"`
 	KeyCount       int                      `json:"key_count"`
+	Models         []string                 `json:"models,omitempty"`
 	ProviderID     string                   `json:"provider_id,omitempty"`
 	ChannelType    int                      `json:"channel_type,omitempty"`
 	DefaultBaseURL string                   `json:"default_base_url,omitempty"`
@@ -96,6 +97,7 @@ type gatewayV2ConfigInput struct {
 type gatewayV2FreeProviderInput struct {
 	Enabled        bool                     `json:"enabled"`
 	Keys           []string                 `json:"keys,omitempty"`
+	Models         []string                 `json:"models,omitempty"`
 	LimitsOverride *gatewayV2LimitsOverride `json:"limits_override,omitempty"`
 }
 
@@ -141,12 +143,72 @@ func toFreeProviderLimits(v *gatewayV2LimitsOverride) *fallback.FreeProviderLimi
 	}
 }
 
+func mergeGatewayFreeProviderInput(existing fallback.FreeProviderConfig, input gatewayV2FreeProviderInput) fallback.FreeProviderConfig {
+	keys := append([]string{}, existing.Keys...)
+	if len(input.Keys) > 0 {
+		freshKeys := make([]string, 0, len(input.Keys))
+		for _, k := range input.Keys {
+			k = strings.TrimSpace(k)
+			if k == "" || strings.Contains(k, "*") {
+				continue
+			}
+			freshKeys = append(freshKeys, k)
+		}
+		if len(freshKeys) > 0 {
+			keys = freshKeys
+		}
+	}
+
+	models := append([]string{}, existing.Models...)
+	if input.Models != nil {
+		models = make([]string, 0, len(input.Models))
+		for _, model := range input.Models {
+			model = strings.TrimSpace(model)
+			if model != "" {
+				models = append(models, model)
+			}
+		}
+	}
+
+	var mergedLimits *fallback.FreeProviderLimits
+	if input.LimitsOverride != nil {
+		mergedLimits = toFreeProviderLimits(input.LimitsOverride)
+	} else if existing.LimitsOverride != nil {
+		mergedLimits = &fallback.FreeProviderLimits{
+			RPMLimit: cloneInt(existing.LimitsOverride.RPMLimit),
+			RPDLimit: cloneInt(existing.LimitsOverride.RPDLimit),
+			TPMLimit: cloneInt(existing.LimitsOverride.TPMLimit),
+			TPDLimit: cloneInt(existing.LimitsOverride.TPDLimit),
+		}
+	}
+
+	return fallback.FreeProviderConfig{
+		Enabled:        input.Enabled,
+		Keys:           keys,
+		Models:         models,
+		DefaultRPM:     existing.DefaultRPM,
+		DefaultRPD:     existing.DefaultRPD,
+		DefaultTPM:     existing.DefaultTPM,
+		DefaultTPD:     existing.DefaultTPD,
+		LimitsOverride: mergedLimits,
+	}
+}
+
+func cloneInt(src *int) *int {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
+}
+
 func buildGatewayV2FreeProviders(freeProviders map[string]fallback.FreeProviderConfig) map[string]gatewayV2FreeProvider {
 	fps := make(map[string]gatewayV2FreeProvider, len(freeProviders))
 	for name, fp := range freeProviders {
 		gfp := gatewayV2FreeProvider{
 			Enabled:  fp.Enabled,
 			KeyCount: len(fp.Keys),
+			Models:   append([]string{}, fp.Models...),
 		}
 		if meta, ok := fallback.BuiltinFreeProviders[name]; ok {
 			gfp.ProviderID = meta.ProviderID
@@ -547,27 +609,7 @@ func updateManualConfig(c *gin.Context) {
 	}
 	for name, fpInput := range payload.FreeProviders {
 		existing := merged.FreeProviders[name]
-		keys := existing.Keys
-
-		if len(fpInput.Keys) > 0 {
-			freshKeys := make([]string, 0, len(fpInput.Keys))
-			for _, k := range fpInput.Keys {
-				k = strings.TrimSpace(k)
-				if k == "" || strings.Contains(k, "*") {
-					continue
-				}
-				freshKeys = append(freshKeys, k)
-			}
-			if len(freshKeys) > 0 {
-				keys = freshKeys
-			}
-		}
-
-		merged.FreeProviders[name] = fallback.FreeProviderConfig{
-			Enabled:        fpInput.Enabled,
-			Keys:           keys,
-			LimitsOverride: toFreeProviderLimits(fpInput.LimitsOverride),
-		}
+		merged.FreeProviders[name] = mergeGatewayFreeProviderInput(existing, fpInput)
 	}
 
 	data, err := json.MarshalIndent(merged, "", "  ")
@@ -773,29 +815,7 @@ func updateGatewayConfig(c *gin.Context) {
 	}
 	for name, fpInput := range payload.FreeProviders {
 		existing := merged.FreeProviders[name]
-		keys := existing.Keys // default: keep existing keys
-
-		if len(fpInput.Keys) > 0 {
-			// Filter out empty and masked entries.
-			freshKeys := make([]string, 0, len(fpInput.Keys))
-			for _, k := range fpInput.Keys {
-				k = strings.TrimSpace(k)
-				if k == "" || strings.Contains(k, "*") {
-					continue // empty or masked 鈥?skip
-				}
-				freshKeys = append(freshKeys, k)
-			}
-			if len(freshKeys) > 0 {
-				keys = freshKeys // only replace when at least one real key provided
-			}
-			// Otherwise all keys were masked/empty 鈥?keep existing.
-		}
-
-		merged.FreeProviders[name] = fallback.FreeProviderConfig{
-			Enabled:        fpInput.Enabled,
-			Keys:           keys,
-			LimitsOverride: toFreeProviderLimits(fpInput.LimitsOverride),
-		}
+		merged.FreeProviders[name] = mergeGatewayFreeProviderInput(existing, fpInput)
 	}
 
 	// Step 5: serialise, backup, write, reload.

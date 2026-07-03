@@ -4,8 +4,27 @@ import (
 	"strings"
 	"testing"
 
+	dbmodel "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/channeltype"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+func setupFreePoolTestDB(t *testing.T) func() {
+	t.Helper()
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open in-memory DB: %v", err)
+	}
+	if err := db.AutoMigrate(&dbmodel.Channel{}); err != nil {
+		t.Fatalf("failed to migrate channel table: %v", err)
+	}
+	dbmodel.DB = db
+	return func() {
+		dbmodel.DB = originalDB
+	}
+}
 
 func TestBuiltinFreeProviderRegistry_OpenRouter(t *testing.T) {
 	meta, ok := BuiltinFreeProviders["openrouter"]
@@ -175,6 +194,74 @@ func TestComputeExpectedAutoResources_KeyRequiredProviderWithoutKeysSkipped(t *t
 	}
 	if len(deployments) != 0 {
 		t.Fatalf("expected no deployments for key-required provider without keys, got %v", deployments)
+	}
+}
+
+func TestSyncAllProviderModelsKeepsConfiguredModelOverride(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	key := "gsk-test-model-override"
+	keyHash := SafeKeyHash(key)
+	channelName := channelName("groq", keyHash)
+	channel := dbmodel.Channel{
+		Name:   channelName,
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: "custom-model",
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create channel: %v", err)
+	}
+
+	depID := deploymentID("groq", keyHash)
+	resetConfigForTest(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}, Models: []string{"custom-model"}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "custom-model", Pool: "free"},
+		},
+	})
+
+	syncAllProviderModels(GetConfig())
+
+	dep, ok := CloneDeployment(depID)
+	if !ok {
+		t.Fatalf("expected deployment %s to exist", depID)
+	}
+	if dep.RealModel != "custom-model" {
+		t.Fatalf("expected configured real model to remain custom-model, got %q", dep.RealModel)
+	}
+	var refreshed dbmodel.Channel
+	if err := dbmodel.DB.First(&refreshed, channel.Id).Error; err != nil {
+		t.Fatalf("failed to reload channel: %v", err)
+	}
+	if refreshed.Models != "custom-model" {
+		t.Fatalf("expected channel models to keep configured override, got %q", refreshed.Models)
+	}
+}
+
+func TestSyncFreePoolDoesNotDeleteManualFreeProviderLikeDeploymentID(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	cfg := &Config{
+		Enabled:       true,
+		FreeProviders: map[string]FreeProviderConfig{},
+		Deployments: map[string]DeploymentConfig{
+			"free:google-0": {ID: "free:google-0", Enabled: true, ChannelID: 12345, RealModel: "manual-model", Pool: "free"},
+		},
+	}
+
+	if err := SyncFreePool(cfg); err != nil {
+		t.Fatalf("SyncFreePool failed: %v", err)
+	}
+	if _, ok := cfg.Deployments["free:google-0"]; !ok {
+		t.Fatalf("manual deployment free:google-0 should not be removed as stale auto deployment")
 	}
 }
 

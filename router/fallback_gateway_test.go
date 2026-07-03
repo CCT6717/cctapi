@@ -95,6 +95,36 @@ const baseValidConfigWithFreeProviderJSON = `{
   }
 }`
 
+const baseValidConfigWithFreeProviderModelsJSON = `{
+  "enabled": true,
+  "virtual_models": {
+    "test/auto": {
+      "enabled": true,
+      "strategy": "quality_first",
+      "pools": ["high"]
+    }
+  },
+  "deployments": {
+    "dep-1": {
+      "enabled": true,
+      "channel_id": 1,
+      "real_model": "gpt-4",
+      "pool": "high",
+      "quality_tier": "high",
+      "cost_tier": "paid"
+    }
+  },
+  "free_providers": {
+    "groq": {
+      "enabled": true,
+      "keys": ["gsk_original_test_key_not_real_12345"],
+      "models": ["custom-free-model"],
+      "default_rpm": 12,
+      "default_tpm": 3456
+    }
+  }
+}`
+
 // setupGatewayConfigForSave creates a temp directory with data/fallback.json,
 // changes CWD to it, loads the config via fallback.LoadConfig, and returns a
 // cleanup function that restores the original CWD.
@@ -557,6 +587,48 @@ func TestGatewayUpdateConfig_EmptyKeyPreservesOld(t *testing.T) {
 	if len(groqFP.Keys) != 1 || groqFP.Keys[0] != originalKey {
 		t.Fatalf("expected original key %q preserved when empty keys sent, got %v",
 			originalKey, groqFP.Keys)
+	}
+}
+
+func TestGatewayUpdateConfig_FreeProviderModelsPreservedWhenOmitted(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigWithFreeProviderModelsJSON)
+	defer cleanup()
+
+	putPayload := `{
+		"enabled": true,
+		"virtual_models": {
+			"test/auto": {
+				"enabled": true,
+				"strategy": "quality_first",
+				"pools": ["high"]
+			}
+		},
+		"deployments": {
+			"dep-1": {
+				"enabled": true,
+				"channel_id": 1,
+				"real_model": "gpt-4",
+				"pool": "high"
+			}
+		},
+		"free_providers": {
+			"groq": {
+				"enabled": true
+			}
+		}
+	}`
+
+	w := callGatewayPUT(t, putPayload)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+
+	fp := fallback.GetConfig().FreeProviders["groq"]
+	if len(fp.Models) != 1 || fp.Models[0] != "custom-free-model" {
+		t.Fatalf("expected existing models override preserved, got %v", fp.Models)
+	}
+	if fp.DefaultRPM != 12 || fp.DefaultTPM != 3456 {
+		t.Fatalf("expected provider defaults preserved, got rpm=%d tpm=%d", fp.DefaultRPM, fp.DefaultTPM)
 	}
 }
 
