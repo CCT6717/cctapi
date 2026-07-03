@@ -4,11 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common/helper"
@@ -118,80 +115,17 @@ func updateFallbackEditorConfig(c *gin.Context) {
 		return
 	}
 
-	virtualModels, deployments, err := normalizeFallbackEditorPayload(payload)
+	data, backupPath, err := saveFallbackEditorConfig(payload)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 
-	deployments, err = upsertFallbackEditorChannels(deployments)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
-		return
-	}
-
-	cfg := buildFallbackConfigFromEditor(payload, virtualModels, deployments)
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
-		return
-	}
-	data = append(data, '\n')
-
-	backupPath, err := backupFallbackEditorConfig(fallbackEditorConfigPath)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
-		return
-	}
-
-	if err := os.WriteFile(fallbackEditorConfigPath, data, 0644); err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
-		return
-	}
-
-	if err := fallback.ReloadConfig(fallbackEditorConfigPath); err != nil {
-		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
-		return
-	}
-
-	response := gin.H{"success": true, "message": "fallback config saved", "data": buildFallbackEditorConfig(&cfg)}
+	response := gin.H{"success": true, "message": "fallback config saved", "data": data}
 	if backupPath != "" {
 		response["backup_path"] = backupPath
 	}
 	c.JSON(http.StatusOK, response)
-}
-
-func backupFallbackEditorConfig(configPath string) (string, error) {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return "", nil
-		}
-		return "", fmt.Errorf("failed to read old fallback config for backup: %w", err)
-	}
-
-	ext := filepath.Ext(configPath)
-	base := strings.TrimSuffix(filepath.Base(configPath), ext)
-	backupDir := filepath.Join(filepath.Dir(configPath), "backups")
-	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		return "", fmt.Errorf("failed to create fallback config backup directory: %w", err)
-	}
-
-	now := time.Now()
-	backupStem := fmt.Sprintf("%s.%s-%09d", base, now.Format("20060102-150405"), now.Nanosecond())
-	backupPath := filepath.Join(backupDir, backupStem+ext)
-	for index := 1; ; index++ {
-		if _, err := os.Stat(backupPath); os.IsNotExist(err) {
-			break
-		} else if err != nil {
-			return "", fmt.Errorf("failed to inspect fallback config backup path: %w", err)
-		}
-		backupPath = filepath.Join(backupDir, fmt.Sprintf("%s.%d%s", backupStem, index, ext))
-	}
-	if err := os.WriteFile(backupPath, data, 0644); err != nil {
-		return "", fmt.Errorf("failed to write fallback config backup: %w", err)
-	}
-	return backupPath, nil
 }
 
 func buildFallbackEditorConfig(cfg *fallback.Config) fallbackEditorConfig {
