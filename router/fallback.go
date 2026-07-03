@@ -241,22 +241,22 @@ func SetFallbackRouter(router *gin.Engine) {
 			c.JSON(http.StatusOK, gin.H{"success": true, "data": events})
 		})
 
-			adminGroup.POST("/alert/read-all", func(c *gin.Context) {
-				if err := fallback.MarkAllAlertsRead(); err != nil {
-					c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
-					return
-				}
-				c.JSON(http.StatusOK, gin.H{"success": true, "message": "all alerts marked as read"})
-			})
+		adminGroup.POST("/alert/read-all", func(c *gin.Context) {
+			if err := fallback.MarkAllAlertsRead(); err != nil {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"success": true, "message": "all alerts marked as read"})
+		})
 
-			adminGroup.GET("/alert/unread-count", func(c *gin.Context) {
-				count, err := fallback.GetUnreadAlertCount()
-				if err != nil {
-					c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
-					return
-				}
-				c.JSON(http.StatusOK, gin.H{"success": true, "data": count})
-			})
+		adminGroup.GET("/alert/unread-count", func(c *gin.Context) {
+			count, err := fallback.GetUnreadAlertCount()
+			if err != nil {
+				c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"success": true, "data": count})
+		})
 
 		adminGroup.GET("/alert/config", func(c *gin.Context) {
 			cfg := fallback.GlobalAlertManager.GetAlertConfig()
@@ -397,7 +397,7 @@ func SetFallbackRouter(router *gin.Engine) {
 		// ── CCT three-tier virtual model gateway endpoints ──
 
 		adminGroup.GET("/virtual-models", func(c *gin.Context) {
-			cfg := fallback.GetConfig()
+			cfg := fallback.CloneConfig()
 			if cfg == nil || !cfg.Enabled {
 				c.JSON(http.StatusOK, gin.H{"success": false, "message": "fallback not enabled"})
 				return
@@ -405,17 +405,17 @@ func SetFallbackRouter(router *gin.Engine) {
 			names := fallback.GetAllVirtualModelNames()
 			vms := make([]map[string]interface{}, 0, len(names))
 			for _, name := range names {
-				vm, ok := fallback.GetVirtualModel(name)
+				vm, ok := fallback.CloneVirtualModel(name)
 				if !ok {
 					continue
 				}
 				vms = append(vms, map[string]interface{}{
-					"name":                 name,
-					"enabled":              vm.Enabled,
-					"description":          vm.Description,
-					"strategy":             vm.Strategy,
-					"pools":                vm.Pools,
-					"allow_degrade_to_low": vm.AllowDegradeToLow,
+					"name":                  name,
+					"enabled":               vm.Enabled,
+					"description":           vm.Description,
+					"strategy":              vm.Strategy,
+					"pools":                 vm.Pools,
+					"allow_degrade_to_low":  vm.AllowDegradeToLow,
 					"allow_degrade_to_free": vm.AllowDegradeToFree,
 				})
 			}
@@ -423,7 +423,7 @@ func SetFallbackRouter(router *gin.Engine) {
 		})
 
 		adminGroup.GET("/deployments/runtime-status", func(c *gin.Context) {
-			cfg := fallback.GetConfig()
+			cfg := fallback.CloneConfig()
 			if cfg == nil || !cfg.Enabled {
 				c.JSON(http.StatusOK, gin.H{"success": false, "message": "fallback not enabled"})
 				return
@@ -433,31 +433,31 @@ func SetFallbackRouter(router *gin.Engine) {
 			for id, dep := range cfg.Deployments {
 				rt := fallback.SnapshotRuntimeState(id)
 				rows = append(rows, map[string]interface{}{
-					"deployment_id":       id,
-					"enabled":             dep.Enabled,
-					"pool":                dep.Pool,
-					"real_model":          dep.RealModel,
-					"quality_tier":        dep.QualityTier,
-					"cost_tier":           dep.CostTier,
-					"supports_vision":     dep.SupportsVision,
-					"supports_tools":      dep.SupportsTools,
-					"supports_json":       dep.SupportsJSON,
-					"supports_stream":     dep.SupportsStream,
-					"context_length":      dep.ContextLength,
-					"rpm_limit":           dep.RPMLimit,
-					"rpd_limit":           dep.RPDLimit,
-					"tpm_limit":           dep.TPMLimit,
-					"tpd_limit":            dep.TPDLimit,
-					"minute_requests":     rt.MinuteRequests,
-					"day_requests":        rt.DayRequests,
-					"minute_tokens":       rt.MinuteTokens,
-					"day_tokens":          rt.DayTokens,
-					"success_count":       rt.SuccessCount,
-					"failure_count":       rt.FailureCount,
-					"rate_limit_score":    rt.RateLimitScore,
-					"health":              string(fallback.GetHealthStatus(id)),
-					"last_error":          rt.LastError,
-					"last_error_at":       rt.LastErrorAt,
+					"deployment_id":    id,
+					"enabled":          dep.Enabled,
+					"pool":             dep.Pool,
+					"real_model":       dep.RealModel,
+					"quality_tier":     dep.QualityTier,
+					"cost_tier":        dep.CostTier,
+					"supports_vision":  dep.SupportsVision,
+					"supports_tools":   dep.SupportsTools,
+					"supports_json":    dep.SupportsJSON,
+					"supports_stream":  dep.SupportsStream,
+					"context_length":   dep.ContextLength,
+					"rpm_limit":        dep.RPMLimit,
+					"rpd_limit":        dep.RPDLimit,
+					"tpm_limit":        dep.TPMLimit,
+					"tpd_limit":        dep.TPDLimit,
+					"minute_requests":  rt.MinuteRequests,
+					"day_requests":     rt.DayRequests,
+					"minute_tokens":    rt.MinuteTokens,
+					"day_tokens":       rt.DayTokens,
+					"success_count":    rt.SuccessCount,
+					"failure_count":    rt.FailureCount,
+					"rate_limit_score": rt.RateLimitScore,
+					"health":           string(fallback.GetHealthStatus(id)),
+					"last_error":       rt.LastError,
+					"last_error_at":    rt.LastErrorAt,
 				})
 			}
 			c.JSON(http.StatusOK, gin.H{"success": true, "data": rows, "health": healthSnap})

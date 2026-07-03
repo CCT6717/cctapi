@@ -130,7 +130,7 @@ func ListAllModels(c *gin.Context) {
 
 	// Add virtual models for admin visibility
 	if common.IsFallbackEnabled {
-		cfg := fallback.GetConfig()
+		cfg := fallback.CloneConfig()
 		if cfg != nil && cfg.Enabled {
 			for modelName, vm := range cfg.VirtualModels {
 				if vm.Enabled {
@@ -169,7 +169,7 @@ func ListModels(c *gin.Context) {
 	}
 	// Add fallback virtual models to the available models set
 	if common.IsFallbackEnabled {
-		cfg := fallback.GetConfig()
+		cfg := fallback.CloneConfig()
 		if cfg != nil && cfg.Enabled {
 			for modelName, vm := range cfg.VirtualModels {
 				if vm.Enabled {
@@ -213,7 +213,7 @@ func RetrieveModel(c *gin.Context) {
 
 	// Check if it's a virtual model
 	if common.IsFallbackEnabled {
-		cfg := fallback.GetConfig()
+		cfg := fallback.CloneConfig()
 		if cfg != nil && cfg.Enabled {
 			if vm, ok := cfg.VirtualModels[modelId]; ok && vm.Enabled {
 				c.JSON(200, OpenAIModels{

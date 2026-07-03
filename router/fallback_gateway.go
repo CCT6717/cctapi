@@ -195,7 +195,7 @@ func buildGatewayV2Config(cfg *fallback.Config) gatewayV2Config {
 
 // getGatewayConfig handles GET /api/fallback/gateway/config.
 func getGatewayConfig(c *gin.Context) {
-	cfg := fallback.GetConfig()
+	cfg := fallback.CloneConfig()
 	if cfg == nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "fallback config is not loaded"})
 		return
@@ -295,7 +295,7 @@ func buildManualConfig(cfg *fallback.Config) gatewayV2Config {
 // getManualConfig handles GET /api/fallback/manual-config.
 // Returns gateway config excluding free pool deployments and cct/free virtual model.
 func getManualConfig(c *gin.Context) {
-	cfg := fallback.GetConfig()
+	cfg := fallback.CloneConfig()
 	if cfg == nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "fallback config is not loaded"})
 		return
@@ -343,7 +343,7 @@ func updateManualConfig(c *gin.Context) {
 		}
 	}
 
-	current := fallback.GetConfig()
+	current := fallback.CloneConfig()
 	if current == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "fallback config is not loaded"})
 		return
@@ -573,7 +573,7 @@ func updateManualConfig(c *gin.Context) {
 		return
 	}
 
-	freshCfg := fallback.GetConfig()
+	freshCfg := fallback.CloneConfig()
 	response := gin.H{
 		"success": true,
 		"message": "manual config saved",
@@ -629,7 +629,7 @@ func updateGatewayConfig(c *gin.Context) {
 	}
 
 	// Step 4: load current config and merge.
-	current := fallback.GetConfig()
+	current := fallback.CloneConfig()
 	if current == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "fallback config is not loaded"})
 		return
@@ -803,7 +803,7 @@ func updateGatewayConfig(c *gin.Context) {
 	}
 
 	// Step 6: return fresh config (same shape as GET).
-	freshCfg := fallback.GetConfig()
+	freshCfg := fallback.CloneConfig()
 	response := gin.H{
 		"success": true,
 		"message": "gateway config saved",
@@ -814,4 +814,3 @@ func updateGatewayConfig(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, response)
 }
-

@@ -91,7 +91,7 @@ func maskSecretKey(key string) string {
 }
 
 func getFallbackEditorConfig(c *gin.Context) {
-	cfg := fallback.GetConfig()
+	cfg := fallback.CloneConfig()
 	if cfg == nil {
 		c.JSON(http.StatusOK, gin.H{"success": false, "message": "fallback config is not loaded"})
 		return
@@ -398,7 +398,7 @@ func normalizeFallbackEditorPayload(payload fallbackEditorConfig) ([]fallbackEdi
 }
 
 func buildFallbackConfigFromEditor(payload fallbackEditorConfig, virtualModels []fallbackEditorVirtualModel, deployments []fallbackEditorDeployment) fallback.Config {
-	current := fallback.GetConfig()
+	current := fallback.CloneConfig()
 
 	alertConfig := payload.Alert
 	if alertConfig.CheckIntervalSec <= 0 && current != nil {

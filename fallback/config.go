@@ -263,6 +263,105 @@ func GetConfig() *Config {
 	return config
 }
 
+func CloneConfig() *Config {
+	configLock.RLock()
+	defer configLock.RUnlock()
+	return cloneConfig(config)
+}
+
+func CloneDeployment(id string) (*DeploymentConfig, bool) {
+	configLock.RLock()
+	defer configLock.RUnlock()
+
+	if config == nil || config.Deployments == nil {
+		return nil, false
+	}
+
+	dep, ok := config.Deployments[id]
+	if !ok {
+		return nil, false
+	}
+	return &dep, true
+}
+
+func CloneVirtualModel(modelName string) (*VirtualModelConfig, bool) {
+	configLock.RLock()
+	defer configLock.RUnlock()
+
+	if config == nil || !config.Enabled || config.VirtualModels == nil {
+		return nil, false
+	}
+
+	vm, ok := config.VirtualModels[modelName]
+	if !ok {
+		return nil, false
+	}
+	return cloneVirtualModelConfig(vm), true
+}
+
+func cloneConfig(src *Config) *Config {
+	if src == nil {
+		return nil
+	}
+
+	dst := *src
+	if src.VirtualModels != nil {
+		dst.VirtualModels = make(map[string]VirtualModelConfig, len(src.VirtualModels))
+		for name, vm := range src.VirtualModels {
+			dst.VirtualModels[name] = *cloneVirtualModelConfig(vm)
+		}
+	}
+	if src.Deployments != nil {
+		dst.Deployments = make(map[string]DeploymentConfig, len(src.Deployments))
+		for id, dep := range src.Deployments {
+			dst.Deployments[id] = dep
+		}
+	}
+	if src.FreeProviders != nil {
+		dst.FreeProviders = make(map[string]FreeProviderConfig, len(src.FreeProviders))
+		for name, fp := range src.FreeProviders {
+			dst.FreeProviders[name] = cloneFreeProviderConfig(fp)
+		}
+	}
+	dst.BlockedErrorCodes = append([]string{}, src.BlockedErrorCodes...)
+	return &dst
+}
+
+func cloneVirtualModelConfig(src VirtualModelConfig) *VirtualModelConfig {
+	dst := src
+	dst.Pools = append([]string{}, src.Pools...)
+	dst.FallbackOrder = append([]string{}, src.FallbackOrder...)
+	return &dst
+}
+
+func cloneFreeProviderConfig(src FreeProviderConfig) FreeProviderConfig {
+	dst := src
+	dst.Keys = append([]string{}, src.Keys...)
+	dst.Models = append([]string{}, src.Models...)
+	dst.LimitsOverride = cloneFreeProviderLimits(src.LimitsOverride)
+	return dst
+}
+
+func cloneFreeProviderLimits(src *FreeProviderLimits) *FreeProviderLimits {
+	if src == nil {
+		return nil
+	}
+	return &FreeProviderLimits{
+		RPMLimit: cloneIntPtr(src.RPMLimit),
+		RPDLimit: cloneIntPtr(src.RPDLimit),
+		TPMLimit: cloneIntPtr(src.TPMLimit),
+		TPDLimit: cloneIntPtr(src.TPDLimit),
+	}
+}
+
+func cloneIntPtr(src *int) *int {
+	if src == nil {
+		return nil
+	}
+	dst := *src
+	return &dst
+}
+
 // UpdateDeploymentDailyLimit updates a single deployment's DailyLimitTokens
 // in the in-memory config under a write lock. Used by soft quota sync
 // (syncFreeQuota) to reflect upstream real balance without writing
