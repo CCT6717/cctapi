@@ -162,6 +162,22 @@ func TestComputeExpectedAutoResources_KeylessProvider(t *testing.T) {
 	}
 }
 
+func TestComputeExpectedAutoResources_KeyRequiredProviderWithoutKeysSkipped(t *testing.T) {
+	cfg := &Config{
+		FreeProviders: map[string]FreeProviderConfig{
+			"openrouter": {Enabled: true},
+		},
+	}
+
+	channels, deployments := computeExpectedAutoResources(cfg)
+	if len(channels) != 0 {
+		t.Fatalf("expected no channels for key-required provider without keys, got %v", channels)
+	}
+	if len(deployments) != 0 {
+		t.Fatalf("expected no deployments for key-required provider without keys, got %v", deployments)
+	}
+}
+
 func TestValidateFreeProviderName(t *testing.T) {
 	if err := ValidateFreeProviderName("openrouter"); err != nil {
 		t.Errorf("expected no error for openrouter, got: %v", err)
@@ -802,6 +818,32 @@ func TestBuiltinFreeProviderRegistry_OVH(t *testing.T) {
 	}
 	if meta.ContextLength != 262144 {
 		t.Errorf("expected ContextLength 262144, got %d", meta.ContextLength)
+	}
+}
+
+func TestBuiltinFreeProviderRegistry_FreeLLMAPICoreProvidersPresent(t *testing.T) {
+	want := []string{
+		"google", "nvidia", "cohere", "huggingface", "ollama",
+		"llm7", "opencode", "aihorde", "routeway", "bazaarlink",
+		"ainative", "agnes", "reka",
+	}
+	for _, name := range want {
+		if err := ValidateFreeProviderName(name); err != nil {
+			t.Errorf("expected FreeLLMAPI provider %q to be accepted: %v", name, err)
+		}
+	}
+}
+
+func TestKnownFreeProvidersMatchesBuiltinRegistry(t *testing.T) {
+	for name := range BuiltinFreeProviders {
+		if _, ok := knownFreeProviders[name]; !ok {
+			t.Errorf("knownFreeProviders missing builtin provider %q", name)
+		}
+	}
+	for name := range knownFreeProviders {
+		if _, ok := BuiltinFreeProviders[name]; !ok {
+			t.Errorf("knownFreeProviders has provider %q missing from BuiltinFreeProviders", name)
+		}
 	}
 }
 

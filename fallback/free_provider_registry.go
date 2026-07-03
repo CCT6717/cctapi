@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/songquanpeng/one-api/relay/adaptor/geminiv2"
+	"github.com/songquanpeng/one-api/relay/adaptor/groq"
 	"github.com/songquanpeng/one-api/relay/adaptor/mistral"
 	"github.com/songquanpeng/one-api/relay/adaptor/novita"
 	"github.com/songquanpeng/one-api/relay/adaptor/siliconflow"
@@ -15,7 +17,15 @@ import (
 	"github.com/songquanpeng/one-api/relay/channeltype"
 )
 
+const (
+	ModelFetchStatic         = "static"
+	ModelFetchOpenAIModels   = "openai_models"
+	ModelFetchOpenRouterFree = "openrouter_free"
+	ModelFetchKiloFree       = "kilo_free"
+)
+
 type FreeProviderMeta struct {
+	ProviderID     string
 	ChannelType    int
 	DefaultBaseURL string
 	DefaultModels  []string
@@ -28,49 +38,189 @@ type FreeProviderMeta struct {
 	SupportsStream bool
 	SupportsTools  bool
 	SupportsJSON   bool
+	RequiresKey    bool
+	Keyless        bool
+	ModelFetchMode string
 }
 
 var BuiltinFreeProviders = map[string]FreeProviderMeta{
 	"openrouter": {
+		ProviderID:     "openrouter",
 		ChannelType:    channeltype.OpenRouter,
 		DefaultBaseURL: "https://openrouter.ai/api",
 		DefaultModels:  []string{"openrouter/free"},
 		DefaultRPM:     20,
 		ContextLength:  128000,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenRouterFree,
 	},
 	"groq": {
+		ProviderID:     "groq",
 		ChannelType:    channeltype.Groq,
 		DefaultBaseURL: "https://api.groq.com/openai",
-		DefaultModels:  []string{"mixtral-8x7b-32768", "llama-3.3-70b-versatile", "llama-3.1-8b-instant"},
+		DefaultModels:  groq.ModelList,
 		DefaultRPM:     30,
 		DefaultTPM:     6000,
 		ContextLength:  32768,
 		SupportsStream: true,
 		SupportsTools:  true,
 		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
+	},
+	"google": {
+		ProviderID:     "google",
+		ChannelType:    channeltype.GeminiOpenAICompatible,
+		DefaultBaseURL: "https://generativelanguage.googleapis.com/v1beta/openai",
+		DefaultModels:  geminiv2.ModelList,
+		DefaultRPM:     15,
+		DefaultRPD:     1500,
+		ContextLength:  1048576,
+		SupportsVision: true,
+		SupportsStream: true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
+	},
+	"nvidia": {
+		ProviderID:     "nvidia",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://integrate.api.nvidia.com/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  128000,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
+	},
+	"mistral": {
+		ProviderID:     "mistral",
+		ChannelType:    channeltype.Mistral,
+		DefaultBaseURL: "https://api.mistral.ai",
+		DefaultModels:  mistral.ModelList,
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
+	},
+	"cohere": {
+		ProviderID:     "cohere",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.cohere.ai/compatibility/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     20,
+		ContextLength:  128000,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
+	},
+	"cloudflare": {
+		ProviderID:     "cloudflare",
+		ChannelType:    channeltype.Cloudflare,
+		DefaultBaseURL: "https://api.cloudflare.com",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  32768,
+		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
+	},
+	"zhipu": {
+		ProviderID:     "zhipu",
+		ChannelType:    channeltype.Zhipu,
+		DefaultBaseURL: "https://open.bigmodel.cn",
+		DefaultModels:  zhipu.ModelList,
+		DefaultRPM:     5,
+		ContextLength:  128000,
+		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
+	},
+	"huggingface": {
+		ProviderID:     "huggingface",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://router.huggingface.co/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  128000,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
+	},
+	"ollama": {
+		ProviderID:     "ollama",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://ollama.com/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     5,
+		ContextLength:  128000,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"kilo": {
+		ProviderID:     "kilo",
 		ChannelType:    channeltype.OpenAICompatible,
 		DefaultBaseURL: "https://api.kilo.ai/api/gateway/v1",
-		DefaultModels:  []string{}, // 由 fetchModels 动态拉取
+		DefaultModels:  []string{},
 		DefaultRPM:     10,
 		ContextLength:  256000,
 		SupportsStream: true,
+		Keyless:        true,
+		ModelFetchMode: ModelFetchKiloFree,
 	},
 	"pollinations": {
+		ProviderID:     "pollinations",
 		ChannelType:    channeltype.OpenAICompatible,
 		DefaultBaseURL: "https://text.pollinations.ai/openai/v1",
-		DefaultModels:  []string{"openai-fast"}, // /v1/models 坏了，用静态列表
-		DefaultRPM:     5,                       // keyless 匿名，限流严格
+		DefaultModels:  []string{"openai-fast"},
+		DefaultRPM:     5,
 		ContextLength:  131072,
 		SupportsStream: true,
+		Keyless:        true,
+		ModelFetchMode: ModelFetchStatic,
+	},
+	"llm7": {
+		ProviderID:     "llm7",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.llm7.io/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  128000,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
+	},
+	"opencode": {
+		ProviderID:     "opencode",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://opencode.ai/zen/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  128000,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"ovh": {
+		ProviderID:     "ovh",
 		ChannelType:    channeltype.OpenAICompatible,
 		DefaultBaseURL: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
 		DefaultModels: []string{
-			// 仅 chat 模型（/v1/models 还返回 embeddings/image/audio，需过滤）
 			"Llama-3.1-8B-Instruct",
 			"Meta-Llama-3_3-70B-Instruct",
 			"Mistral-7B-Instruct-v0.3",
@@ -87,115 +237,199 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 			"gpt-oss-120b",
 			"gpt-oss-20b",
 		},
-		DefaultRPM:     2, // keyless 匿名，2 req/min per IP per model
+		DefaultRPM:     2,
 		ContextLength:  262144,
 		SupportsStream: true,
+		Keyless:        true,
+		ModelFetchMode: ModelFetchStatic,
 	},
-	// ── Phase 2: 启用的供应商 ──
+	"agnes": {
+		ProviderID:     "agnes",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://apihub.agnes-ai.com/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  128000,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
+	},
+	"reka": {
+		ProviderID:     "reka",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.reka.ai/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  128000,
+		SupportsVision: true,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
+	},
 	"siliconflow": {
+		ProviderID:     "siliconflow",
 		ChannelType:    channeltype.SiliconFlow,
 		DefaultBaseURL: "https://api.siliconflow.cn",
 		DefaultModels:  siliconflow.ModelList,
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
 	},
-	"zhipu": {
-		ChannelType:    channeltype.Zhipu,
-		DefaultBaseURL: "https://open.bigmodel.cn",
-		DefaultModels:  zhipu.ModelList,
+	"routeway": {
+		ProviderID:     "routeway",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.routeway.ai/v1",
+		DefaultModels:  []string{},
 		DefaultRPM:     5,
+		DefaultRPD:     200,
 		ContextLength:  128000,
 		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
-	// ── Phase 2: 预置但禁用的供应商 ──
-	"mistral": {
-		ChannelType:    channeltype.Mistral,
-		DefaultBaseURL: "https://api.mistral.ai",
-		DefaultModels:  mistral.ModelList,
+	"bazaarlink": {
+		ProviderID:     "bazaarlink",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://bazaarlink.ai/api/v1",
+		DefaultModels:  []string{"auto:free"},
 		DefaultRPM:     10,
-		ContextLength:  32768,
+		ContextLength:  128000,
 		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
+	},
+	"ainative": {
+		ProviderID:     "ainative",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://api.ainative.studio/api/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     10,
+		ContextLength:  128000,
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
+	},
+	"aihorde": {
+		ProviderID:     "aihorde",
+		ChannelType:    channeltype.OpenAICompatible,
+		DefaultBaseURL: "https://oai.aihorde.net/v1",
+		DefaultModels:  []string{},
+		DefaultRPM:     2,
+		ContextLength:  8192,
+		SupportsStream: false,
+		Keyless:        true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"togetherai": {
+		ProviderID:     "togetherai",
 		ChannelType:    channeltype.TogetherAI,
 		DefaultBaseURL: "https://api.together.xyz",
 		DefaultModels:  togetherai.ModelList,
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
 	},
 	"novita": {
+		ProviderID:     "novita",
 		ChannelType:    channeltype.Novita,
 		DefaultBaseURL: "https://api.novita.ai/v3/openai",
 		DefaultModels:  novita.ModelList,
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
-	},
-	"cloudflare": {
-		ChannelType:    channeltype.Cloudflare,
-		DefaultBaseURL: "https://api.cloudflare.com",
-		DefaultModels:  []string{}, // 需特殊认证（account_id:token）
-		DefaultRPM:     10,
-		ContextLength:  32768,
-		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchStatic,
 	},
 	"cerebras": {
+		ProviderID:     "cerebras",
 		ChannelType:    channeltype.OpenAICompatible,
-		DefaultBaseURL: "https://api.cerebras.ai/v1", // ponytail: 占位，启用后需验证
+		DefaultBaseURL: "https://api.cerebras.ai/v1",
 		DefaultModels:  []string{},
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"sambanova": {
+		ProviderID:     "sambanova",
 		ChannelType:    channeltype.OpenAICompatible,
-		DefaultBaseURL: "https://api.sambanova.ai/v1", // ponytail: 占位
+		DefaultBaseURL: "https://api.sambanova.ai/v1",
 		DefaultModels:  []string{},
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"github": {
+		ProviderID:     "github",
 		ChannelType:    channeltype.OpenAICompatible,
-		DefaultBaseURL: "https://models.inference.ai.azure.com", // GitHub Models endpoint
+		DefaultBaseURL: "https://models.github.ai/inference",
 		DefaultModels:  []string{},
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"chutes": {
+		ProviderID:     "chutes",
 		ChannelType:    channeltype.OpenAICompatible,
-		DefaultBaseURL: "https://api.chutes.ai/v1", // ponytail: 占位
+		DefaultBaseURL: "https://api.chutes.ai/v1",
 		DefaultModels:  []string{},
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"fireworks": {
+		ProviderID:     "fireworks",
 		ChannelType:    channeltype.OpenAICompatible,
 		DefaultBaseURL: "https://api.fireworks.ai/inference/v1",
 		DefaultModels:  []string{},
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"nebius": {
+		ProviderID:     "nebius",
 		ChannelType:    channeltype.OpenAICompatible,
-		DefaultBaseURL: "https://api.studio.nebius.ai/v1", // ponytail: 占位
+		DefaultBaseURL: "https://api.studio.nebius.ai/v1",
 		DefaultModels:  []string{},
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 	"lambdalabs": {
+		ProviderID:     "lambdalabs",
 		ChannelType:    channeltype.OpenAICompatible,
-		DefaultBaseURL: "https://api.lambdalabs.com/v1", // ponytail: 占位
+		DefaultBaseURL: "https://api.lambdalabs.com/v1",
 		DefaultModels:  []string{},
 		DefaultRPM:     10,
 		ContextLength:  32768,
 		SupportsStream: true,
+		RequiresKey:    true,
+		ModelFetchMode: ModelFetchOpenAIModels,
 	},
 }
 
@@ -210,46 +444,29 @@ func deploymentID(provider string, keyHash string) string {
 }
 
 // SafeKeyHash returns a short 8-char hex hash of the API key for use in
-// auto-generated channel names and deployment IDs. Uses first 4 bytes of
-// SHA256 — enough to distinguish keys without exposing the full key.
+// auto-generated channel names and deployment IDs.
 func SafeKeyHash(key string) string {
 	h := sha256.Sum256([]byte(key))
 	return hex.EncodeToString(h[:4])
 }
 
-// knownFreeProviders lists providers that SyncFreePool can auto-manage.
-// Used to distinguish auto-generated IDs from user-created ones.
-var knownFreeProviders = map[string]struct{}{
-	"openrouter":   {},
-	"groq":         {},
-	"kilo":         {},
-	"pollinations": {},
-	"ovh":          {},
-	// Phase 2
-	"siliconflow": {},
-	"zhipu":       {},
-	"mistral":     {},
-	"togetherai":  {},
-	"novita":      {},
-	"cloudflare":  {},
-	"cerebras":    {},
-	"sambanova":   {},
-	"github":      {},
-	"chutes":      {},
-	"fireworks":   {},
-	"nebius":      {},
-	"lambdalabs":  {},
+var knownFreeProviders = initKnownFreeProviders()
+
+func initKnownFreeProviders() map[string]struct{} {
+	known := make(map[string]struct{}, len(BuiltinFreeProviders))
+	for name := range BuiltinFreeProviders {
+		known[name] = struct{}{}
+	}
+	return known
 }
 
 // isAutoDeploymentSuffix validates the suffix portion of an auto-generated
 // channel name or deployment ID. Accepts both the old integer index format
-// (e.g. "0", "1") and the new 8-char hex hash format (e.g. "a1b2c3d4").
+// and the new 8-char hex hash format.
 func isAutoDeploymentSuffix(suffix string) bool {
-	// Old format: integer index
 	if _, err := strconv.Atoi(suffix); err == nil {
 		return true
 	}
-	// New format: 8-char hex hash
 	if len(suffix) == 8 {
 		_, err := hex.DecodeString(suffix)
 		return err == nil
@@ -258,9 +475,8 @@ func isAutoDeploymentSuffix(suffix string) bool {
 }
 
 // IsAutoDeploymentID returns true if the deployment ID was auto-generated by SyncFreePool.
-// Strictly matches "free:{known_provider}-{suffix}" pattern where suffix is either
-// an integer index (old format) or an 8-char hex hash (new format).
-// User-created "free:*" IDs are excluded as they don't match known providers.
+// Strictly matches "free:{known_provider}-{suffix}" where suffix is an old index
+// or an 8-char key hash. User-created "free:*" IDs are excluded.
 func IsAutoDeploymentID(id string) bool {
 	for prov := range knownFreeProviders {
 		prefix := "free:" + prov + "-"
@@ -273,7 +489,6 @@ func IsAutoDeploymentID(id string) bool {
 }
 
 // IsAutoChannelName returns true if the channel name was auto-generated by SyncFreePool.
-// Strictly matches "[CCT Auto] {known_provider}-{suffix}" pattern.
 func IsAutoChannelName(name string) bool {
 	for prov := range knownFreeProviders {
 		prefix := autoChannelPrefix + prov + "-"
@@ -297,9 +512,8 @@ func ValidateFreeProviderName(name string) error {
 }
 
 // ApplyLimitsOverride applies limits_override fields on top of existing int values.
-// Each non-nil pointer in override replaces the corresponding value.
-// Zero means unlimited (valid). Negative values should be rejected by ValidateFreeProviderLimits
-// before reaching this function.
+// Each non-nil pointer in override replaces the corresponding value. Zero means
+// unlimited. Negative values should be rejected by ValidateFreeProviderLimits first.
 func ApplyLimitsOverride(rpm, rpd, tpm, tpd int, override *FreeProviderLimits) (int, int, int, int) {
 	if override == nil {
 		return rpm, rpd, tpm, tpd

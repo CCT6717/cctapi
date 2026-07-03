@@ -62,6 +62,10 @@ func SyncFreePool(cfg *Config) error {
 
 		// keyless 供应商:用空 key 创建单个 channel
 		if len(fp.Keys) == 0 {
+			if !meta.Keyless {
+				logger.SysWarn(fmt.Sprintf("[free_pool] provider %q requires at least one key, skipping", providerName))
+				continue
+			}
 			keyHash := SafeKeyHash("")
 			name := channelName(providerName, keyHash)
 			now := helper.GetTimestamp()
@@ -314,10 +318,14 @@ func computeExpectedAutoResources(cfg *Config) (expectedChannels map[string]bool
 		if !fp.Enabled {
 			continue
 		}
-		if _, ok := BuiltinFreeProviders[providerName]; !ok {
+		meta, ok := BuiltinFreeProviders[providerName]
+		if !ok {
 			continue
 		}
 		if len(fp.Keys) == 0 {
+			if !meta.Keyless {
+				continue
+			}
 			keyHash := SafeKeyHash("")
 			expectedChannels[channelName(providerName, keyHash)] = true
 			expectedDeployments[deploymentID(providerName, keyHash)] = true
