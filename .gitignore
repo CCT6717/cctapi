@@ -35,6 +35,13 @@ coverage.txt
 tmp/
 .git-rewrite/
 
+# Local MCP / secret configs and temporary debug files
+.mcp.json
+*.bak
+*.prev
+*.prev2
+tmp_*.txt
+
 # System files
 .DS_Store
 Thumbs.db
