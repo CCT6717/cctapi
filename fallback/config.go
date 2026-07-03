@@ -378,6 +378,29 @@ func UpdateDeploymentDailyLimit(deploymentID string, limit int64) {
 	}
 }
 
+// UpdateDeploymentRealModel updates one deployment's routing-visible real model
+// in the in-memory config. It returns true only when the deployment exists and
+// the model value changed.
+func UpdateDeploymentRealModel(deploymentID string, realModel string) bool {
+	realModel = strings.TrimSpace(realModel)
+	if realModel == "" {
+		return false
+	}
+
+	configLock.Lock()
+	defer configLock.Unlock()
+	if config == nil || config.Deployments == nil {
+		return false
+	}
+	dep, ok := config.Deployments[deploymentID]
+	if !ok || dep.RealModel == realModel {
+		return false
+	}
+	dep.RealModel = realModel
+	config.Deployments[deploymentID] = dep
+	return true
+}
+
 func IsEnabled() bool {
 	configLock.RLock()
 	defer configLock.RUnlock()

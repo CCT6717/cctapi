@@ -430,6 +430,10 @@ func syncAllProviderModels(cfg *Config) {
 			}
 			// keyless 供应商只有一个 channel,用空 key 的 hash
 			keyHash := SafeKeyHash("")
+			depID := deploymentID(providerName, keyHash)
+			if UpdateDeploymentRealModel(depID, models[0]) {
+				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
+			}
 			name := channelName(providerName, keyHash)
 			var ch model.Channel
 			if err := model.DB.Where("name = ?", name).First(&ch).Error; err != nil {
@@ -466,10 +470,11 @@ func syncAllProviderModels(cfg *Config) {
 				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models for %s (keeping static default)", providerName, depID))
 				continue
 			}
-			// ponytail: 不更新 cfg.Deployments[depID].RealModel — GetConfig() 返的是快照副本，
-			// 写了也丢。路由靠 DB channel.Models（下面更新），deployment.RealModel 由
-			// SyncFreePool/ReloadConfig 从静态 config 设置，这里是动态补充。
-			// 更新 channel Models 字段(照抄 SyncFreePool L255-263 更新模式)
+			if UpdateDeploymentRealModel(depID, models[0]) {
+				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
+			}
+			// Update channel.Models so the admin UI and channel abilities see the
+			// same dynamic model list that routing now sees via RealModel.
 			name := channelName(providerName, keyHash)
 			var ch model.Channel
 			if err := model.DB.Where("name = ?", name).First(&ch).Error; err != nil {
