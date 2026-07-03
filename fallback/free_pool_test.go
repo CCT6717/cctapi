@@ -142,6 +142,26 @@ func TestBuiltinFreeProviderRegistry_DisabledProviderNoDeployment(t *testing.T) 
 	}
 }
 
+func TestComputeExpectedAutoResources_KeylessProvider(t *testing.T) {
+	cfg := &Config{
+		FreeProviders: map[string]FreeProviderConfig{
+			"pollinations": {Enabled: true},
+		},
+	}
+
+	channels, deployments := computeExpectedAutoResources(cfg)
+	keyHash := SafeKeyHash("")
+	wantChannel := channelName("pollinations", keyHash)
+	wantDeployment := deploymentID("pollinations", keyHash)
+
+	if !channels[wantChannel] {
+		t.Fatalf("expected keyless channel %q in desired resources", wantChannel)
+	}
+	if !deployments[wantDeployment] {
+		t.Fatalf("expected keyless deployment %q in desired resources", wantDeployment)
+	}
+}
+
 func TestValidateFreeProviderName(t *testing.T) {
 	if err := ValidateFreeProviderName("openrouter"); err != nil {
 		t.Errorf("expected no error for openrouter, got: %v", err)

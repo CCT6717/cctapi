@@ -311,10 +311,16 @@ func computeExpectedAutoResources(cfg *Config) (expectedChannels map[string]bool
 	expectedDeployments = make(map[string]bool)
 
 	for providerName, fp := range cfg.FreeProviders {
-		if !fp.Enabled || len(fp.Keys) == 0 {
+		if !fp.Enabled {
 			continue
 		}
 		if _, ok := BuiltinFreeProviders[providerName]; !ok {
+			continue
+		}
+		if len(fp.Keys) == 0 {
+			keyHash := SafeKeyHash("")
+			expectedChannels[channelName(providerName, keyHash)] = true
+			expectedDeployments[deploymentID(providerName, keyHash)] = true
 			continue
 		}
 		for _, key := range fp.Keys {

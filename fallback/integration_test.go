@@ -2,6 +2,7 @@ package fallback
 
 import (
 	"testing"
+	"time"
 )
 
 // Integration-style tests covering the three-tier gateway core: capability
@@ -62,6 +63,28 @@ func TestIntegrationQuotaPreCheckBlocksTPD(t *testing.T) {
 	}
 	if !PassQuotaCheck(dep, state, 50) {
 		t.Fatalf("expected TPD pre-check to allow 50 tokens")
+	}
+}
+
+func TestIntegrationQuotaPreCheckResetsExpiredWindows(t *testing.T) {
+	resetRuntimeForTest()
+	dep := DeploymentConfig{ID: "groq", RPMLimit: 1, RPDLimit: 1, TPMLimit: 100, TPDLimit: 100}
+	state := GetRuntimeState("groq")
+	state.MinuteRequests = 1
+	state.DayRequests = 1
+	state.MinuteTokens = 100
+	state.DayTokens = 100
+	state.LastResetMinute = time.Now().Add(-2 * time.Minute).Truncate(time.Minute)
+	state.LastResetDay = truncateToDay(time.Now().AddDate(0, 0, -1))
+
+	if !PassQuotaCheck(dep, state, 50) {
+		t.Fatalf("expected expired quota windows to reset before pre-check")
+	}
+
+	snap := SnapshotRuntimeState("groq")
+	if snap.MinuteRequests != 0 || snap.DayRequests != 0 || snap.MinuteTokens != 0 || snap.DayTokens != 0 {
+		t.Fatalf("expected expired counters reset, got req %d/%d tokens %d/%d",
+			snap.MinuteRequests, snap.DayRequests, snap.MinuteTokens, snap.DayTokens)
 	}
 }
 
