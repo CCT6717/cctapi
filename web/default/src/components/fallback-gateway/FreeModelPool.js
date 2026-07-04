@@ -26,6 +26,21 @@ const STRATEGY_LABELS = {
 const PROVIDER_LABELS = {
   openrouter: 'OpenRouter',
   groq: 'Groq',
+  google: 'Google AI',
+  kilo: 'Kilo',
+  pollinations: 'Pollinations',
+  ovh: 'OVH Cloud',
+  nvidia: 'NVIDIA',
+  cohere: 'Cohere',
+  huggingface: 'Hugging Face',
+  llm7: 'LLM7',
+  opencode: 'OpenCode',
+  aihorde: 'AI Horde',
+  routeway: 'Routeway',
+  bazaarlink: 'Bazaarlink',
+  ainative: 'AINative',
+  agnes: 'Agnes',
+  reka: 'Reka',
 };
 
 const formatNumber = (value) => {
@@ -273,6 +288,7 @@ const FreeModelPool = () => {
         </div>
         <FreeProvidersEditor
           freeProviders={config.free_providers || {}}
+          freeProviderCatalog={config.free_provider_catalog || []}
           onChange={updateFreeProviders}
         />
       </section>
