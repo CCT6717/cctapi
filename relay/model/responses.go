@@ -124,6 +124,9 @@ func responseInputItemToMessage(item any) (Message, error) {
 			msg.Content = text
 			return msg, nil
 		}
+		if len(msg.ToolCalls) > 0 {
+			return msg, nil
+		}
 		return Message{}, UnsupportedResponsesInputError("responses input message content is required")
 	}
 	converted, err := responseContentToChatContent(content)

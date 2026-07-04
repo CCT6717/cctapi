@@ -144,6 +144,46 @@ func TestResponsesRequestToChatRequestPreservesMessageMetadata(t *testing.T) {
 	}
 }
 
+func TestResponsesRequestToChatRequestAllowsToolCallOnlyAssistantMessage(t *testing.T) {
+	var req ResponsesRequest
+	raw := []byte(`{
+		"model":"cct/free",
+		"input":[
+			{
+				"role":"assistant",
+				"tool_calls":[
+					{
+						"id":"call_1",
+						"type":"function",
+						"function":{"name":"lookup","arguments":"{\"q\":\"x\"}"}
+					}
+				]
+			}
+		]
+	}`)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	chat, err := req.ToChatRequest()
+	if err != nil {
+		t.Fatalf("ToChatRequest returned error: %v", err)
+	}
+	if len(chat.Messages) != 1 {
+		t.Fatalf("expected one message, got %#v", chat.Messages)
+	}
+	msg := chat.Messages[0]
+	if msg.Role != "assistant" {
+		t.Fatalf("expected assistant role, got %#v", msg.Role)
+	}
+	if msg.Content != nil {
+		t.Fatalf("expected empty content, got %#v", msg.Content)
+	}
+	if len(msg.ToolCalls) != 1 || msg.ToolCalls[0].Id != "call_1" {
+		t.Fatalf("expected preserved tool call, got %#v", msg.ToolCalls)
+	}
+}
+
 func TestChatCompletionToResponsesMapsAssistantTextAndUsage(t *testing.T) {
 	body := []byte(`{
 		"id":"chatcmpl-test",
