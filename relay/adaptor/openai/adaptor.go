@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/freeproviderquirks"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/alibailian"
 	"github.com/songquanpeng/one-api/relay/adaptor/baiduv2"
@@ -103,58 +104,16 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	return request, nil
 }
 
-type freeProviderRequestQuirks struct {
-	ForceParallelToolCalls *bool
-	DefaultUserAgent       string
-	DisableStream          bool
-	MaxOutputTokens        int
-	DropStop               bool
-}
-
-var forceParallelToolCallsFalseForRequest = false
-
-var freeProviderRequestQuirksByProvider = map[string]freeProviderRequestQuirks{
-	"nvidia": {
-		ForceParallelToolCalls: &forceParallelToolCallsFalseForRequest,
-	},
-	"routeway": {
-		DefaultUserAgent: "cctapi-free-pool/1.0",
-	},
-	"aihorde": {
-		DisableStream:   true,
-		MaxOutputTokens: 1024,
-		DropStop:        true,
-	},
-}
-
-func freeProviderQuirksFromContext(c *gin.Context) *freeProviderRequestQuirks {
+func freeProviderQuirksFromContext(c *gin.Context) *freeproviderquirks.Quirks {
 	if c == nil {
 		return nil
 	}
 	channelName := c.GetString(ctxkey.ChannelName)
-	providerName := freeProviderNameFromAutoChannelName(channelName)
-	if providerName == "" {
-		return nil
-	}
-	quirks, ok := freeProviderRequestQuirksByProvider[providerName]
+	_, quirks, ok := freeproviderquirks.FromAutoChannelName(channelName)
 	if !ok {
 		return nil
 	}
-	return &quirks
-}
-
-func freeProviderNameFromAutoChannelName(channelName string) string {
-	const prefix = "[CCT Auto] "
-	if !strings.HasPrefix(channelName, prefix) {
-		return ""
-	}
-	rest := strings.TrimPrefix(channelName, prefix)
-	for providerName := range freeProviderRequestQuirksByProvider {
-		if strings.HasPrefix(rest, providerName+"-") {
-			return providerName
-		}
-	}
-	return ""
+	return quirks
 }
 
 func ApplyFreeProviderRequestQuirks(c *gin.Context, request *model.GeneralOpenAIRequest) {

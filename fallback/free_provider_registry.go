@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/songquanpeng/one-api/common/freeproviderquirks"
 	"github.com/songquanpeng/one-api/relay/adaptor/geminiv2"
 	"github.com/songquanpeng/one-api/relay/adaptor/groq"
 	"github.com/songquanpeng/one-api/relay/adaptor/mistral"
@@ -44,15 +45,12 @@ type FreeProviderMeta struct {
 	Quirks         *FreeProviderQuirks
 }
 
-type FreeProviderQuirks struct {
-	ForceParallelToolCalls *bool  `json:"force_parallel_tool_calls,omitempty"`
-	DefaultUserAgent       string `json:"default_user_agent,omitempty"`
-	DisableStream          bool   `json:"disable_stream,omitempty"`
-	MaxOutputTokens        int    `json:"max_output_tokens,omitempty"`
-	DropStop               bool   `json:"drop_stop,omitempty"`
-}
+type FreeProviderQuirks = freeproviderquirks.Quirks
 
-var forceParallelToolCallsFalse = false
+func freeProviderQuirks(provider string) *FreeProviderQuirks {
+	quirks, _ := freeproviderquirks.ForProvider(provider)
+	return quirks
+}
 
 var BuiltinFreeProviders = map[string]FreeProviderMeta{
 	"openrouter": {
@@ -106,9 +104,7 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		SupportsJSON:   true,
 		RequiresKey:    true,
 		ModelFetchMode: ModelFetchOpenAIModels,
-		Quirks: &FreeProviderQuirks{
-			ForceParallelToolCalls: &forceParallelToolCallsFalse,
-		},
+		Quirks:         freeProviderQuirks("nvidia"),
 	},
 	"mistral": {
 		ProviderID:     "mistral",
@@ -308,9 +304,7 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		SupportsJSON:   true,
 		RequiresKey:    true,
 		ModelFetchMode: ModelFetchOpenAIModels,
-		Quirks: &FreeProviderQuirks{
-			DefaultUserAgent: "cctapi-free-pool/1.0",
-		},
+		Quirks:         freeProviderQuirks("routeway"),
 	},
 	"bazaarlink": {
 		ProviderID:     "bazaarlink",
@@ -348,11 +342,7 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		SupportsStream: true,
 		Keyless:        true,
 		ModelFetchMode: ModelFetchOpenAIModels,
-		Quirks: &FreeProviderQuirks{
-			DisableStream:   true,
-			MaxOutputTokens: 1024,
-			DropStop:        true,
-		},
+		Quirks:         freeProviderQuirks("aihorde"),
 	},
 	"togetherai": {
 		ProviderID:     "togetherai",
