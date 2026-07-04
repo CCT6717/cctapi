@@ -81,6 +81,49 @@ func TestBuiltinFreeProviderRegistry_AllHaveRealModel(t *testing.T) {
 	}
 }
 
+func TestBuildDesiredFreeProviderResourcesKeylessProvider(t *testing.T) {
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"pollinations": {Enabled: true},
+		},
+	}
+
+	resources, deployments := buildDesiredFreeProviderResources(cfg)
+
+	if len(resources) != 1 {
+		t.Fatalf("resources length = %d, want 1", len(resources))
+	}
+	if resources[0].provider != "pollinations" {
+		t.Fatalf("provider = %q, want pollinations", resources[0].provider)
+	}
+	if resources[0].ch.Key != "" {
+		t.Fatalf("keyless channel key = %q, want empty", resources[0].ch.Key)
+	}
+	depID := deploymentID("pollinations", SafeKeyHash(""))
+	if _, ok := deployments[depID]; !ok {
+		t.Fatalf("missing deployment %s", depID)
+	}
+}
+
+func TestBuildDesiredFreeProviderResourcesSkipsMissingKey(t *testing.T) {
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true},
+		},
+	}
+
+	resources, deployments := buildDesiredFreeProviderResources(cfg)
+
+	if len(resources) != 0 {
+		t.Fatalf("resources length = %d, want 0", len(resources))
+	}
+	if len(deployments) != 0 {
+		t.Fatalf("deployments length = %d, want 0", len(deployments))
+	}
+}
+
 // TestBuiltinFreeProviderRegistry_AllLimitsNonNegative verifies all limit
 // defaults are non-negative. Zero is valid (unlimited).
 func TestBuiltinFreeProviderRegistry_AllLimitsNonNegative(t *testing.T) {

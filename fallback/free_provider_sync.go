@@ -10,34 +10,19 @@ import (
 	"github.com/songquanpeng/one-api/model"
 )
 
-func SyncFreePool(cfg *Config) error {
-	if cfg == nil || !cfg.Enabled {
-		return nil
-	}
+type desiredFreeProviderResource struct {
+	name     string
+	ch       model.Channel
+	provider string
+	keyHash  string
+}
 
-	// 1. Scan existing auto channels
-	// Note: escape [ and ] in LIKE — SQL treats [] as character class wildcard
-	var existing []*model.Channel
-	if err := model.DB.Where("name LIKE ?", autoChannelPrefix+"%").Find(&existing).Error; err != nil {
-		return fmt.Errorf("failed to query auto channels: %w", err)
-	}
-	existingByName := map[string]*model.Channel{}
-	existingAutoChannelIDs := map[int]bool{}
-	for _, ch := range existing {
-		existingByName[ch.Name] = ch
-		existingAutoChannelIDs[ch.Id] = true
-	}
-
-	// 2. Compute desired channels and collect deployments
-	type desired struct {
-		name     string
-		ch       model.Channel
-		provider string
-		keyHash  string
-	}
-	var desiredChannels []desired
-	// Preserve existing non-auto deployments (collect them first)
+func buildDesiredFreeProviderResources(cfg *Config) ([]desiredFreeProviderResource, map[string]DeploymentConfig) {
+	desiredChannels := []desiredFreeProviderResource{}
 	autoDeployments := map[string]DeploymentConfig{}
+	if cfg == nil {
+		return desiredChannels, autoDeployments
+	}
 
 	for providerName, fp := range cfg.FreeProviders {
 		meta, ok := BuiltinFreeProviders[providerName]
@@ -56,54 +41,29 @@ func SyncFreePool(cfg *Config) error {
 			models = meta.DefaultModels
 		}
 		if len(models) == 0 {
-			// 需要动态拉取的供应商，用占位模型，后续 syncAllProviderModels 会更新
 			models = []string{providerName + "/free"}
 			logger.SysLog(fmt.Sprintf("[free_pool] provider %q has no models, using placeholder: %v", providerName, models))
 		}
 		realModel := models[0]
 
-		// keyless 供应商:用空 key 创建单个 channel
-		if len(fp.Keys) == 0 {
-			if !meta.Keyless {
-				logger.SysWarn(fmt.Sprintf("[free_pool] provider %q requires at least one key, skipping", providerName))
-				continue
-			}
-			keyHash := SafeKeyHash("")
+		addResource := func(key string) {
+			key = strings.TrimSpace(key)
+			keyHash := SafeKeyHash(key)
 			name := channelName(providerName, keyHash)
-			now := helper.GetTimestamp()
 			weight := uint(0)
 			baseURL := meta.DefaultBaseURL
 			ch := model.Channel{
-				Name:        name,
-				Type:        meta.ChannelType,
-				Key:         "",
-				BaseURL:     &baseURL,
-				Models:      strings.Join(models, ","),
-				Status:      model.ChannelStatusEnabled,
-				Weight:      &weight,
-				CreatedTime: now,
+				Name:    name,
+				Type:    meta.ChannelType,
+				Key:     key,
+				BaseURL: &baseURL,
+				Models:  strings.Join(models, ","),
+				Status:  model.ChannelStatusEnabled,
+				Weight:  &weight,
 			}
-			desiredChannels = append(desiredChannels, desired{name, ch, providerName, keyHash})
+			desiredChannels = append(desiredChannels, desiredFreeProviderResource{name: name, ch: ch, provider: providerName, keyHash: keyHash})
 
-			// Build deployment
-			rpm := fp.DefaultRPM
-			if rpm <= 0 {
-				rpm = meta.DefaultRPM
-			}
-			rpd := fp.DefaultRPD
-			if rpd <= 0 {
-				rpd = meta.DefaultRPD
-			}
-			tpm := fp.DefaultTPM
-			if tpm <= 0 {
-				tpm = meta.DefaultTPM
-			}
-			tpd := fp.DefaultTPD
-			if tpd <= 0 {
-				tpd = meta.DefaultTPD
-			}
-			rpm, rpd, tpm, tpd = ApplyLimitsOverride(rpm, rpd, tpm, tpd, fp.LimitsOverride)
-
+			rpm, rpd, tpm, tpd := ResolveFreeProviderLimits(meta, fp)
 			depID := deploymentID(providerName, keyHash)
 			autoDeployments[depID] = DeploymentConfig{
 				ID:                    depID,
@@ -129,79 +89,48 @@ func SyncFreePool(cfg *Config) error {
 				TPMLimit:              tpm,
 				TPDLimit:              tpd,
 			}
+		}
+
+		if len(fp.Keys) == 0 {
+			if !meta.Keyless {
+				logger.SysWarn(fmt.Sprintf("[free_pool] provider %q requires at least one key, skipping", providerName))
+				continue
+			}
+			addResource("")
 			continue
 		}
 
-		// 有 key 的供应商:遍历每个 key
 		for _, key := range fp.Keys {
 			if strings.TrimSpace(key) == "" {
 				continue
 			}
-			keyHash := SafeKeyHash(key)
-			name := channelName(providerName, keyHash)
-			now := helper.GetTimestamp()
-			weight := uint(0)
-			baseURL := meta.DefaultBaseURL
-			ch := model.Channel{
-				Name:        name,
-				Type:        meta.ChannelType,
-				Key:         strings.TrimSpace(key),
-				BaseURL:     &baseURL,
-				Models:      strings.Join(models, ","),
-				Status:      model.ChannelStatusEnabled,
-				Weight:      &weight,
-				CreatedTime: now,
-			}
-			desiredChannels = append(desiredChannels, desired{name, ch, providerName, keyHash})
-
-			// Build deployment
-			rpm := fp.DefaultRPM
-			if rpm <= 0 {
-				rpm = meta.DefaultRPM
-			}
-			rpd := fp.DefaultRPD
-			if rpd <= 0 {
-				rpd = meta.DefaultRPD
-			}
-			tpm := fp.DefaultTPM
-			if tpm <= 0 {
-				tpm = meta.DefaultTPM
-			}
-			tpd := fp.DefaultTPD
-			if tpd <= 0 {
-				tpd = meta.DefaultTPD
-			}
-
-			// Apply limits_override on top of merged defaults
-			rpm, rpd, tpm, tpd = ApplyLimitsOverride(rpm, rpd, tpm, tpd, fp.LimitsOverride)
-
-			depID := deploymentID(providerName, keyHash)
-			autoDeployments[depID] = DeploymentConfig{
-				ID:                    depID,
-				Enabled:               true,
-				ChannelID:             0, // filled after channel insert/update
-				RealModel:             realModel,
-				Pool:                  "free",
-				QualityTier:           "medium",
-				CostTier:              "free",
-				SupportsVision:        meta.SupportsVision,
-				SupportsStream:        meta.SupportsStream,
-				SupportsTools:         meta.SupportsTools,
-				SupportsJSON:          meta.SupportsJSON,
-				ContextLength:         meta.ContextLength,
-				Priority:              10,
-				Weight:                100,
-				MaxConcurrentRequests: 5,
-				QuotaMode:             "free",
-				SoftLimitRatio:        0.95,
-				HardLimitRatio:        1.0,
-				RPMLimit:              rpm,
-				RPDLimit:              rpd,
-				TPMLimit:              tpm,
-				TPDLimit:              tpd,
-			}
+			addResource(key)
 		}
 	}
+
+	return desiredChannels, autoDeployments
+}
+
+func SyncFreePool(cfg *Config) error {
+	if cfg == nil || !cfg.Enabled {
+		return nil
+	}
+
+	// 1. Scan existing auto channels
+	// Note: escape [ and ] in LIKE; SQL treats [] as character class wildcard.
+	var existing []*model.Channel
+	if err := model.DB.Where("name LIKE ?", autoChannelPrefix+"%").Find(&existing).Error; err != nil {
+		return fmt.Errorf("failed to query auto channels: %w", err)
+	}
+	existingByName := map[string]*model.Channel{}
+	existingAutoChannelIDs := map[int]bool{}
+	for _, ch := range existing {
+		existingByName[ch.Name] = ch
+		existingAutoChannelIDs[ch.Id] = true
+	}
+
+	// 2. Compute desired channels and collect deployments.
+	desiredChannels, autoDeployments := buildDesiredFreeProviderResources(cfg)
 
 	// 3. Reconcile channels
 	for _, d := range desiredChannels {
@@ -221,7 +150,7 @@ func SyncFreePool(cfg *Config) error {
 					continue
 				}
 				_ = existingCh.UpdateAbilities()
-				logger.SysWarn(fmt.Sprintf("[free_pool] auto channel %s (id=%d) key updated — config sync overwrote previous key", d.name, existingCh.Id))
+				logger.SysWarn(fmt.Sprintf("[free_pool] auto channel %s (id=%d) key updated - config sync overwrote previous key", d.name, existingCh.Id))
 			}
 			// Ensure enabled
 			if existingCh.Status != model.ChannelStatusEnabled {
@@ -235,6 +164,7 @@ func SyncFreePool(cfg *Config) error {
 			}
 		} else {
 			// Create new channel
+			d.ch.CreatedTime = helper.GetTimestamp()
 			if err := d.ch.Insert(); err != nil {
 				logger.SysError(fmt.Sprintf("[free_pool] failed to insert channel %s: %v", d.name, err))
 				continue
@@ -264,7 +194,7 @@ func SyncFreePool(cfg *Config) error {
 	}
 
 	// 5. Write auto deployments into cfg.Deployments (merge, don't wipe).
-	// Only write deployments whose ID matches IsAutoDeploymentID — user-created
+	// Only write deployments whose ID matches IsAutoDeploymentID; user-created
 	// deployments with a "free:*" prefix are preserved and never overwritten.
 	if cfg.Deployments == nil {
 		cfg.Deployments = map[string]DeploymentConfig{}
@@ -339,12 +269,8 @@ func shouldSyncDeploymentRealModel(deploymentID string, generatedRealModel strin
 }
 
 func providerNameForAutoDeploymentID(id string) string {
-	for providerName := range knownFreeProviders {
-		if strings.HasPrefix(id, "free:"+providerName+"-") {
-			return providerName
-		}
-	}
-	return ""
+	providerName, _ := FreeProviderNameFromDeploymentID(id)
+	return providerName
 }
 
 // StaleCleanupReport describes auto-generated resources that exist but no longer
@@ -369,31 +295,12 @@ func computeExpectedAutoResources(cfg *Config) (expectedChannels map[string]bool
 	expectedChannels = make(map[string]bool)
 	expectedDeployments = make(map[string]bool)
 
-	for providerName, fp := range cfg.FreeProviders {
-		if !fp.Enabled {
-			continue
-		}
-		meta, ok := BuiltinFreeProviders[providerName]
-		if !ok {
-			continue
-		}
-		if len(fp.Keys) == 0 {
-			if !meta.Keyless {
-				continue
-			}
-			keyHash := SafeKeyHash("")
-			expectedChannels[channelName(providerName, keyHash)] = true
-			expectedDeployments[deploymentID(providerName, keyHash)] = true
-			continue
-		}
-		for _, key := range fp.Keys {
-			if strings.TrimSpace(key) == "" {
-				continue
-			}
-			keyHash := SafeKeyHash(key)
-			expectedChannels[channelName(providerName, keyHash)] = true
-			expectedDeployments[deploymentID(providerName, keyHash)] = true
-		}
+	desiredChannels, deployments := buildDesiredFreeProviderResources(cfg)
+	for _, resource := range desiredChannels {
+		expectedChannels[resource.name] = true
+	}
+	for deploymentID := range deployments {
+		expectedDeployments[deploymentID] = true
 	}
 	return expectedChannels, expectedDeployments
 }
@@ -465,12 +372,9 @@ func DryRunCleanStale() (*StaleCleanupReport, error) {
 	return report, nil
 }
 
-// syncAllProviderModels 是通用的模型同步入口:遍历 cfg.FreeProviders 中
-// 所有 Enabled 条目,对每个供应商的每个 key 调 fetchModels,
-// 成功则更新对应 channel 的 Models 字段;
-// 失败 log warn 保静态默认,不动 channel。
-// 仅操作传入的 cfg(调用方负责锁),不在持有 configLock 时调 HTTP。
-// keyless 供应商（如 kilo）用空 key,fetchModels 会处理。
+// syncAllProviderModels refreshes dynamic model lists for enabled providers.
+// It only uses the passed config snapshot and applies live model updates via
+// the dedicated update helpers.
 func syncAllProviderModels(cfg *Config) {
 	if cfg == nil || cfg.FreeProviders == nil {
 		return
@@ -483,7 +387,7 @@ func syncAllProviderModels(cfg *Config) {
 			logger.SysLog(fmt.Sprintf("[free-pool] %s has configured models, skipping dynamic model sync", providerName))
 			continue
 		}
-		// keyless 供应商:用空 key 调一次 fetchModels
+		// keyless 渚涘簲鍟?鐢ㄧ┖ key 璋冧竴娆?fetchModels
 		if len(fp.Keys) == 0 {
 			models, err := fetchModels(providerName, "")
 			if err != nil {
@@ -494,7 +398,7 @@ func syncAllProviderModels(cfg *Config) {
 				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models (keeping static default)", providerName))
 				continue
 			}
-			// keyless 供应商只有一个 channel,用空 key 的 hash
+			// keyless 渚涘簲鍟嗗彧鏈変竴涓?channel,鐢ㄧ┖ key 鐨?hash
 			keyHash := SafeKeyHash("")
 			depID := deploymentID(providerName, keyHash)
 			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
@@ -508,7 +412,7 @@ func syncAllProviderModels(cfg *Config) {
 			}
 			newModels := strings.Join(models, ",")
 			if ch.Models == newModels {
-				continue // 无变化,跳过
+				continue // 鏃犲彉鍖?璺宠繃
 			}
 			if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
 				logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
@@ -519,7 +423,7 @@ func syncAllProviderModels(cfg *Config) {
 			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
 			continue
 		}
-		// 有 key 的供应商:遍历每个 key
+		// 鏈?key 鐨勪緵搴斿晢:閬嶅巻姣忎釜 key
 		for _, key := range fp.Keys {
 			key = strings.TrimSpace(key)
 			if key == "" {
@@ -549,7 +453,7 @@ func syncAllProviderModels(cfg *Config) {
 			}
 			newModels := strings.Join(models, ",")
 			if ch.Models == newModels {
-				continue // 无变化,跳过
+				continue // 鏃犲彉鍖?璺宠繃
 			}
 			if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
 				logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
