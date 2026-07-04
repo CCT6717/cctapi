@@ -30,6 +30,7 @@ data/backups/
 
 # Tool and dependency caches
 .claude/
+.superpowers/
 web/default/node_modules/
 coverage.txt
 tmp/
