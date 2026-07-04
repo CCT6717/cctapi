@@ -184,6 +184,47 @@ func TestResponsesRequestToChatRequestAllowsToolCallOnlyAssistantMessage(t *test
 	}
 }
 
+func TestResponsesRequestToChatRequestRejectsUserToolCallsWithoutContent(t *testing.T) {
+	var req ResponsesRequest
+	raw := []byte(`{
+		"model":"cct/free",
+		"input":[
+			{
+				"role":"user",
+				"tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{}"}}]
+			}
+		]
+	}`)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	_, err := req.ToChatRequest()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestResponsesRequestToChatRequestRejectsMissingRoleToolCallsWithoutContent(t *testing.T) {
+	var req ResponsesRequest
+	raw := []byte(`{
+		"model":"cct/free",
+		"input":[
+			{
+				"tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{}"}}]
+			}
+		]
+	}`)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	_, err := req.ToChatRequest()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestResponsesRequestToChatRequestRejectsEmptyInputWithInstructions(t *testing.T) {
 	req := ResponsesRequest{
 		Model:        "cct/free",
@@ -260,6 +301,27 @@ func TestChatCompletionToResponsesMapsAssistantTextAndUsage(t *testing.T) {
 	}
 	if resp.Usage == nil || resp.Usage.InputTokens != 3 || resp.Usage.OutputTokens != 4 || resp.Usage.TotalTokens != 7 {
 		t.Fatalf("unexpected usage: %#v", resp.Usage)
+	}
+}
+
+func TestChatCompletionToResponsesLeavesUsageNilWhenOmitted(t *testing.T) {
+	body := []byte(`{
+		"id":"chatcmpl-test",
+		"object":"chat.completion",
+		"created":1710000000,
+		"model":"llama-free",
+		"choices":[{"index":0,"message":{"role":"assistant","content":"pong"},"finish_reason":"stop"}]
+	}`)
+
+	resp, status, err := ChatCompletionToResponses(body, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionToResponses returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+	if resp.Usage != nil {
+		t.Fatalf("expected nil usage, got %#v", resp.Usage)
 	}
 }
 

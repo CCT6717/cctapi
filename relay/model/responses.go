@@ -118,6 +118,9 @@ func responseInputItemToMessage(item any) (Message, error) {
 		}
 		msg.ToolCalls = toolCalls
 	}
+	if len(msg.ToolCalls) > 0 && msg.Role != "assistant" {
+		return Message{}, UnsupportedResponsesInputError("responses tool_calls are only supported on assistant messages")
+	}
 	content, ok := obj["content"]
 	if !ok {
 		if text, ok := obj["text"].(string); ok {
@@ -243,7 +246,7 @@ func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObj
 		Choices []struct {
 			Message Message `json:"message"`
 		} `json:"choices"`
-		Usage Usage `json:"usage"`
+		Usage *Usage `json:"usage"`
 	}
 	if err := json.Unmarshal(body, &chat); err != nil {
 		return nil, 0, err
@@ -285,19 +288,22 @@ func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObj
 			})
 		}
 	}
-	return &ResponsesObject{
+	resp := &ResponsesObject{
 		ID:        id,
 		Object:    "response",
 		CreatedAt: created,
 		Status:    "completed",
 		Model:     modelName,
 		Output:    output,
-		Usage: &ResponsesUsage{
+	}
+	if chat.Usage != nil {
+		resp.Usage = &ResponsesUsage{
 			InputTokens:  chat.Usage.PromptTokens,
 			OutputTokens: chat.Usage.CompletionTokens,
 			TotalTokens:  chat.Usage.TotalTokens,
-		},
-	}, 200, nil
+		}
+	}
+	return resp, 200, nil
 }
 
 func responsesID() string {
