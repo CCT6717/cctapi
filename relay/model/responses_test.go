@@ -88,6 +88,22 @@ func TestResponsesRequestToChatRequestRejectsImageInput(t *testing.T) {
 	}
 }
 
+func TestResponsesRequestToChatRequestRejectsMissingInputWithRequiredFieldError(t *testing.T) {
+	req := ResponsesRequest{Model: "cct/free"}
+
+	_, err := req.ToChatRequest()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if err.Error() != "field input is required" {
+		t.Fatalf("expected field input is required, got %v", err)
+	}
+	var unsupported *ResponsesUnsupportedInputError
+	if errors.As(err, &unsupported) {
+		t.Fatalf("expected non-unsupported error, got %T %v", err, err)
+	}
+}
+
 func TestResponsesRequestToChatRequestPreservesMessageMetadata(t *testing.T) {
 	var req ResponsesRequest
 	raw := []byte(`{
@@ -270,6 +286,38 @@ func TestResponsesRequestToChatRequestRejectsEmptyContentArrayWithoutToolCalls(t
 	}
 }
 
+func TestResponsesRequestToChatRequestRejectsBlankTextInContentArrayWithoutToolCalls(t *testing.T) {
+	var req ResponsesRequest
+	raw := []byte(`{
+		"model":"cct/free",
+		"input":[{"role":"assistant","content":[{"type":"input_text","text":""}]}]
+	}`)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	_, err := req.ToChatRequest()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestResponsesRequestToChatRequestRejectsWhitespaceTextInContentArrayWithoutToolCalls(t *testing.T) {
+	var req ResponsesRequest
+	raw := []byte(`{
+		"model":"cct/free",
+		"input":[{"role":"assistant","content":[{"type":"input_text","text":"   "}]}]
+	}`)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	_, err := req.ToChatRequest()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestChatCompletionToResponsesMapsAssistantTextAndUsage(t *testing.T) {
 	body := []byte(`{
 		"id":"chatcmpl-test",
@@ -322,6 +370,24 @@ func TestChatCompletionToResponsesLeavesUsageNilWhenOmitted(t *testing.T) {
 	}
 	if resp.Usage != nil {
 		t.Fatalf("expected nil usage, got %#v", resp.Usage)
+	}
+}
+
+func TestChatCompletionToResponsesUsesTopLevelErrorStatusCode(t *testing.T) {
+	body := []byte(`{
+		"status_code":429,
+		"error":{"message":"rate limited","type":"rate_limit_error","code":"rate_limit"}
+	}`)
+
+	resp, status, err := ChatCompletionToResponses(body, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionToResponses returned error: %v", err)
+	}
+	if status != 429 {
+		t.Fatalf("expected status 429, got %d", status)
+	}
+	if resp == nil || resp.Error == nil || resp.Error.Message != "rate limited" {
+		t.Fatalf("unexpected error response: %#v", resp)
 	}
 }
 

@@ -69,6 +69,9 @@ func (r ResponsesRequest) ToChatRequest() (*GeneralOpenAIRequest, error) {
 }
 
 func responsesInputToMessages(input any) ([]Message, error) {
+	if input == nil {
+		return nil, fmt.Errorf("field input is required")
+	}
 	switch value := input.(type) {
 	case string:
 		if strings.TrimSpace(value) == "" {
@@ -146,8 +149,10 @@ func responseInputItemToMessage(item any) (Message, error) {
 		msg.Content = text
 		return msg, nil
 	}
-	if contentList, ok := converted.([]any); ok && len(contentList) == 0 && len(msg.ToolCalls) == 0 {
-		return Message{}, UnsupportedResponsesInputError("responses input message content is required")
+	if contentList, ok := converted.([]any); ok {
+		if !responseContentHasNonBlankText(contentList) && len(msg.ToolCalls) == 0 {
+			return Message{}, UnsupportedResponsesInputError("responses input message content is required")
+		}
 	}
 	msg.Content = converted
 	return msg, nil
@@ -221,9 +226,14 @@ type ResponsesErrorObject struct {
 
 func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObject, int, error) {
 	var errPayload struct {
-		Error Error `json:"error"`
+		StatusCode int   `json:"status_code"`
+		Error      Error `json:"error"`
 	}
 	if err := json.Unmarshal(body, &errPayload); err == nil && errPayload.Error.Message != "" {
+		status := errPayload.StatusCode
+		if status == 0 {
+			status = 500
+		}
 		return &ResponsesObject{
 			ID:        responsesID(),
 			Object:    "response",
@@ -235,7 +245,7 @@ func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObj
 				Type:    errPayload.Error.Type,
 				Code:    errPayload.Error.Code,
 			},
-		}, 500, nil
+		}, status, nil
 	}
 
 	var chat struct {
@@ -345,4 +355,21 @@ func responseToolCallArguments(value any) string {
 		}
 		return string(raw)
 	}
+}
+
+func responseContentHasNonBlankText(content []any) bool {
+	for _, rawPart := range content {
+		part, ok := rawPart.(map[string]any)
+		if !ok {
+			continue
+		}
+		partType, _ := part["type"].(string)
+		if partType != ContentTypeText && partType != "input_text" && partType != "output_text" {
+			continue
+		}
+		if text, _ := part["text"].(string); strings.TrimSpace(text) != "" {
+			return true
+		}
+	}
+	return false
 }
