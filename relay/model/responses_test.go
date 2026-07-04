@@ -567,6 +567,26 @@ func TestChatCompletionStreamToResponsesEventsMapsToolCallDelta(t *testing.T) {
 	}
 }
 
+func TestChatCompletionStreamToResponsesEventsEmitsFailedBeforeCreatedForErrorChunk(t *testing.T) {
+	raw := []byte("data: {\"error\":{\"message\":\"upstream failed\",\"type\":\"server_error\",\"code\":\"bad_gateway\"}}\n\n")
+
+	events, err := ChatCompletionStreamToResponsesEvents(raw, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionStreamToResponsesEvents returned error: %v", err)
+	}
+	if len(events) == 0 {
+		t.Fatal("expected failure event, got no events")
+	}
+	if events[0].Event != "response.failed" {
+		t.Fatalf("expected first event to be response.failed, got %#v", events[0])
+	}
+	for _, event := range events {
+		if event.Event == "response.created" {
+			t.Fatalf("did not expect response.created for pure error chunk: %#v", events)
+		}
+	}
+}
+
 func TestWriteResponsesSSEWritesEventAndDataLines(t *testing.T) {
 	var buf bytes.Buffer
 	events := []ResponsesSSEEvent{

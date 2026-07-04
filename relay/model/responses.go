@@ -391,23 +391,6 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 		if chunk.Model != "" {
 			modelName = chunk.Model
 		}
-		if !createdSent {
-			createdAt := chunk.Created
-			if createdAt == 0 {
-				createdAt = time.Now().Unix()
-			}
-			events = append(events, ResponsesSSEEvent{
-				Event: "response.created",
-				Data: map[string]any{
-					"id":         responseID,
-					"object":     "response",
-					"created_at": createdAt,
-					"status":     "in_progress",
-					"model":      modelName,
-				},
-			})
-			createdSent = true
-		}
 		if chunk.Error != nil && chunk.Error.Message != "" {
 			events = append(events, ResponsesSSEEvent{
 				Event: "response.failed",
@@ -423,6 +406,23 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 			failedSent = true
 			completedSent = true
 			continue
+		}
+		if !createdSent {
+			createdAt := chunk.Created
+			if createdAt == 0 {
+				createdAt = time.Now().Unix()
+			}
+			events = append(events, ResponsesSSEEvent{
+				Event: "response.created",
+				Data: map[string]any{
+					"id":         responseID,
+					"object":     "response",
+					"created_at": createdAt,
+					"status":     "in_progress",
+					"model":      modelName,
+			},
+			})
+			createdSent = true
 		}
 		for _, choice := range chunk.Choices {
 			if text := choice.Delta.StringContent(); text != "" {
@@ -463,7 +463,7 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 		}
 	}
 
-	if !createdSent {
+	if !createdSent && !failedSent {
 		events = append(events, ResponsesSSEEvent{
 			Event: "response.created",
 			Data: map[string]any{
