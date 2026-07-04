@@ -95,15 +95,34 @@ func responseInputItemToMessage(item any) (Message, error) {
 	if !ok {
 		return Message{}, UnsupportedResponsesInputError("responses input items must be objects")
 	}
+	msg := Message{}
 	role, _ := obj["role"].(string)
 	role = strings.TrimSpace(role)
 	if role == "" {
 		role = "user"
 	}
+	msg.Role = role
+	if name := responseStringPtr(obj["name"]); name != nil {
+		msg.Name = name
+	}
+	if reasoningContent, ok := obj["reasoning_content"]; ok {
+		msg.ReasoningContent = reasoningContent
+	}
+	if toolCallID, ok := obj["tool_call_id"].(string); ok {
+		msg.ToolCallId = toolCallID
+	}
+	if rawToolCalls, ok := obj["tool_calls"]; ok {
+		toolCalls, err := responseToolCalls(rawToolCalls)
+		if err != nil {
+			return Message{}, err
+		}
+		msg.ToolCalls = toolCalls
+	}
 	content, ok := obj["content"]
 	if !ok {
 		if text, ok := obj["text"].(string); ok {
-			return Message{Role: role, Content: text}, nil
+			msg.Content = text
+			return msg, nil
 		}
 		return Message{}, UnsupportedResponsesInputError("responses input message content is required")
 	}
@@ -111,7 +130,8 @@ func responseInputItemToMessage(item any) (Message, error) {
 	if err != nil {
 		return Message{}, err
 	}
-	return Message{Role: role, Content: converted}, nil
+	msg.Content = converted
+	return msg, nil
 }
 
 func responseContentToChatContent(content any) (any, error) {
@@ -154,10 +174,13 @@ type ResponsesObject struct {
 }
 
 type ResponsesOutputItem struct {
-	ID      string                   `json:"id"`
-	Type    string                   `json:"type"`
-	Role    string                   `json:"role,omitempty"`
-	Content []ResponsesOutputContent `json:"content,omitempty"`
+	ID        string                   `json:"id,omitempty"`
+	CallID    string                   `json:"call_id,omitempty"`
+	Type      string                   `json:"type"`
+	Role      string                   `json:"role,omitempty"`
+	Name      string                   `json:"name,omitempty"`
+	Arguments string                   `json:"arguments,omitempty"`
+	Content   []ResponsesOutputContent `json:"content,omitempty"`
 }
 
 type ResponsesOutputContent struct {
@@ -224,15 +247,27 @@ func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObj
 	output := make([]ResponsesOutputItem, 0, len(chat.Choices))
 	for index, choice := range chat.Choices {
 		text := choice.Message.StringContent()
-		output = append(output, ResponsesOutputItem{
-			ID:   fmt.Sprintf("msg_%d", index),
-			Type: "message",
-			Role: "assistant",
-			Content: []ResponsesOutputContent{{
-				Type: "output_text",
-				Text: text,
-			}},
-		})
+		if text != "" {
+			output = append(output, ResponsesOutputItem{
+				ID:   fmt.Sprintf("msg_%d", index),
+				Type: "message",
+				Role: "assistant",
+				Content: []ResponsesOutputContent{{
+					Type: "output_text",
+					Text: text,
+				}},
+			})
+		}
+		for _, toolCall := range choice.Message.ToolCalls {
+			callID := toolCall.Id
+			output = append(output, ResponsesOutputItem{
+				ID:        callID,
+				CallID:    callID,
+				Type:      "function_call",
+				Name:      toolCall.Function.Name,
+				Arguments: responseToolCallArguments(toolCall.Function.Arguments),
+			})
+		}
 	}
 	return &ResponsesObject{
 		ID:        id,
@@ -251,4 +286,41 @@ func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObj
 
 func responsesID() string {
 	return fmt.Sprintf("resp_%d", time.Now().UnixNano())
+}
+
+func responseStringPtr(value any) *string {
+	s, ok := value.(string)
+	if !ok {
+		return nil
+	}
+	return &s
+}
+
+func responseToolCalls(value any) ([]Tool, error) {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, UnsupportedResponsesInputError("responses tool_calls field is invalid")
+	}
+	var toolCalls []Tool
+	if err := json.Unmarshal(raw, &toolCalls); err != nil {
+		return nil, UnsupportedResponsesInputError("responses tool_calls field is invalid")
+	}
+	return toolCalls, nil
+}
+
+func responseToolCallArguments(value any) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case []byte:
+		return string(v)
+	case nil:
+		return ""
+	default:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return ""
+		}
+		return string(raw)
+	}
 }

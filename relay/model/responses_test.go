@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 )
 
@@ -87,6 +88,62 @@ func TestResponsesRequestToChatRequestRejectsImageInput(t *testing.T) {
 	}
 }
 
+func TestResponsesRequestToChatRequestPreservesMessageMetadata(t *testing.T) {
+	var req ResponsesRequest
+	raw := []byte(`{
+		"model":"cct/free",
+		"input":[
+			{
+				"role":"assistant",
+				"name":"helper",
+				"reasoning_content":"thinking",
+				"tool_call_id":"call_1",
+				"tool_calls":[
+					{
+						"id":"call_1",
+						"type":"function",
+						"function":{"name":"lookup","arguments":"{\"q\":\"x\"}"}
+					}
+				],
+				"content":[{"type":"output_text","text":"hi"}]
+			}
+		]
+	}`)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	chat, err := req.ToChatRequest()
+	if err != nil {
+		t.Fatalf("ToChatRequest returned error: %v", err)
+	}
+	if len(chat.Messages) != 1 {
+		t.Fatalf("expected one message, got %#v", chat.Messages)
+	}
+	msg := chat.Messages[0]
+	if msg.Name == nil || *msg.Name != "helper" {
+		t.Fatalf("expected name helper, got %#v", msg.Name)
+	}
+	if msg.ReasoningContent != "thinking" {
+		t.Fatalf("expected reasoning_content thinking, got %#v", msg.ReasoningContent)
+	}
+	if msg.ToolCallId != "call_1" {
+		t.Fatalf("expected tool_call_id call_1, got %#v", msg.ToolCallId)
+	}
+	if len(msg.ToolCalls) != 1 {
+		t.Fatalf("expected one tool call, got %#v", msg.ToolCalls)
+	}
+	if msg.ToolCalls[0].Id != "call_1" || msg.ToolCalls[0].Type != "function" {
+		t.Fatalf("unexpected tool call: %#v", msg.ToolCalls[0])
+	}
+	if msg.ToolCalls[0].Function.Name != "lookup" {
+		t.Fatalf("expected tool call name lookup, got %#v", msg.ToolCalls[0].Function.Name)
+	}
+	if !reflect.DeepEqual(msg.ToolCalls[0].Function.Arguments, `{"q":"x"}`) {
+		t.Fatalf("expected tool call arguments preserved, got %#v", msg.ToolCalls[0].Function.Arguments)
+	}
+}
+
 func TestChatCompletionToResponsesMapsAssistantTextAndUsage(t *testing.T) {
 	body := []byte(`{
 		"id":"chatcmpl-test",
@@ -118,5 +175,39 @@ func TestChatCompletionToResponsesMapsAssistantTextAndUsage(t *testing.T) {
 	}
 	if resp.Usage == nil || resp.Usage.InputTokens != 3 || resp.Usage.OutputTokens != 4 || resp.Usage.TotalTokens != 7 {
 		t.Fatalf("unexpected usage: %#v", resp.Usage)
+	}
+}
+
+func TestChatCompletionToResponsesPreservesAssistantToolCalls(t *testing.T) {
+	body := []byte(`{
+		"id":"chatcmpl-tool",
+		"object":"chat.completion",
+		"created":1710000000,
+		"model":"llama-free",
+		"choices":[{"index":0,"message":{"role":"assistant","content":"pong","tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{\"q\":\"x\"}"}}]},"finish_reason":"tool_calls"}],
+		"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}
+	}`)
+
+	resp, status, err := ChatCompletionToResponses(body, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionToResponses returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+	if len(resp.Output) != 2 {
+		t.Fatalf("expected text plus tool call outputs, got %#v", resp.Output)
+	}
+	if resp.Output[0].Type != "message" || resp.Output[0].Role != "assistant" {
+		t.Fatalf("unexpected assistant output: %#v", resp.Output[0])
+	}
+	if len(resp.Output[0].Content) != 1 || resp.Output[0].Content[0].Text != "pong" {
+		t.Fatalf("unexpected assistant text content: %#v", resp.Output[0].Content)
+	}
+	if resp.Output[1].Type != "function_call" || resp.Output[1].ID != "call_1" || resp.Output[1].CallID != "call_1" || resp.Output[1].Name != "lookup" {
+		t.Fatalf("unexpected function call output: %#v", resp.Output[1])
+	}
+	if resp.Output[1].Arguments != `{"q":"x"}` {
+		t.Fatalf("expected function call arguments preserved, got %#v", resp.Output[1].Arguments)
 	}
 }
