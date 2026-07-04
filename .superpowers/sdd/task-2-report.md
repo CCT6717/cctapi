@@ -119,3 +119,51 @@ Implemented a deferred capture helper plus a test seam for the relay call, added
 ### Concerns
 
 None.
+
+---
+
+## Reviewer Fix Follow-Up 2
+
+Status: DONE
+
+### Summary
+
+Addressed the remaining `/v1/responses` capture-writer header leak:
+
+- gave `responsesCaptureWriter` its own `http.Header` map and overrode `Header()` so relay-time header writes stay captured,
+- kept non-stream converted responses clean by leaving captured upstream/chat headers off the real writer,
+- preserved temporary stream passthrough behavior by copying captured headers onto the real writer before emitting the stream body, while forcing the final stream content type back to `text/event-stream`.
+
+### Files Changed
+
+- Modified: `controller/responses.go`
+- Modified: `controller/responses_test.go`
+
+### TDD Notes
+
+#### RED
+
+1. Tightened `TestResponsesCaptureWriterCapturesStatusHeadersAndBody` to assert captured headers do not touch the real recorder before conversion.
+2. Added `TestRelayResponsesNonStreamDoesNotLeakCapturedUpstreamHeaders`.
+3. Added `TestRelayResponsesStreamCopiesCapturedHeadersBeforePassthrough`.
+4. Ran focused controller tests and confirmed expected failures:
+   - capture-time header writes leaked to the real recorder,
+   - converted non-stream responses leaked captured upstream headers,
+   - stream passthrough kept the upstream content type instead of `text/event-stream`.
+
+#### GREEN
+
+Implemented isolated header capture plus stream header copy behavior, then reran the focused controller tests and the full controller package until green.
+
+### Tests Run
+
+1. `go test -p 1 ./controller -run 'TestResponsesCaptureWriterCapturesStatusHeadersAndBody|TestRelayResponsesNonStreamDoesNotLeakCapturedUpstreamHeaders|TestRelayResponsesStreamCopiesCapturedHeadersBeforePassthrough' -count=1`
+   - RED: failed as expected for header leakage and incorrect stream content type.
+   - GREEN: passed after the fix.
+
+2. `go test -p 1 ./controller -count=1`
+   - passed.
+
+### Concerns
+
+None.

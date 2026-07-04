@@ -33,6 +33,9 @@ func TestResponsesCaptureWriterCapturesStatusHeadersAndBody(t *testing.T) {
 	if capture.BodyString() != `{"ok":true}` {
 		t.Fatalf("unexpected captured body: %q", capture.BodyString())
 	}
+	if got := rec.Header().Get("X-Test"); got != "" {
+		t.Fatalf("capture writer must not mutate real headers before conversion, got %q", got)
+	}
 	if rec.Body.Len() != 0 {
 		t.Fatalf("capture writer must not write to real recorder before conversion")
 	}
@@ -231,5 +234,84 @@ func TestRelayResponsesSuccessfulNonStreamShim(t *testing.T) {
 	}
 	if resp.Usage.InputTokens != 3 || resp.Usage.OutputTokens != 4 || resp.Usage.TotalTokens != 7 {
 		t.Fatalf("unexpected shim usage: %#v", resp.Usage)
+	}
+}
+
+func TestRelayResponsesNonStreamDoesNotLeakCapturedUpstreamHeaders(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalRelay := relayResponsesRelay
+	relayResponsesRelay = func(c *gin.Context) {
+		c.Writer.Header().Set("Content-Type", "application/x-upstream-chat")
+		c.Writer.Header().Set("X-Upstream-Header", "chat")
+		c.Writer.WriteHeader(http.StatusOK)
+		if _, err := c.Writer.Write([]byte(`{
+			"id":"chatcmpl-test",
+			"object":"chat.completion",
+			"created":1710000000,
+			"model":"llama-free",
+			"choices":[{"index":0,"message":{"role":"assistant","content":"pong"},"finish_reason":"stop"}],
+			"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}
+		}`)); err != nil {
+			t.Fatalf("write captured relay response: %v", err)
+		}
+	}
+	defer func() {
+		relayResponsesRelay = originalRelay
+	}()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(`{"model":"cct/free","input":"ping"}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	RelayResponses(c)
+
+	if got := rec.Header().Get("X-Upstream-Header"); got != "" {
+		t.Fatalf("expected upstream header to stay captured, got %q", got)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "application/json; charset=utf-8" {
+		t.Fatalf("expected final JSON content type, got %q", got)
+	}
+}
+
+func TestRelayResponsesStreamCopiesCapturedHeadersBeforePassthrough(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalRelay := relayResponsesRelay
+	relayResponsesRelay = func(c *gin.Context) {
+		c.Writer.Header().Set("Content-Type", "application/x-upstream-stream")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("X-Upstream-Header", "stream")
+		c.Writer.WriteHeader(http.StatusAccepted)
+		if _, err := c.Writer.Write([]byte("data: hello\n\n")); err != nil {
+			t.Fatalf("write captured relay stream: %v", err)
+		}
+	}
+	defer func() {
+		relayResponsesRelay = originalRelay
+	}()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(`{"model":"cct/free","input":"ping","stream":true}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	RelayResponses(c)
+
+	if rec.Code != http.StatusAccepted {
+		t.Fatalf("expected status 202, got %d", rec.Code)
+	}
+	if got := rec.Header().Get("X-Upstream-Header"); got != "stream" {
+		t.Fatalf("expected passthrough header, got %q", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
+		t.Fatalf("expected cache-control passthrough, got %q", got)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/event-stream" {
+		t.Fatalf("expected stream content type, got %q", got)
+	}
+	if got := rec.Body.String(); got != "data: hello\n\n" {
+		t.Fatalf("expected raw stream body passthrough, got %q", got)
 	}
 }

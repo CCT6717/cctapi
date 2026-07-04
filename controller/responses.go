@@ -16,6 +16,7 @@ import (
 
 type responsesCaptureWriter struct {
 	gin.ResponseWriter
+	header     http.Header
 	body       bytes.Buffer
 	statusCode int
 	wroteCode  bool
@@ -26,8 +27,13 @@ var relayResponsesRelay = Relay
 func newResponsesCaptureWriter(real gin.ResponseWriter) *responsesCaptureWriter {
 	return &responsesCaptureWriter{
 		ResponseWriter: real,
+		header:         make(http.Header),
 		statusCode:     http.StatusOK,
 	}
+}
+
+func (w *responsesCaptureWriter) Header() http.Header {
+	return w.header
 }
 
 func (w *responsesCaptureWriter) WriteHeader(code int) {
@@ -125,6 +131,15 @@ func withResponsesCaptureWriter(c *gin.Context, fn func()) *responsesCaptureWrit
 	return capture
 }
 
+func copyCapturedHeaders(dst, src http.Header) {
+	for key, values := range src {
+		dst.Del(key)
+		for _, value := range values {
+			dst.Add(key, value)
+		}
+	}
+}
+
 func RelayResponses(c *gin.Context) {
 	var req relaymodel.ResponsesRequest
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
@@ -157,6 +172,7 @@ func RelayResponses(c *gin.Context) {
 	})
 
 	if chatReq.Stream {
+		copyCapturedHeaders(c.Writer.Header(), capture.Header())
 		writeResponsesStream(c, capture.BodyBytes(), capture.Status())
 		return
 	}
@@ -171,5 +187,6 @@ func RelayResponses(c *gin.Context) {
 }
 
 func writeResponsesStream(c *gin.Context, raw []byte, status int) {
+	c.Writer.Header().Set("Content-Type", "text/event-stream")
 	c.Data(status, "text/event-stream", raw)
 }
