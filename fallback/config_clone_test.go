@@ -74,6 +74,66 @@ func TestCloneConfigMutationIsolation(t *testing.T) {
 	}
 }
 
+func TestGetConfigReturnsDeepClone(t *testing.T) {
+	rpm := 10
+	resetConfigForTest(&Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/free": {
+				Enabled: true,
+				Strategy: StrategyFreeFirst,
+				Pools:   []string{"free"},
+			},
+		},
+		Deployments: map[string]DeploymentConfig{
+			"free:groq-001122ff": {
+				Enabled:        true,
+				ChannelID:      1,
+				RealModel:      "original",
+				Pool:           "free",
+				Weight:         100,
+				SoftLimitRatio: 0.95,
+				HardLimitRatio: 1.0,
+			},
+		},
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {
+				Enabled:        true,
+				Keys:           []string{"original-key"},
+				Models:         []string{"original-model"},
+				LimitsOverride: &FreeProviderLimits{RPMLimit: &rpm},
+			},
+		},
+	})
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	got := GetConfig()
+	got.VirtualModels["cct/free"] = VirtualModelConfig{Enabled: false}
+	got.Deployments["free:groq-001122ff"] = DeploymentConfig{RealModel: "mutated"}
+	fp := got.FreeProviders["groq"]
+	fp.Keys[0] = "mutated-key"
+	fp.Models[0] = "mutated-model"
+	*fp.LimitsOverride.RPMLimit = 99
+	got.FreeProviders["groq"] = fp
+
+	live := GetConfig()
+	if !live.VirtualModels["cct/free"].Enabled {
+		t.Fatalf("GetConfig leaked virtual model mutation")
+	}
+	if live.Deployments["free:groq-001122ff"].RealModel != "original" {
+		t.Fatalf("GetConfig leaked deployment mutation: %s", live.Deployments["free:groq-001122ff"].RealModel)
+	}
+	if live.FreeProviders["groq"].Keys[0] != "original-key" {
+		t.Fatalf("GetConfig leaked free provider key mutation: %v", live.FreeProviders["groq"].Keys)
+	}
+	if live.FreeProviders["groq"].Models[0] != "original-model" {
+		t.Fatalf("GetConfig leaked free provider model mutation: %v", live.FreeProviders["groq"].Models)
+	}
+	if *live.FreeProviders["groq"].LimitsOverride.RPMLimit != 10 {
+		t.Fatalf("GetConfig leaked limit mutation: %d", *live.FreeProviders["groq"].LimitsOverride.RPMLimit)
+	}
+}
+
 func TestCloneVirtualModelMutationIsolation(t *testing.T) {
 	resetConfigForTest(&Config{
 		Enabled: true,

@@ -260,7 +260,7 @@ func LoadConfig(path string) error {
 func GetConfig() *Config {
 	configLock.RLock()
 	defer configLock.RUnlock()
-	return config
+	return cloneConfig(config)
 }
 
 func CloneConfig() *Config {
@@ -685,6 +685,27 @@ func ValidateConfig() error {
 	configLock.RLock()
 	defer configLock.RUnlock()
 	return validateConfigData(config)
+}
+
+func SyncFreePoolRuntime() error {
+	configLock.RLock()
+	newCfg := cloneConfig(config)
+	configLock.RUnlock()
+	if newCfg == nil || !newCfg.Enabled {
+		return fmt.Errorf("fallback config is not enabled")
+	}
+
+	if err := SyncFreePool(newCfg); err != nil {
+		return err
+	}
+	if err := validateConfigData(newCfg); err != nil {
+		return err
+	}
+
+	configLock.Lock()
+	config = newCfg
+	configLock.Unlock()
+	return nil
 }
 
 func ReloadConfig(path string) error {
