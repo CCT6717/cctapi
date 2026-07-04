@@ -40,14 +40,14 @@ func (r ResponsesRequest) ToChatRequest() (*GeneralOpenAIRequest, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("field input is required")
+	}
 	if strings.TrimSpace(r.Instructions) != "" {
 		messages = append([]Message{{
 			Role:    "system",
 			Content: strings.TrimSpace(r.Instructions),
 		}}, messages...)
-	}
-	if len(messages) == 0 {
-		return nil, fmt.Errorf("field input is required")
 	}
 	req := &GeneralOpenAIRequest{
 		Model:            r.Model,
@@ -121,6 +121,9 @@ func responseInputItemToMessage(item any) (Message, error) {
 	content, ok := obj["content"]
 	if !ok {
 		if text, ok := obj["text"].(string); ok {
+			if strings.TrimSpace(text) == "" && len(msg.ToolCalls) == 0 {
+				return Message{}, UnsupportedResponsesInputError("responses input message content is required")
+			}
 			msg.Content = text
 			return msg, nil
 		}
@@ -132,6 +135,16 @@ func responseInputItemToMessage(item any) (Message, error) {
 	converted, err := responseContentToChatContent(content)
 	if err != nil {
 		return Message{}, err
+	}
+	if text, ok := converted.(string); ok {
+		if strings.TrimSpace(text) == "" && len(msg.ToolCalls) == 0 {
+			return Message{}, UnsupportedResponsesInputError("responses input message content is required")
+		}
+		msg.Content = text
+		return msg, nil
+	}
+	if contentList, ok := converted.([]any); ok && len(contentList) == 0 && len(msg.ToolCalls) == 0 {
+		return Message{}, UnsupportedResponsesInputError("responses input message content is required")
 	}
 	msg.Content = converted
 	return msg, nil

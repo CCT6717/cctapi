@@ -184,6 +184,51 @@ func TestResponsesRequestToChatRequestAllowsToolCallOnlyAssistantMessage(t *test
 	}
 }
 
+func TestResponsesRequestToChatRequestRejectsEmptyInputWithInstructions(t *testing.T) {
+	req := ResponsesRequest{
+		Model:        "cct/free",
+		Instructions: "x",
+		Input:        []any{},
+	}
+
+	chat, err := req.ToChatRequest()
+	if err == nil {
+		t.Fatalf("expected error, got chat %#v", chat)
+	}
+}
+
+func TestResponsesRequestToChatRequestRejectsBlankStringContentWithoutToolCalls(t *testing.T) {
+	var req ResponsesRequest
+	raw := []byte(`{
+		"model":"cct/free",
+		"input":[{"role":"assistant","content":""}]
+	}`)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	_, err := req.ToChatRequest()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
+func TestResponsesRequestToChatRequestRejectsEmptyContentArrayWithoutToolCalls(t *testing.T) {
+	var req ResponsesRequest
+	raw := []byte(`{
+		"model":"cct/free",
+		"input":[{"role":"assistant","content":[]}]
+	}`)
+	if err := json.Unmarshal(raw, &req); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	_, err := req.ToChatRequest()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+}
+
 func TestChatCompletionToResponsesMapsAssistantTextAndUsage(t *testing.T) {
 	body := []byte(`{
 		"id":"chatcmpl-test",
