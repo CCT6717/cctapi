@@ -33,41 +33,57 @@ const pickBoolean = (...values) => {
 
 const cloneArray = (value) => (Array.isArray(value) ? [...value] : []);
 
+const applyLimitOverride = (base, overrides, field) => {
+  if (!overrides || overrides[field] === undefined || overrides[field] === null || overrides[field] === '') {
+    return base;
+  }
+  const parsed = Number(overrides[field]);
+  return Number.isFinite(parsed) ? parsed : base;
+};
+
 export const buildFreeProviderRows = (freeProviders = {}, catalog = []) => {
   const providers = freeProviders && typeof freeProviders === 'object' ? freeProviders : {};
   const entries = Array.isArray(catalog) ? catalog : [];
   const rows = [];
   const seen = new Set();
 
-  const buildRow = (name, saved = {}, meta = {}, configured = false) => ({
-    ...meta,
-    ...saved,
-    name,
-    configured,
-    enabled: pickBoolean(saved.enabled, meta.enabled),
-    key_count: cloneArray(saved.keys).length > 0
-      ? cloneArray(saved.keys).length
-      : pickNumber(saved.key_count, meta.key_count),
-    models: cloneArray(saved.models).length > 0 ? cloneArray(saved.models) : cloneArray(meta.models),
-    default_models: cloneArray(saved.default_models).length > 0
-      ? cloneArray(saved.default_models)
-      : cloneArray(meta.default_models),
-    requires_key: pickBoolean(saved.requires_key, meta.requires_key),
-    keyless: pickBoolean(saved.keyless, meta.keyless),
-    supports_vision: pickBoolean(saved.supports_vision, meta.supports_vision),
-    supports_stream: pickBoolean(saved.supports_stream, meta.supports_stream),
-    supports_tools: pickBoolean(saved.supports_tools, meta.supports_tools),
-    supports_json: pickBoolean(saved.supports_json, meta.supports_json),
-    rpm_limit: pickNumber(meta.rpm_limit, saved.default_rpm),
-    rpd_limit: pickNumber(meta.rpd_limit, saved.default_rpd),
-    tpm_limit: pickNumber(meta.tpm_limit, saved.default_tpm),
-    tpd_limit: pickNumber(meta.tpd_limit, saved.default_tpd),
-    limits_override: { ...(saved.limits_override || {}) },
-    quirks: saved.quirks || meta.quirks || null,
-    model_fetch_mode: saved.model_fetch_mode || meta.model_fetch_mode || '',
-    provider_id: saved.provider_id || meta.provider_id || name,
-    default_base_url: saved.default_base_url || meta.default_base_url || '',
-  });
+  const buildRow = (name, saved = {}, meta = {}, configured = false) => {
+    const limitsOverride = { ...(saved.limits_override || {}) };
+    const rpmLimit = pickNumber(meta.rpm_limit, saved.default_rpm);
+    const rpdLimit = pickNumber(meta.rpd_limit, saved.default_rpd);
+    const tpmLimit = pickNumber(meta.tpm_limit, saved.default_tpm);
+    const tpdLimit = pickNumber(meta.tpd_limit, saved.default_tpd);
+
+    return {
+      ...meta,
+      ...saved,
+      name,
+      configured,
+      enabled: pickBoolean(saved.enabled, meta.enabled),
+      key_count: cloneArray(saved.keys).length > 0
+        ? cloneArray(saved.keys).length
+        : pickNumber(saved.key_count, meta.key_count),
+      models: cloneArray(saved.models).length > 0 ? cloneArray(saved.models) : cloneArray(meta.models),
+      default_models: cloneArray(saved.default_models).length > 0
+        ? cloneArray(saved.default_models)
+        : cloneArray(meta.default_models),
+      requires_key: pickBoolean(saved.requires_key, meta.requires_key),
+      keyless: pickBoolean(saved.keyless, meta.keyless),
+      supports_vision: pickBoolean(saved.supports_vision, meta.supports_vision),
+      supports_stream: pickBoolean(saved.supports_stream, meta.supports_stream),
+      supports_tools: pickBoolean(saved.supports_tools, meta.supports_tools),
+      supports_json: pickBoolean(saved.supports_json, meta.supports_json),
+      rpm_limit: applyLimitOverride(rpmLimit, limitsOverride, 'rpm_limit'),
+      rpd_limit: applyLimitOverride(rpdLimit, limitsOverride, 'rpd_limit'),
+      tpm_limit: applyLimitOverride(tpmLimit, limitsOverride, 'tpm_limit'),
+      tpd_limit: applyLimitOverride(tpdLimit, limitsOverride, 'tpd_limit'),
+      limits_override: limitsOverride,
+      quirks: saved.quirks || meta.quirks || null,
+      model_fetch_mode: saved.model_fetch_mode || meta.model_fetch_mode || '',
+      provider_id: saved.provider_id || meta.provider_id || name,
+      default_base_url: saved.default_base_url || meta.default_base_url || '',
+    };
+  };
 
   entries.forEach((entry) => {
     const name = normalizeProviderName(entry.name);

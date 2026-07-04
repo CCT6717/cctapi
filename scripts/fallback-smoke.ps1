@@ -248,7 +248,9 @@ if (-not [string]::IsNullOrWhiteSpace($ExpectedProvider)) {
 
 if ($FreeProviderCatalogOnly) {
   Show-FreeProviderCatalog -ProviderName $ExpectedProvider
-  Test-ExpectedFreeProviderRuntime -ProviderName $ExpectedProvider -DeploymentPrefix $ExpectedDeploymentPrefix
+  if (-not [string]::IsNullOrWhiteSpace($ExpectedDeploymentPrefix)) {
+    Test-ExpectedFreeProviderRuntime -ProviderName $ExpectedProvider -DeploymentPrefix $ExpectedDeploymentPrefix
+  }
   Write-Host ''
   Write-Host 'Free provider catalog inspection passed.'
   exit 0

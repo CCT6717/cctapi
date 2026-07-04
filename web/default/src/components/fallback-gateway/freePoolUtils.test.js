@@ -76,7 +76,7 @@ describe('freePoolUtils', () => {
     expect(groq.key_count).toBe(2);
     expect(groq.models).toEqual(['custom-groq-model']);
     expect(groq.limits_override.rpm_limit).toBe(10);
-    expect(groq.rpm_limit).toBe(30);
+    expect(groq.rpm_limit).toBe(10);
     expect(groq.quirks.default_user_agent).toBe('test-agent');
 
     const aihorde = rows.find((row) => row.name === 'aihorde');
@@ -101,5 +101,33 @@ describe('freePoolUtils', () => {
     );
 
     expect(rows[0].key_count).toBe(1);
+  });
+
+  it('applies staged limit overrides to effective limits', () => {
+    const rows = buildFreeProviderRows(
+      {
+        groq: {
+          enabled: true,
+          limits_override: {
+            rpm_limit: 5,
+            tpd_limit: 0,
+          },
+        },
+      },
+      [
+        {
+          name: 'groq',
+          rpm_limit: 30,
+          rpd_limit: 1000,
+          tpm_limit: 6000,
+          tpd_limit: 200000,
+        },
+      ],
+    );
+
+    expect(rows[0].rpm_limit).toBe(5);
+    expect(rows[0].rpd_limit).toBe(1000);
+    expect(rows[0].tpm_limit).toBe(6000);
+    expect(rows[0].tpd_limit).toBe(0);
   });
 });
