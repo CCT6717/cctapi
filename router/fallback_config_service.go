@@ -53,6 +53,10 @@ func backupFallbackEditorConfig(configPath string) (string, error) {
 		}
 		return "", fmt.Errorf("failed to read old fallback config for backup: %w", err)
 	}
+	data, err = sanitizeFallbackBackupData(data)
+	if err != nil {
+		return "", fmt.Errorf("failed to sanitize fallback config backup: %w", err)
+	}
 
 	ext := filepath.Ext(configPath)
 	base := strings.TrimSuffix(filepath.Base(configPath), ext)
@@ -76,4 +80,55 @@ func backupFallbackEditorConfig(configPath string) (string, error) {
 		return "", fmt.Errorf("failed to write fallback config backup: %w", err)
 	}
 	return backupPath, nil
+}
+
+func sanitizeFallbackBackupData(data []byte) ([]byte, error) {
+	var root map[string]interface{}
+	if err := json.Unmarshal(data, &root); err != nil {
+		return nil, err
+	}
+
+	rawProviders, ok := root["free_providers"].(map[string]interface{})
+	if !ok {
+		return data, nil
+	}
+
+	changed := false
+	for _, rawProvider := range rawProviders {
+		provider, ok := rawProvider.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		rawKeys, ok := provider["keys"].([]interface{})
+		if !ok || len(rawKeys) == 0 {
+			continue
+		}
+
+		keyHashes := make([]string, 0, len(rawKeys))
+		for _, rawKey := range rawKeys {
+			key, ok := rawKey.(string)
+			if !ok {
+				continue
+			}
+			key = strings.TrimSpace(key)
+			if key == "" {
+				continue
+			}
+			keyHashes = append(keyHashes, fallback.SafeKeyHash(key))
+		}
+
+		provider["keys"] = []interface{}{}
+		provider["key_hashes"] = keyHashes
+		changed = true
+	}
+
+	if !changed {
+		return data, nil
+	}
+
+	sanitized, err := json.MarshalIndent(root, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(sanitized, '\n'), nil
 }

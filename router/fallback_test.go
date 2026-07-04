@@ -65,6 +65,43 @@ func TestBackupFallbackEditorConfigMissingFile(t *testing.T) {
 	}
 }
 
+func TestBackupFallbackEditorConfigSanitizesFreeProviderKeys(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "fallback.json")
+	rawKey := "gsk_backup_secret_not_real_12345"
+	config := `{
+  "enabled": true,
+  "free_providers": {
+    "groq": {
+      "enabled": true,
+      "keys": ["` + rawKey + `"]
+    }
+  }
+}`
+	if err := os.WriteFile(configPath, []byte(config), 0644); err != nil {
+		t.Fatalf("failed to write source config: %v", err)
+	}
+
+	backupPath, err := backupFallbackEditorConfig(configPath)
+	if err != nil {
+		t.Fatalf("expected backup to succeed, got %v", err)
+	}
+
+	backupContent, err := os.ReadFile(backupPath)
+	if err != nil {
+		t.Fatalf("failed to read backup config: %v", err)
+	}
+	if strings.Contains(string(backupContent), rawKey) {
+		t.Fatalf("backup must not contain raw free provider key: %s", backupContent)
+	}
+	if !strings.Contains(string(backupContent), `"keys": []`) {
+		t.Fatalf("expected sanitized backup to remove stored keys, got %s", backupContent)
+	}
+	if !strings.Contains(string(backupContent), fallback.SafeKeyHash(rawKey)) {
+		t.Fatalf("expected sanitized backup to retain non-secret key hash, got %s", backupContent)
+	}
+}
+
 func TestSplitFallbackEditorChannelModels(t *testing.T) {
 	models := splitFallbackEditorChannelModels(" deepseek-v3,deepseek-reasoner,, deepseek-v3 , claude-3-5-sonnet ")
 
