@@ -3,6 +3,7 @@ package model
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"strings"
 	"time"
 )
@@ -224,6 +225,11 @@ type ResponsesErrorObject struct {
 	Code    any    `json:"code,omitempty"`
 }
 
+type ResponsesSSEEvent struct {
+	Event string         `json:"-"`
+	Data  map[string]any `json:"-"`
+}
+
 func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObject, int, error) {
 	var errPayload struct {
 		StatusCode int   `json:"status_code"`
@@ -315,6 +321,183 @@ func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObj
 		}
 	}
 	return resp, 200, nil
+}
+
+func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]ResponsesSSEEvent, error) {
+	var errPayload struct {
+		StatusCode int   `json:"status_code"`
+		Error      Error `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &errPayload); err == nil && errPayload.Error.Message != "" {
+		return []ResponsesSSEEvent{{
+			Event: "response.failed",
+			Data: map[string]any{
+				"error": map[string]any{
+					"message": errPayload.Error.Message,
+					"type":    errPayload.Error.Type,
+					"code":    errPayload.Error.Code,
+				},
+			},
+		}}, nil
+	}
+
+	lines := strings.Split(string(raw), "\n")
+	events := make([]ResponsesSSEEvent, 0)
+	responseID := responsesID()
+	modelName := fallbackModel
+	createdSent := false
+	completedSent := false
+	failedSent := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" {
+			continue
+		}
+		if payload == "[DONE]" {
+			if !completedSent && !failedSent {
+				events = append(events, ResponsesSSEEvent{
+					Event: "response.completed",
+					Data: map[string]any{
+						"id":     responseID,
+						"status": "completed",
+					},
+				})
+				completedSent = true
+			}
+			continue
+		}
+
+		var chunk struct {
+			ID      string `json:"id"`
+			Created int64  `json:"created"`
+			Model   string `json:"model"`
+			Choices []struct {
+				Delta        Message `json:"delta"`
+				FinishReason *string `json:"finish_reason,omitempty"`
+			} `json:"choices"`
+			Error *Error `json:"error,omitempty"`
+		}
+		if err := json.Unmarshal([]byte(payload), &chunk); err != nil {
+			return nil, err
+		}
+		if chunk.ID != "" {
+			responseID = chunk.ID
+		}
+		if chunk.Model != "" {
+			modelName = chunk.Model
+		}
+		if !createdSent {
+			createdAt := chunk.Created
+			if createdAt == 0 {
+				createdAt = time.Now().Unix()
+			}
+			events = append(events, ResponsesSSEEvent{
+				Event: "response.created",
+				Data: map[string]any{
+					"id":         responseID,
+					"object":     "response",
+					"created_at": createdAt,
+					"status":     "in_progress",
+					"model":      modelName,
+				},
+			})
+			createdSent = true
+		}
+		if chunk.Error != nil && chunk.Error.Message != "" {
+			events = append(events, ResponsesSSEEvent{
+				Event: "response.failed",
+				Data: map[string]any{
+					"id": responseID,
+					"error": map[string]any{
+						"message": chunk.Error.Message,
+						"type":    chunk.Error.Type,
+						"code":    chunk.Error.Code,
+					},
+				},
+			})
+			failedSent = true
+			completedSent = true
+			continue
+		}
+		for _, choice := range chunk.Choices {
+			if text := choice.Delta.StringContent(); text != "" {
+				events = append(events, ResponsesSSEEvent{
+					Event: "response.output_text.delta",
+					Data: map[string]any{
+						"response_id":   responseID,
+						"output_index":  0,
+						"content_index": 0,
+						"delta":         text,
+					},
+				})
+			}
+			for _, toolCall := range choice.Delta.ToolCalls {
+				if arg := responseToolCallArguments(toolCall.Function.Arguments); arg != "" {
+					events = append(events, ResponsesSSEEvent{
+						Event: "response.function_call_arguments.delta",
+						Data: map[string]any{
+							"response_id":  responseID,
+							"item_id":      toolCall.Id,
+							"output_index": 0,
+							"delta":        arg,
+						},
+					})
+				}
+			}
+			if choice.FinishReason != nil && *choice.FinishReason != "" && !completedSent && !failedSent {
+				events = append(events, ResponsesSSEEvent{
+					Event: "response.completed",
+					Data: map[string]any{
+						"id":            responseID,
+						"status":        "completed",
+						"finish_reason": *choice.FinishReason,
+					},
+				})
+				completedSent = true
+			}
+		}
+	}
+
+	if !createdSent {
+		events = append(events, ResponsesSSEEvent{
+			Event: "response.created",
+			Data: map[string]any{
+				"id":         responseID,
+				"object":     "response",
+				"created_at": time.Now().Unix(),
+				"status":     "in_progress",
+				"model":      modelName,
+			},
+		})
+	}
+	if !completedSent && !failedSent {
+		events = append(events, ResponsesSSEEvent{
+			Event: "response.completed",
+			Data: map[string]any{
+				"id":     responseID,
+				"status": "completed",
+			},
+		})
+	}
+	return events, nil
+}
+
+func WriteResponsesSSE(w io.Writer, events []ResponsesSSEEvent) error {
+	for _, event := range events {
+		payload, err := json.Marshal(event.Data)
+		if err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Event, payload); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func responsesID() string {

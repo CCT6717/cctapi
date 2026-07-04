@@ -1,9 +1,11 @@
 package model
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -515,5 +517,83 @@ func TestChatCompletionToResponsesPreservesAssistantToolCalls(t *testing.T) {
 	}
 	if resp.Output[1].Arguments != `{"q":"x"}` {
 		t.Fatalf("expected function call arguments preserved, got %#v", resp.Output[1].Arguments)
+	}
+}
+
+func TestChatCompletionStreamToResponsesEventsMapsTextDeltaAndCompletion(t *testing.T) {
+	raw := []byte("data: {\"id\":\"chatcmpl-1\",\"created\":1710000000,\"model\":\"llama-free\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"hel\"}}]}\n\n" +
+		"data: {\"id\":\"chatcmpl-1\",\"created\":1710000000,\"model\":\"llama-free\",\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\n\n" +
+		"data: [DONE]\n\n")
+
+	events, err := ChatCompletionStreamToResponsesEvents(raw, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionStreamToResponsesEvents returned error: %v", err)
+	}
+	if len(events) != 4 {
+		t.Fatalf("expected created, two deltas, completed; got %#v", events)
+	}
+	if events[0].Event != "response.created" {
+		t.Fatalf("expected response.created, got %#v", events[0])
+	}
+	if events[1].Event != "response.output_text.delta" || events[1].Data["delta"] != "hel" {
+		t.Fatalf("unexpected first delta: %#v", events[1])
+	}
+	if events[2].Event != "response.output_text.delta" || events[2].Data["delta"] != "lo" {
+		t.Fatalf("unexpected second delta: %#v", events[2])
+	}
+	if events[3].Event != "response.completed" {
+		t.Fatalf("expected response.completed, got %#v", events[3])
+	}
+}
+
+func TestChatCompletionStreamToResponsesEventsMapsToolCallDelta(t *testing.T) {
+	raw := []byte("data: {\"id\":\"chatcmpl-tool\",\"model\":\"llama-free\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"q\\\"\"}}]}}]}\n\n")
+
+	events, err := ChatCompletionStreamToResponsesEvents(raw, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionStreamToResponsesEvents returned error: %v", err)
+	}
+	found := false
+	for _, event := range events {
+		if event.Event == "response.function_call_arguments.delta" {
+			found = true
+			if event.Data["item_id"] != "call_1" || event.Data["delta"] != "{\"q\"" {
+				t.Fatalf("unexpected tool delta: %#v", event)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected function call argument delta in %#v", events)
+	}
+}
+
+func TestWriteResponsesSSEWritesEventAndDataLines(t *testing.T) {
+	var buf bytes.Buffer
+	events := []ResponsesSSEEvent{
+		{
+			Event: "response.created",
+			Data: map[string]any{
+				"id":     "chatcmpl-1",
+				"status": "in_progress",
+			},
+		},
+		{
+			Event: "response.completed",
+			Data: map[string]any{
+				"id":     "chatcmpl-1",
+				"status": "completed",
+			},
+		},
+	}
+
+	if err := WriteResponsesSSE(&buf, events); err != nil {
+		t.Fatalf("WriteResponsesSSE returned error: %v", err)
+	}
+	body := buf.String()
+	if !strings.Contains(body, "event: response.created\n") || !strings.Contains(body, "event: response.completed\n") {
+		t.Fatalf("expected event lines, got %q", body)
+	}
+	if !strings.Contains(body, "\"id\":\"chatcmpl-1\"") || !strings.Contains(body, "\"status\":\"completed\"") {
+		t.Fatalf("expected marshaled data lines, got %q", body)
 	}
 }

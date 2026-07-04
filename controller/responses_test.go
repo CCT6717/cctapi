@@ -275,16 +275,19 @@ func TestRelayResponsesNonStreamDoesNotLeakCapturedUpstreamHeaders(t *testing.T)
 	}
 }
 
-func TestRelayResponsesStreamCopiesCapturedHeadersBeforePassthrough(t *testing.T) {
+func TestRelayResponsesStreamConvertsSSEAndUsesFinalHeadersOnly(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
 	originalRelay := relayResponsesRelay
 	relayResponsesRelay = func(c *gin.Context) {
 		c.Writer.Header().Set("Content-Type", "application/x-upstream-stream")
 		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "close")
 		c.Writer.Header().Set("X-Upstream-Header", "stream")
 		c.Writer.WriteHeader(http.StatusAccepted)
-		if _, err := c.Writer.Write([]byte("data: hello\n\n")); err != nil {
+		if _, err := c.Writer.Write([]byte("data: {\"id\":\"chatcmpl-1\",\"created\":1710000000,\"model\":\"llama-free\",\"choices\":[{\"delta\":{\"role\":\"assistant\",\"content\":\"hel\"}}]}\n\n" +
+			"data: {\"id\":\"chatcmpl-1\",\"created\":1710000000,\"model\":\"llama-free\",\"choices\":[{\"delta\":{\"content\":\"lo\"},\"finish_reason\":\"stop\"}]}\n\n" +
+			"data: [DONE]\n\n")); err != nil {
 			t.Fatalf("write captured relay stream: %v", err)
 		}
 	}
@@ -302,16 +305,29 @@ func TestRelayResponsesStreamCopiesCapturedHeadersBeforePassthrough(t *testing.T
 	if rec.Code != http.StatusAccepted {
 		t.Fatalf("expected status 202, got %d", rec.Code)
 	}
-	if got := rec.Header().Get("X-Upstream-Header"); got != "stream" {
-		t.Fatalf("expected passthrough header, got %q", got)
+	if got := rec.Header().Get("X-Upstream-Header"); got != "" {
+		t.Fatalf("expected upstream header to stay captured, got %q", got)
 	}
 	if got := rec.Header().Get("Cache-Control"); got != "no-cache" {
-		t.Fatalf("expected cache-control passthrough, got %q", got)
+		t.Fatalf("expected final cache-control, got %q", got)
+	}
+	if got := rec.Header().Get("Connection"); got != "keep-alive" {
+		t.Fatalf("expected final keep-alive connection header, got %q", got)
 	}
 	if got := rec.Header().Get("Content-Type"); got != "text/event-stream" {
 		t.Fatalf("expected stream content type, got %q", got)
 	}
-	if got := rec.Body.String(); got != "data: hello\n\n" {
-		t.Fatalf("expected raw stream body passthrough, got %q", got)
+	body := rec.Body.String()
+	if strings.Contains(body, "data: [DONE]") {
+		t.Fatalf("expected converted responses SSE, got raw done marker %q", body)
+	}
+	if !strings.Contains(body, "event: response.created\n") {
+		t.Fatalf("expected response.created event, got %q", body)
+	}
+	if !strings.Contains(body, "event: response.output_text.delta\n") || !strings.Contains(body, "\"delta\":\"hel\"") || !strings.Contains(body, "\"delta\":\"lo\"") {
+		t.Fatalf("expected text delta events, got %q", body)
+	}
+	if !strings.Contains(body, "event: response.completed\n") {
+		t.Fatalf("expected response.completed event, got %q", body)
 	}
 }

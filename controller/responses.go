@@ -131,15 +131,6 @@ func withResponsesCaptureWriter(c *gin.Context, fn func()) *responsesCaptureWrit
 	return capture
 }
 
-func copyCapturedHeaders(dst, src http.Header) {
-	for key, values := range src {
-		dst.Del(key)
-		for _, value := range values {
-			dst.Add(key, value)
-		}
-	}
-}
-
 func RelayResponses(c *gin.Context) {
 	var req relaymodel.ResponsesRequest
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
@@ -172,8 +163,7 @@ func RelayResponses(c *gin.Context) {
 	})
 
 	if chatReq.Stream {
-		copyCapturedHeaders(c.Writer.Header(), capture.Header())
-		writeResponsesStream(c, capture.BodyBytes(), capture.Status())
+		writeResponsesStream(c, capture.BodyBytes(), chatReq.Model, capture.Status())
 		return
 	}
 
@@ -186,7 +176,17 @@ func RelayResponses(c *gin.Context) {
 	c.JSON(responsesConversionStatus(capture.Status(), convertedStatus), resp)
 }
 
-func writeResponsesStream(c *gin.Context, raw []byte, status int) {
+func writeResponsesStream(c *gin.Context, raw []byte, modelName string, status int) {
+	events, err := relaymodel.ChatCompletionStreamToResponsesEvents(raw, modelName)
+	if err != nil {
+		claudeutil.WriteClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_error", err.Error())
+		return
+	}
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	c.Data(status, "text/event-stream", raw)
+	c.Writer.Header().Set("Cache-Control", "no-cache")
+	c.Writer.Header().Set("Connection", "keep-alive")
+	c.Status(status)
+	if err := relaymodel.WriteResponsesSSE(c.Writer, events); err != nil {
+		c.Error(err)
+	}
 }
