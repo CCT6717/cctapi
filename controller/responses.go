@@ -21,6 +21,8 @@ type responsesCaptureWriter struct {
 	wroteCode  bool
 }
 
+var relayResponsesRelay = Relay
+
 func newResponsesCaptureWriter(real gin.ResponseWriter) *responsesCaptureWriter {
 	return &responsesCaptureWriter{
 		ResponseWriter: real,
@@ -112,6 +114,17 @@ func responsesConversionStatus(capturedStatus, convertedStatus int) int {
 	return capturedStatus
 }
 
+func withResponsesCaptureWriter(c *gin.Context, fn func()) *responsesCaptureWriter {
+	realWriter := c.Writer
+	capture := newResponsesCaptureWriter(realWriter)
+	c.Writer = capture
+	defer func() {
+		c.Writer = realWriter
+	}()
+	fn()
+	return capture
+}
+
 func RelayResponses(c *gin.Context) {
 	var req relaymodel.ResponsesRequest
 	if err := common.UnmarshalBodyReusable(c, &req); err != nil {
@@ -139,11 +152,9 @@ func RelayResponses(c *gin.Context) {
 	restore := rewriteResponsesContextForChatRelay(c, chatBody, chatReq.Model)
 	defer restore()
 
-	realWriter := c.Writer
-	capture := newResponsesCaptureWriter(realWriter)
-	c.Writer = capture
-	Relay(c)
-	c.Writer = realWriter
+	capture := withResponsesCaptureWriter(c, func() {
+		relayResponsesRelay(c)
+	})
 
 	if chatReq.Stream {
 		writeResponsesStream(c, capture.BodyBytes(), capture.Status())
