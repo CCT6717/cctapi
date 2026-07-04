@@ -108,6 +108,11 @@ func freeProviderQuirksFromContext(c *gin.Context) *freeproviderquirks.Quirks {
 	if c == nil {
 		return nil
 	}
+	if provider := strings.TrimSpace(c.GetString(ctxkey.FallbackFreeProviderName)); provider != "" {
+		if quirks, ok := freeproviderquirks.ForProvider(provider); ok {
+			return quirks
+		}
+	}
 	channelName := c.GetString(ctxkey.ChannelName)
 	_, quirks, ok := freeproviderquirks.FromAutoChannelName(channelName)
 	if !ok {

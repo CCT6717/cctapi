@@ -405,6 +405,19 @@ func TestIsAutoDeploymentID_HashFormat(t *testing.T) {
 	}
 }
 
+func TestFreeProviderNameFromDeploymentID(t *testing.T) {
+	provider, ok := FreeProviderNameFromDeploymentID("free:groq-001122ff")
+	if !ok || provider != "groq" {
+		t.Fatalf("FreeProviderNameFromDeploymentID = %q, %v; want groq, true", provider, ok)
+	}
+	if _, ok := FreeProviderNameFromDeploymentID("free:unknown-001122ff"); ok {
+		t.Fatalf("unknown provider should not be accepted")
+	}
+	if _, ok := FreeProviderNameFromDeploymentID("manual-free"); ok {
+		t.Fatalf("manual deployment should not be accepted")
+	}
+}
+
 func TestIsAutoChannelName_OldIndex(t *testing.T) {
 	// Old format: integer index
 	if !IsAutoChannelName("[CCT Auto] openrouter-0") {

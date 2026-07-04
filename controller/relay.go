@@ -325,6 +325,12 @@ func relayWithFallback(c *gin.Context) {
 		c.Set(ctxkey.FallbackVirtualModel, virtualModel)
 		c.Set(ctxkey.FallbackDeploymentID, dep.ID)
 		c.Set(ctxkey.FallbackRealModel, dep.RealModel)
+		freeProviderName, hasFreeProviderName := fallback.FreeProviderNameFromDeploymentID(dep.ID)
+		if hasFreeProviderName {
+			c.Set(ctxkey.FallbackFreeProviderName, freeProviderName)
+		} else {
+			c.Set(ctxkey.FallbackFreeProviderName, "")
+		}
 		c.Set(ctxkey.FallbackChannelID, dep.ChannelID)
 		c.Set(ctxkey.FallbackDeploymentIndex, i)
 		c.Set(ctxkey.FallbackAttemptCount, attempts)
@@ -338,6 +344,9 @@ func relayWithFallback(c *gin.Context) {
 		newCtx := context.WithValue(ctx, ctxkey.FallbackVirtualModel, virtualModel)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackDeploymentID, dep.ID)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackRealModel, dep.RealModel)
+		if hasFreeProviderName {
+			newCtx = context.WithValue(newCtx, ctxkey.FallbackFreeProviderName, freeProviderName)
+		}
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackChannelID, dep.ChannelID)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackDeploymentIndex, i)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackAttemptCount, attempts)

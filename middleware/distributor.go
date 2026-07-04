@@ -67,6 +67,11 @@ func Distribute() func(c *gin.Context) {
 				c.Set(ctxkey.FallbackVirtualModel, requestModel)
 				c.Set(ctxkey.FallbackDeploymentID, dep.ID)
 				c.Set(ctxkey.FallbackRealModel, dep.RealModel)
+				if providerName, ok := fallback.FreeProviderNameFromDeploymentID(dep.ID); ok {
+					c.Set(ctxkey.FallbackFreeProviderName, providerName)
+				} else {
+					c.Set(ctxkey.FallbackFreeProviderName, "")
+				}
 				c.Set(ctxkey.FallbackChannelID, dep.ChannelID)
 
 				// Log for debugging

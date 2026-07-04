@@ -151,3 +151,31 @@ func TestApplyFreeProviderRequestQuirksDisablesAIHordeUnsupportedFields(t *testi
 		t.Fatalf("expected aihorde quirk to drop stop, got %#v", request.Stop)
 	}
 }
+
+func TestApplyFreeProviderRequestQuirksUsesExplicitProviderContext(t *testing.T) {
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Set(ctxkey.ChannelName, "manual-channel-name")
+	c.Set(ctxkey.FallbackFreeProviderName, "aihorde")
+	maxTokens := 4096
+	req := &model.GeneralOpenAIRequest{
+		Stream:              true,
+		MaxTokens:           4096,
+		MaxCompletionTokens: &maxTokens,
+		Stop:                []string{"stop"},
+	}
+
+	ApplyFreeProviderRequestQuirks(c, req)
+
+	if req.Stream {
+		t.Fatalf("stream should be disabled for aihorde")
+	}
+	if req.MaxTokens != 1024 {
+		t.Fatalf("MaxTokens = %d, want 1024", req.MaxTokens)
+	}
+	if req.MaxCompletionTokens == nil || *req.MaxCompletionTokens != 1024 {
+		t.Fatalf("MaxCompletionTokens = %v, want 1024", req.MaxCompletionTokens)
+	}
+	if req.Stop != nil {
+		t.Fatalf("Stop = %#v, want nil", req.Stop)
+	}
+}

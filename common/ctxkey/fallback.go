@@ -13,6 +13,9 @@ const (
 	// FallbackRealModel is the real model name that will be sent to upstream
 	FallbackRealModel = "fallback_real_model"
 
+	// FallbackFreeProviderName is the builtin free provider selected at runtime
+	FallbackFreeProviderName = "fallback_free_provider_name"
+
 	// FallbackChannelID is the channel ID that will be used
 	FallbackChannelID = "fallback_channel_id"
 
