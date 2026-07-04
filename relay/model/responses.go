@@ -273,21 +273,21 @@ func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObj
 	if modelName == "" {
 		modelName = fallbackModel
 	}
-	output := make([]ResponsesOutputItem, 0, len(chat.Choices))
-	for index, choice := range chat.Choices {
-		text := choice.Message.StringContent()
-		if text != "" {
-			output = append(output, ResponsesOutputItem{
-				ID:   fmt.Sprintf("msg_%d", index),
-				Type: "message",
-				Role: "assistant",
-				Content: []ResponsesOutputContent{{
-					Type: "output_text",
-					Text: text,
-				}},
-			})
+	output := make([]ResponsesOutputItem, 0, 1)
+	assistantMessage := ResponsesOutputItem{
+		ID:   fmt.Sprintf("msg_%d", 0),
+		Type: "message",
+		Role: "assistant",
+	}
+	if len(chat.Choices) > 0 {
+		firstChoice := chat.Choices[0]
+		if text := firstChoice.Message.StringContent(); text != "" {
+			assistantMessage.Content = []ResponsesOutputContent{{
+				Type: "output_text",
+				Text: text,
+			}}
 		}
-		for _, toolCall := range choice.Message.ToolCalls {
+		for _, toolCall := range firstChoice.Message.ToolCalls {
 			callID := toolCall.Id
 			output = append(output, ResponsesOutputItem{
 				ID:        callID,
@@ -298,6 +298,7 @@ func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObj
 			})
 		}
 	}
+	output = append([]ResponsesOutputItem{assistantMessage}, output...)
 	resp := &ResponsesObject{
 		ID:        id,
 		Object:    "response",

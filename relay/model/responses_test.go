@@ -391,6 +391,99 @@ func TestChatCompletionToResponsesUsesTopLevelErrorStatusCode(t *testing.T) {
 	}
 }
 
+func TestChatCompletionToResponsesUsesOnlyFirstChoiceForAssistantMessage(t *testing.T) {
+	body := []byte(`{
+		"id":"chatcmpl-multi",
+		"object":"chat.completion",
+		"created":1710000000,
+		"model":"llama-free",
+		"choices":[
+			{"index":0,"message":{"role":"assistant","content":"first"},"finish_reason":"stop"},
+			{"index":1,"message":{"role":"assistant","content":"second"},"finish_reason":"stop"}
+		],
+		"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}
+	}`)
+
+	resp, status, err := ChatCompletionToResponses(body, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionToResponses returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+	if len(resp.Output) != 1 {
+		t.Fatalf("expected exactly one output item, got %#v", resp.Output)
+	}
+	if resp.Output[0].Type != "message" || resp.Output[0].Role != "assistant" {
+		t.Fatalf("unexpected assistant message output: %#v", resp.Output[0])
+	}
+	if len(resp.Output[0].Content) != 1 || resp.Output[0].Content[0].Text != "first" {
+		t.Fatalf("expected first choice text, got %#v", resp.Output[0].Content)
+	}
+}
+
+func TestChatCompletionToResponsesEmitsAssistantMessageForEmptyChoices(t *testing.T) {
+	body := []byte(`{
+		"id":"chatcmpl-empty",
+		"object":"chat.completion",
+		"created":1710000000,
+		"model":"llama-free",
+		"choices":[],
+		"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}
+	}`)
+
+	resp, status, err := ChatCompletionToResponses(body, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionToResponses returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+	if len(resp.Output) != 1 {
+		t.Fatalf("expected exactly one assistant output item, got %#v", resp.Output)
+	}
+	if resp.Output[0].Type != "message" || resp.Output[0].Role != "assistant" {
+		t.Fatalf("unexpected assistant output: %#v", resp.Output[0])
+	}
+	if len(resp.Output[0].Content) != 0 {
+		t.Fatalf("expected empty assistant content, got %#v", resp.Output[0].Content)
+	}
+}
+
+func TestChatCompletionToResponsesUsesFirstChoiceToolCallsOnly(t *testing.T) {
+	body := []byte(`{
+		"id":"chatcmpl-tools",
+		"object":"chat.completion",
+		"created":1710000000,
+		"model":"llama-free",
+		"choices":[
+			{"index":0,"message":{"role":"assistant","content":"pong","tool_calls":[{"id":"call_1","type":"function","function":{"name":"lookup","arguments":"{\"q\":\"x\"}"}}]},"finish_reason":"tool_calls"},
+			{"index":1,"message":{"role":"assistant","content":"ignored"},"finish_reason":"stop"}
+		],
+		"usage":{"prompt_tokens":3,"completion_tokens":4,"total_tokens":7}
+	}`)
+
+	resp, status, err := ChatCompletionToResponses(body, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionToResponses returned error: %v", err)
+	}
+	if status != 200 {
+		t.Fatalf("expected status 200, got %d", status)
+	}
+	if len(resp.Output) != 2 {
+		t.Fatalf("expected one assistant message and one function call, got %#v", resp.Output)
+	}
+	if resp.Output[0].Type != "message" || resp.Output[0].Role != "assistant" {
+		t.Fatalf("unexpected assistant output: %#v", resp.Output[0])
+	}
+	if len(resp.Output[0].Content) != 1 || resp.Output[0].Content[0].Text != "pong" {
+		t.Fatalf("expected first choice text, got %#v", resp.Output[0].Content)
+	}
+	if resp.Output[1].Type != "function_call" || resp.Output[1].ID != "call_1" || resp.Output[1].CallID != "call_1" || resp.Output[1].Name != "lookup" {
+		t.Fatalf("unexpected function call output: %#v", resp.Output[1])
+	}
+}
+
 func TestChatCompletionToResponsesPreservesAssistantToolCalls(t *testing.T) {
 	body := []byte(`{
 		"id":"chatcmpl-tool",
