@@ -126,6 +126,36 @@
       "limits_override": {
         "rpm_limit": 2
       }
+    },
+    "nvidia": {
+      "enabled": false,
+      "keys": ["nvapi_replace_me"],
+      "models": []
+    },
+    "cohere": {
+      "enabled": false,
+      "keys": ["cohere_replace_me"],
+      "models": []
+    },
+    "huggingface": {
+      "enabled": false,
+      "keys": ["hf_replace_me"],
+      "models": []
+    },
+    "llm7": {
+      "enabled": false,
+      "keys": ["llm7_replace_me"],
+      "models": []
+    },
+    "routeway": {
+      "enabled": false,
+      "keys": ["routeway_replace_me"],
+      "models": []
+    },
+    "aihorde": {
+      "enabled": false,
+      "keys": [],
+      "models": []
     }
   },
   "alert": {
