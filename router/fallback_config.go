@@ -424,6 +424,10 @@ func buildFallbackConfigFromEditor(payload fallbackEditorConfig, virtualModels [
 		Alert:         alertConfig,
 		SmartSort:     smartSortConfig,
 	}
+	if current != nil {
+		cfg.FreeProviders = current.FreeProviders
+		cfg.BlockedErrorCodes = append([]string{}, current.BlockedErrorCodes...)
+	}
 	if !cfg.Enabled && current != nil {
 		cfg.Enabled = current.Enabled
 	}

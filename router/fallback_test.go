@@ -150,6 +150,58 @@ func TestBuildFallbackConfigFromEditorPreservesStrategyAndPools(t *testing.T) {
 	}
 }
 
+func TestBuildFallbackConfigFromEditorPreservesUnmanagedFreeProviders(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "fallback.json")
+	if err := os.WriteFile(configPath, []byte(`{
+  "enabled": true,
+  "virtual_models": {},
+  "deployments": {},
+  "free_providers": {
+    "groq": {
+      "enabled": true,
+      "keys": ["stored-secret-key"],
+      "models": ["llama-3.1-8b-instant"],
+      "limits_override": {"rpm_limit": 11}
+    }
+  },
+  "blocked_error_codes": ["insufficient_quota"],
+  "alert": {"check_interval_sec": 300},
+  "smart_sort": {"enabled": false, "weights": {"base_priority_penalty": 10}}
+}`), 0644); err != nil {
+		t.Fatalf("failed to write fallback config: %v", err)
+	}
+	if err := fallback.LoadConfig(configPath); err != nil {
+		t.Fatalf("failed to load fallback config: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = fallback.LoadConfig(filepath.Join(t.TempDir(), "missing.json"))
+	})
+
+	payload := fallbackEditorConfig{Enabled: true}
+	virtualModels := []fallbackEditorVirtualModel{
+		{Name: "cct/free", Enabled: true, Strategy: "free_first", Pools: []string{"free"}},
+	}
+	deployments := []fallbackEditorDeployment{
+		{ID: "groq-free", Enabled: true, ChannelID: 1, RealModel: "llama-3.1-8b-instant", Pool: "free", CostTier: "free"},
+	}
+
+	cfg := buildFallbackConfigFromEditor(payload, virtualModels, deployments)
+
+	groq, ok := cfg.FreeProviders["groq"]
+	if !ok {
+		t.Fatalf("expected existing groq free provider to be preserved")
+	}
+	if len(groq.Keys) != 1 || groq.Keys[0] != "stored-secret-key" {
+		t.Fatalf("expected stored free provider key to be preserved, got %v", groq.Keys)
+	}
+	if groq.LimitsOverride == nil || groq.LimitsOverride.RPMLimit == nil || *groq.LimitsOverride.RPMLimit != 11 {
+		t.Fatalf("expected stored limits override to be preserved, got %#v", groq.LimitsOverride)
+	}
+	if len(cfg.BlockedErrorCodes) != 1 || cfg.BlockedErrorCodes[0] != "insufficient_quota" {
+		t.Fatalf("expected blocked error codes to be preserved, got %v", cfg.BlockedErrorCodes)
+	}
+}
+
 func TestNormalizeFallbackEditorPayloadRejectsInvalidPoolConfig(t *testing.T) {
 	basePayload := func() fallbackEditorConfig {
 		return fallbackEditorConfig{
