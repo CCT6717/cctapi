@@ -25,7 +25,11 @@ jest.mock('./gatewayConfigApi', () => ({
 jest.mock('semantic-ui-react', () => {
   const React = require('react');
   const passthrough = (tag) => ({ children }) => React.createElement(tag, null, children);
-  const Button = passthrough('button');
+  const Button = ({ children, disabled, onClick }) => (
+    <button type='button' disabled={disabled} onClick={onClick}>
+      {children}
+    </button>
+  );
   const Header = passthrough('h2');
   Header.Subheader = passthrough('div');
   const Form = passthrough('form');
@@ -53,8 +57,13 @@ jest.mock('semantic-ui-react', () => {
     Form,
     Header,
     Icon: () => null,
-    Input: ({ value = '', onChange }) => (
-      <input value={value} onChange={(event) => onChange?.(event, { value: event.target.value })} />
+    Input: ({ 'aria-label': ariaLabel, placeholder, value = '', onChange }) => (
+      <input
+        aria-label={ariaLabel}
+        placeholder={placeholder}
+        value={value}
+        onChange={(event) => onChange?.(event, { value: event.target.value })}
+      />
     ),
     Label: passthrough('span'),
     Loader: () => <div>Loading</div>,
@@ -155,5 +164,70 @@ describe('FreeModelPool', () => {
     expect(container.textContent).toContain('0/4 complete');
     expect(container.textContent).toContain('Enable cct/free virtual model.');
     expect(container.textContent).toContain('Sync the free pool to generate deployments.');
+  });
+
+  test('filters provider rows and stages bulk disable for selected visible providers', async () => {
+    getGatewayConfig.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          free_providers: {
+            groq: { enabled: true, key_count: 2 },
+            openrouter: { enabled: true, key_count: 1 },
+          },
+          free_provider_catalog: [
+            { name: 'groq', requires_key: true, supports_tools: true },
+            { name: 'openrouter', requires_key: true, supports_json: true },
+          ],
+          virtual_models: {
+            'cct/free': {
+              enabled: true,
+              pools: ['free'],
+              strategy: 'free_first',
+            },
+          },
+          deployments: {},
+        },
+      },
+    });
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: true, data: [] },
+    });
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    await act(async () => {
+      const searchInput = container.querySelector('input[aria-label="Search free providers"]');
+      expect(searchInput).not.toBeNull();
+      const setValue = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        'value',
+      ).set;
+      setValue.call(searchInput, 'groq');
+      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+
+    expect(container.textContent).toContain('Groq');
+    expect(container.textContent).not.toContain('openrouterconfigured');
+
+    await act(async () => {
+      const selectVisibleButton = Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent.includes('Select visible'))
+      expect(selectVisibleButton).toBeDefined();
+      selectVisibleButton.click();
+    });
+
+    await act(async () => {
+      const disableSelectedButton = Array.from(container.querySelectorAll('button'))
+        .find((button) => button.textContent.includes('Disable selected'))
+      expect(disableSelectedButton).toBeDefined();
+      disableSelectedButton.click();
+    });
+
+    expect(container.textContent).toContain('Staged 1 provider');
+    expect(container.textContent).toContain('disabled');
+    expect(container.textContent).not.toContain('openrouterconfigured');
   });
 });

@@ -58,6 +58,8 @@ const FreeProviderRow = ({
   onUpdateKeys,
   onClearKeys,
   usageRows = [],
+  selected = false,
+  onSelectProvider,
 }) => {
   const key = provider.name;
   const display = PROVIDER_DISPLAY[key] || { title: key, color: 'grey', icon: 'key' };
@@ -68,6 +70,15 @@ const FreeProviderRow = ({
 
   return (
     <Table.Row key={key} warning={invalidLimits}>
+      {onSelectProvider && (
+        <Table.Cell collapsing>
+          <Checkbox
+            checked={selected}
+            aria-label={`Select ${display.title}`}
+            onChange={(_, { checked }) => onSelectProvider(key, checked)}
+          />
+        </Table.Cell>
+      )}
       <Table.Cell collapsing>
         <Checkbox
           toggle

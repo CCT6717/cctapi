@@ -1,3 +1,5 @@
+import { PROVIDER_DISPLAY } from './freeProviderDisplay';
+
 export const AUTO_FREE_DEPLOYMENT_RE = /^free:([a-z0-9][a-z0-9_-]*)-(\d+|[a-f0-9]{8})$/i;
 
 export const isAutoFreeDeploymentId = (id) =>
@@ -104,6 +106,108 @@ export const buildFreeProviderRows = (freeProviders = {}, catalog = []) => {
     });
 
   return rows;
+};
+
+export const isFreeProviderReady = (provider = {}) =>
+  provider.enabled === true
+  && (provider.keyless === true || Number(provider.key_count || 0) > 0);
+
+export const freeProviderNeedsKey = (provider = {}) =>
+  provider.requires_key === true
+  && provider.keyless !== true
+  && Number(provider.key_count || 0) <= 0;
+
+const capabilityFilterField = (capability) => ({
+  keyless: 'keyless',
+  stream: 'supports_stream',
+  tools: 'supports_tools',
+  json: 'supports_json',
+  vision: 'supports_vision',
+})[capability] || '';
+
+const providerSearchHaystack = (provider = {}) => {
+  const capabilityTerms = [
+    provider.keyless ? 'keyless' : '',
+    provider.requires_key ? 'key required needs key' : '',
+    provider.supports_stream ? 'stream' : '',
+    provider.supports_tools ? 'tools tool calling' : '',
+    provider.supports_json ? 'json' : '',
+    provider.supports_vision ? 'vision image' : '',
+    provider.configured ? 'configured' : 'catalog',
+  ];
+  return [
+    provider.name,
+    PROVIDER_DISPLAY[provider.name]?.title,
+    provider.provider_id,
+    provider.default_base_url,
+    provider.model_fetch_mode,
+    ...(Array.isArray(provider.models) ? provider.models : []),
+    ...(Array.isArray(provider.default_models) ? provider.default_models : []),
+    ...capabilityTerms,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+};
+
+export const matchesFreeProviderFilters = (provider = {}, filters = {}) => {
+  const searchText = String(filters.searchText || '').trim().toLowerCase();
+  if (searchText && !providerSearchHaystack(provider).includes(searchText)) {
+    return false;
+  }
+
+  switch (filters.statusFilter || 'all') {
+    case 'enabled':
+      if (provider.enabled !== true) return false;
+      break;
+    case 'disabled':
+      if (provider.enabled === true) return false;
+      break;
+    case 'ready':
+      if (!isFreeProviderReady(provider)) return false;
+      break;
+    case 'needs_key':
+      if (!freeProviderNeedsKey(provider)) return false;
+      break;
+    case 'configured':
+      if (provider.configured !== true) return false;
+      break;
+    case 'catalog':
+      if (provider.configured === true) return false;
+      break;
+    default:
+      break;
+  }
+
+  const capabilityField = capabilityFilterField(filters.capabilityFilter);
+  if (capabilityField && provider[capabilityField] !== true) {
+    return false;
+  }
+
+  return true;
+};
+
+export const filterFreeProviderRows = (rows = [], filters = {}) =>
+  (Array.isArray(rows) ? rows : []).filter((provider) =>
+    matchesFreeProviderFilters(provider, filters)
+  );
+
+export const buildBulkEnabledProviderConfig = (
+  freeProviders = {},
+  providers = [],
+  enabled = true,
+) => {
+  const current = freeProviders && typeof freeProviders === 'object' ? freeProviders : {};
+  const next = { ...current };
+  (Array.isArray(providers) ? providers : []).forEach((provider) => {
+    const name = normalizeProviderName(provider?.name || provider);
+    if (!name) return;
+    next[name] = {
+      ...(current[name] || {}),
+      enabled: enabled === true,
+    };
+  });
+  return next;
 };
 
 export const buildFreePoolWorkflowSummary = ({

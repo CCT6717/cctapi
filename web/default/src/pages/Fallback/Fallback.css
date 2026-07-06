@@ -963,6 +963,73 @@
   font-weight: 700;
 }
 
+/* --- Free Provider Operations --- */
+.free-provider-ops {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: #fbfcfe;
+}
+
+.free-provider-filter-row,
+.free-provider-bulk-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.free-provider-filter-row .ui.input {
+  flex: 1 1 260px;
+  min-width: 220px;
+}
+
+.free-provider-filter-row label {
+  display: inline-grid;
+  gap: 4px;
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.free-provider-filter-row select {
+  min-width: 148px;
+  height: 34px;
+  padding: 0 30px 0 10px;
+  border: 1px solid var(--fb-border-medium);
+  border-radius: var(--fb-radius-sm);
+  color: var(--fb-text);
+  background: var(--fb-surface);
+  font-size: 13px;
+}
+
+.free-provider-count {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 2px 9px;
+  border: 1px solid var(--fb-border);
+  border-radius: 999px;
+  color: var(--fb-text-secondary);
+  background: var(--fb-surface);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.free-provider-bulk-row .ui.button {
+  margin: 0 !important;
+}
+
+.free-provider-bulk-message.ui.message {
+  margin: 0 !important;
+  background: #eef4ff !important;
+  color: var(--fb-primary-strong) !important;
+}
+
 /* ============================================================
    Summary Bar
    ============================================================ */
