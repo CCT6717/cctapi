@@ -4,9 +4,9 @@ import FreeProviderRow from './FreeProviderRow';
 import {
   buildBulkEnabledProviderConfig,
   buildClearKeysProviderConfig,
-  filterFreeProviderRows,
   buildFreeProviderRows,
   buildReplaceKeysProviderConfig,
+  filterFreeProviderRows,
 } from './freePoolUtils';
 
 const FreeProvidersEditor = ({
@@ -24,6 +24,7 @@ const FreeProvidersEditor = ({
   const [capabilityFilter, setCapabilityFilter] = useState('all');
   const [selectedProviders, setSelectedProviders] = useState([]);
   const [bulkMessage, setBulkMessage] = useState('');
+
   const providerRows = useMemo(
     () => buildFreeProviderRows(providerConfig, freeProviderCatalog),
     [providerConfig, freeProviderCatalog],
@@ -99,9 +100,10 @@ const FreeProvidersEditor = ({
     const selectedNames = new Set(selectedProviders);
     const selectedRows = providerRows.filter((provider) => selectedNames.has(provider.name));
     if (selectedRows.length === 0) return;
+
     onChange(buildBulkEnabledProviderConfig(providerConfig, selectedRows, enabled));
     setBulkMessage(
-      `已暂存 ${selectedRows.length} 个供应商为${enabled ? '已启用' : '已停用'}，点击“保存配置”后生效。`
+      `已暂存 ${selectedRows.length} 个供应商为${enabled ? '已启用' : '已停用'}，点击“保存配置”后生效。`,
     );
   };
 
@@ -152,9 +154,10 @@ const FreeProvidersEditor = ({
             </select>
           </label>
           <span className='free-provider-count'>
-            {visibleProviderRows.length} / {providerRows.length} 个供应商
+            <strong>{visibleProviderRows.length}</strong> / {providerRows.length} 个供应商
           </span>
         </div>
+
         <div className='free-provider-bulk-row'>
           <Button
             type='button'
@@ -195,17 +198,19 @@ const FreeProvidersEditor = ({
             批量停用
           </Button>
           {selectedProviders.length > 0 && (
-            <Label basic size='mini'>
+            <Label basic size='mini' className='free-provider-selected-count'>
               已选择 {selectedProviders.length} 项
             </Label>
           )}
         </div>
+
         {bulkMessage && (
           <Message info size='small' className='free-provider-bulk-message'>
             {bulkMessage}
           </Message>
         )}
       </div>
+
       <Table compact celled striped>
         <Table.Header>
           <Table.Row>
@@ -243,6 +248,7 @@ const FreeProvidersEditor = ({
           ))}
         </Table.Body>
       </Table>
+
       <Message info size='small'>
         <Icon name='info circle' />
         已保存的密钥不会显示。密钥输入为空会保留已保存密钥；粘贴新密钥会在保存时替换原密钥。

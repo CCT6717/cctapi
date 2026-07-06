@@ -965,13 +965,17 @@
 
 /* --- Free Provider Operations --- */
 .free-provider-ops {
+  position: sticky;
+  top: 0;
+  z-index: 3;
   display: grid;
   gap: 10px;
   margin-bottom: 12px;
-  padding: 12px;
+  padding: 10px;
   border: 1px solid var(--fb-border);
   border-radius: var(--fb-radius-sm);
-  background: #fbfcfe;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: var(--fb-shadow-sm);
 }
 
 .free-provider-filter-row,
@@ -1009,6 +1013,7 @@
 .free-provider-count {
   display: inline-flex;
   align-items: center;
+  gap: 4px;
   min-height: 24px;
   padding: 2px 9px;
   border: 1px solid var(--fb-border);
@@ -1018,6 +1023,24 @@
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+}
+
+.free-provider-count strong {
+  color: var(--fb-text);
+}
+
+.free-provider-selected-count.ui.label,
+.free-provider-selected-count {
+  margin: 0 !important;
+}
+
+.free-provider-row.needs-key td:first-child,
+.free-provider-row.has-invalid-limits td:first-child {
+  box-shadow: inset 3px 0 0 var(--fb-warning);
+}
+
+.free-provider-row.is-disabled {
+  color: var(--fb-text-muted);
 }
 
 .free-provider-bulk-row .ui.button {

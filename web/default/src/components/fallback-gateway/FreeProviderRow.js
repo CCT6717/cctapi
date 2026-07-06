@@ -67,9 +67,17 @@ const FreeProviderRow = ({
   const keyCount = provider.key_count || 0;
   const invalidLimits = !validateLimits(limits);
   const stagedKeys = providerConfig[key]?.keys || [];
+  const rowClasses = [
+    'free-provider-row',
+    provider.enabled ? 'is-enabled' : 'is-disabled',
+    invalidLimits ? 'has-invalid-limits' : '',
+    provider.requires_key && !provider.keyless && keyCount === 0 && stagedKeys.length === 0
+      ? 'needs-key'
+      : '',
+  ].filter(Boolean).join(' ');
 
   return (
-    <Table.Row key={key} warning={invalidLimits}>
+    <Table.Row key={key} className={rowClasses} warning={invalidLimits}>
       {onSelectProvider && (
         <Table.Cell collapsing>
           <Checkbox

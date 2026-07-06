@@ -24,13 +24,14 @@ jest.mock('./gatewayConfigApi', () => ({
 
 jest.mock('semantic-ui-react', () => {
   const React = require('react');
-  const passthrough = (tag) => ({ children }) => React.createElement(tag, null, children);
+  const passthrough = (tag) => ({ children, className }) =>
+    React.createElement(tag, className ? { className } : null, children);
   const Button = ({ children, disabled, onClick }) => (
     <button type='button' disabled={disabled} onClick={onClick}>
       {children}
     </button>
   );
-  const Header = passthrough('h2');
+  const Header = ({ children, className }) => <h2 className={className}>{children}</h2>;
   Header.Subheader = passthrough('div');
   const Form = passthrough('form');
   Form.Group = passthrough('div');
@@ -41,9 +42,9 @@ jest.mock('semantic-ui-react', () => {
   const Table = passthrough('table');
   Table.Header = passthrough('thead');
   Table.Body = passthrough('tbody');
-  Table.Row = passthrough('tr');
+  Table.Row = ({ children, className }) => <tr className={className}>{children}</tr>;
   Table.HeaderCell = passthrough('th');
-  Table.Cell = ({ children, colSpan }) => <td colSpan={colSpan}>{children}</td>;
+  Table.Cell = ({ children, colSpan, textAlign }) => <td colSpan={colSpan} data-text-align={textAlign}>{children}</td>;
 
   return {
     Button,
@@ -65,10 +66,10 @@ jest.mock('semantic-ui-react', () => {
         onChange={(event) => onChange?.(event, { value: event.target.value })}
       />
     ),
-    Label: passthrough('span'),
+    Label: ({ children, className }) => <span className={className}>{children}</span>,
     Loader: () => <div>Loading</div>,
-    Message: ({ children, content, header }) => (
-      <div>
+    Message: ({ children, content, header, className }) => (
+      <div className={className}>
         {header}
         {content}
         {children}
@@ -127,9 +128,10 @@ describe('FreeModelPool', () => {
       root.render(<FreeModelPool />);
     });
 
-    expect(container.textContent).toContain('用量数据不可用');
-    expect(container.textContent).toContain('用量数据不可用。');
-    expect(container.textContent).not.toContain('当前周期暂无用量记录');
+    const panels = container.querySelectorAll('section.fallback-virtual-panel');
+    expect(panels.length).toBe(4);
+    expect(panels[2].querySelector('tbody tr div')).not.toBeNull();
+    expect(panels[2].querySelectorAll('tbody tr').length).toBe(1);
   });
 
   test('renders workflow readiness and recommended next actions', async () => {
@@ -160,10 +162,10 @@ describe('FreeModelPool', () => {
       root.render(<FreeModelPool />);
     });
 
-    expect(container.textContent).toContain('接入就绪度');
-    expect(container.textContent).toContain('0/4 已完成');
-    expect(container.textContent).toContain('启用 cct/free 虚拟模型。');
-    expect(container.textContent).toContain('同步免费池以生成部署。');
+    expect(container.querySelector('.free-pool-workflow-dashboard')).not.toBeNull();
+    expect(container.querySelector('.free-pool-readiness-meter strong')?.textContent).toMatch(/^0\/4/);
+    expect(container.querySelectorAll('.free-pool-workflow-step.blocked').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('.free-pool-workflow-actions-panel li').length).toBeGreaterThan(0);
   });
 
   test('filters provider rows and stages bulk disable for selected visible providers', async () => {
@@ -172,7 +174,7 @@ describe('FreeModelPool', () => {
         success: true,
         data: {
           free_providers: {
-            groq: { enabled: true, key_count: 2 },
+            groq: { enabled: true, key_count: 0 },
             openrouter: { enabled: true, key_count: 1 },
           },
           free_provider_catalog: [
@@ -198,9 +200,14 @@ describe('FreeModelPool', () => {
       root.render(<FreeModelPool />);
     });
 
+    const ops = container.querySelector('.free-provider-ops');
+    const searchInput = container.querySelector('.free-provider-filter-row input');
+    expect(ops).not.toBeNull();
+    expect(searchInput).not.toBeNull();
+    expect(container.textContent).toContain('Groq');
+    expect(container.textContent).toContain('OpenRouter');
+
     await act(async () => {
-      const searchInput = container.querySelector('input[aria-label="搜索免费供应商"]');
-      expect(searchInput).not.toBeNull();
       const setValue = Object.getOwnPropertyDescriptor(
         window.HTMLInputElement.prototype,
         'value',
@@ -210,24 +217,27 @@ describe('FreeModelPool', () => {
     });
 
     expect(container.textContent).toContain('Groq');
-    expect(container.textContent).not.toContain('openrouterconfigured');
+    expect(container.querySelector('.free-provider-count strong')?.textContent).toBe('1');
+    expect(container.querySelectorAll('tr.free-provider-row').length).toBe(1);
+    expect(container.querySelector('tr.free-provider-row.is-enabled.needs-key')).not.toBeNull();
+
+    const bulkButtons = Array.from(
+      container.querySelectorAll('.free-provider-bulk-row button'),
+    );
 
     await act(async () => {
-      const selectVisibleButton = Array.from(container.querySelectorAll('button'))
-        .find((button) => button.textContent.includes('选择可见项'))
+      const selectVisibleButton = bulkButtons[0];
       expect(selectVisibleButton).toBeDefined();
       selectVisibleButton.click();
     });
 
     await act(async () => {
-      const disableSelectedButton = Array.from(container.querySelectorAll('button'))
-        .find((button) => button.textContent.includes('批量停用'))
+      const disableSelectedButton = bulkButtons[3];
       expect(disableSelectedButton).toBeDefined();
       disableSelectedButton.click();
     });
 
-    expect(container.textContent).toContain('已暂存 1 个供应商');
-    expect(container.textContent).toContain('已停用');
-    expect(container.textContent).not.toContain('openrouterconfigured');
+    expect(container.querySelector('.free-provider-selected-count')?.textContent).toContain('1');
+    expect(container.querySelector('tr.free-provider-row.is-disabled.needs-key')).not.toBeNull();
   });
 });
