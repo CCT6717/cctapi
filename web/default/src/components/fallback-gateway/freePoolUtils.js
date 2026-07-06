@@ -127,3 +127,39 @@ export const buildClearKeysProviderConfig = (freeProviders = {}, providerKey) =>
     [providerKey]: nextProvider,
   };
 };
+
+export const buildReplaceKeysProviderConfig = (freeProviders = {}, providerKey, value) => {
+  const current = freeProviders && typeof freeProviders === 'object' ? freeProviders : {};
+  const existing = current[providerKey] || {};
+  const keys = String(value || '')
+    .split(/\r?\n/)
+    .map((key) => key.trim())
+    .filter((key) => key && !key.includes('*'));
+  const nextProvider = { ...existing, keys };
+  delete nextProvider.clear_keys;
+  return {
+    ...current,
+    [providerKey]: nextProvider,
+  };
+};
+
+export const loadFreePoolDashboardData = async ({
+  getGatewayConfig,
+  getRuntimeStatus,
+  getFreePoolUsage,
+}) => {
+  const usageRequest = getFreePoolUsage()
+    .then((usageRes) => usageRes)
+    .catch(() => null);
+  const [configRes, runtimeRes, usageRes] = await Promise.all([
+    getGatewayConfig(),
+    getRuntimeStatus(),
+    usageRequest,
+  ]);
+  const usageData = usageRes?.data || {};
+  return {
+    configData: configRes.data || {},
+    runtimeData: runtimeRes.data || {},
+    usageRows: usageData.success !== false && Array.isArray(usageData.data) ? usageData.data : [],
+  };
+};

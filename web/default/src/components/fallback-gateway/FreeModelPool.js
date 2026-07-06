@@ -14,6 +14,7 @@ import FreeProvidersEditor from './FreeProvidersEditor';
 import {
   indexUsageRows,
   isAutoFreeDeployment,
+  loadFreePoolDashboardData,
   providerFromDeploymentId,
 } from './freePoolUtils';
 
@@ -69,25 +70,20 @@ const FreeModelPool = () => {
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [configRes, runtimeRes, usageRes] = await Promise.all([
-        getGatewayConfig(),
-        getRuntimeStatus(),
-        getFreePoolUsage(),
-      ]);
-      const configData = configRes.data || {};
+      const { configData, runtimeData, usageRows: nextUsageRows } = await loadFreePoolDashboardData({
+        getGatewayConfig,
+        getRuntimeStatus,
+        getFreePoolUsage,
+      });
       if (configData.success !== false && configData.data) {
         setConfig(configData.data);
       } else {
         showError(configData.message || '加载免费模型池失败');
       }
-      const runtimeData = runtimeRes.data || {};
       if (runtimeData.success !== false) {
         setRuntimeRows(Array.isArray(runtimeData.data) ? runtimeData.data : []);
       }
-      const usageData = usageRes.data || {};
-      if (usageData.success !== false) {
-        setUsageRows(Array.isArray(usageData.data) ? usageData.data : []);
-      }
+      setUsageRows(nextUsageRows);
     } catch (e) {
       showError(e.message || '加载免费模型池失败');
     } finally {

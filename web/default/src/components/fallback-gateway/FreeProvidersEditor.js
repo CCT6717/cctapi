@@ -4,6 +4,7 @@ import FreeProviderRow from './FreeProviderRow';
 import {
   buildClearKeysProviderConfig,
   buildFreeProviderRows,
+  buildReplaceKeysProviderConfig,
 } from './freePoolUtils';
 
 const FreeProvidersEditor = ({
@@ -36,11 +37,7 @@ const FreeProvidersEditor = ({
   };
 
   const updateKeys = (providerKey, value) => {
-    const keys = String(value || '')
-      .split(/\r?\n/)
-      .map((key) => key.trim())
-      .filter((key) => key && !key.includes('*'));
-    updateProvider(providerKey, 'keys', keys);
+    onChange(buildReplaceKeysProviderConfig(providerConfig, providerKey, value));
   };
 
   const clearKeys = (providerKey) => {

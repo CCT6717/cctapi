@@ -1,9 +1,11 @@
 import {
   buildClearKeysProviderConfig,
   buildFreeProviderRows,
+  buildReplaceKeysProviderConfig,
   indexUsageRows,
   isAutoFreeDeploymentId,
   isAutoFreeDeployment,
+  loadFreePoolDashboardData,
   providerFromDeploymentId,
 } from './freePoolUtils';
 
@@ -158,5 +160,38 @@ describe('freePoolUtils', () => {
 
     expect(next.groq.clear_keys).toBe(true);
     expect(next.groq.keys).toBeUndefined();
+  });
+
+  it('builds replacement keys after clear without keeping clear_keys', () => {
+    const next = buildReplaceKeysProviderConfig(
+      {
+        groq: {
+          enabled: true,
+          key_count: 1,
+          clear_keys: true,
+        },
+      },
+      'groq',
+      'gsk-new-key\n****stored-key\n another-new-key ',
+    );
+
+    expect(next.groq.keys).toEqual(['gsk-new-key', 'another-new-key']);
+    expect(next.groq.clear_keys).toBeUndefined();
+  });
+
+  it('loads config and runtime data when usage endpoint fails', async () => {
+    const result = await loadFreePoolDashboardData({
+      getGatewayConfig: jest.fn().mockResolvedValue({
+        data: { success: true, data: { free_providers: { groq: { enabled: true } } } },
+      }),
+      getRuntimeStatus: jest.fn().mockResolvedValue({
+        data: { success: true, data: [{ deployment_id: 'free:groq-1' }] },
+      }),
+      getFreePoolUsage: jest.fn().mockRejectedValue(new Error('usage unavailable')),
+    });
+
+    expect(result.configData.data.free_providers.groq.enabled).toBe(true);
+    expect(result.runtimeData.data).toEqual([{ deployment_id: 'free:groq-1' }]);
+    expect(result.usageRows).toEqual([]);
   });
 });
