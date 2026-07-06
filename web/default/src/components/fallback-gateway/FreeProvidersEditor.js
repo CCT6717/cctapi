@@ -51,7 +51,7 @@ const FreeProvidersEditor = ({
   }, [visibleProviderNameKey, visibleProviderNames]);
 
   if (providerRows.length === 0) {
-    return <Message info>No free providers are available in the current catalog.</Message>;
+    return <Message info>当前目录没有可用的免费供应商。</Message>;
   }
 
   const updateProvider = (key, field, value) => {
@@ -101,7 +101,7 @@ const FreeProvidersEditor = ({
     if (selectedRows.length === 0) return;
     onChange(buildBulkEnabledProviderConfig(providerConfig, selectedRows, enabled));
     setBulkMessage(
-      `Staged ${selectedRows.length} provider${selectedRows.length === 1 ? '' : 's'} as ${enabled ? 'enabled' : 'disabled'}. Save config to apply.`
+      `已暂存 ${selectedRows.length} 个供应商为${enabled ? '已启用' : '已停用'}，点击“保存配置”后生效。`
     );
   };
 
@@ -114,45 +114,45 @@ const FreeProvidersEditor = ({
       <div className='free-provider-ops'>
         <div className='free-provider-filter-row'>
           <Input
-            aria-label='Search free providers'
+            aria-label='搜索免费供应商'
             icon='search'
-            placeholder='Search providers, capability, or model mode'
+            placeholder='搜索供应商、能力或模型模式'
             value={searchText}
             onChange={(_, { value }) => setSearchText(value)}
           />
           <label>
-            <span>Status</span>
+            <span>状态</span>
             <select
-              aria-label='Filter free providers by status'
+              aria-label='按状态筛选免费供应商'
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
             >
-              <option value='all'>All statuses</option>
-              <option value='enabled'>Enabled</option>
-              <option value='disabled'>Disabled</option>
-              <option value='ready'>Ready</option>
-              <option value='needs_key'>Needs key</option>
-              <option value='configured'>Configured</option>
-              <option value='catalog'>Catalog only</option>
+              <option value='all'>全部状态</option>
+              <option value='enabled'>已启用</option>
+              <option value='disabled'>已停用</option>
+              <option value='ready'>已就绪</option>
+              <option value='needs_key'>需要 key</option>
+              <option value='configured'>已配置</option>
+              <option value='catalog'>仅目录</option>
             </select>
           </label>
           <label>
-            <span>Capability</span>
+            <span>能力</span>
             <select
-              aria-label='Filter free providers by capability'
+              aria-label='按能力筛选免费供应商'
               value={capabilityFilter}
               onChange={(event) => setCapabilityFilter(event.target.value)}
             >
-              <option value='all'>All capabilities</option>
-              <option value='keyless'>Keyless</option>
-              <option value='stream'>Stream</option>
-              <option value='tools'>Tools</option>
+              <option value='all'>全部能力</option>
+              <option value='keyless'>免 key</option>
+              <option value='stream'>流式</option>
+              <option value='tools'>工具</option>
               <option value='json'>JSON</option>
-              <option value='vision'>Vision</option>
+              <option value='vision'>视觉</option>
             </select>
           </label>
           <span className='free-provider-count'>
-            {visibleProviderRows.length} / {providerRows.length} providers
+            {visibleProviderRows.length} / {providerRows.length} 个供应商
           </span>
         </div>
         <div className='free-provider-bulk-row'>
@@ -163,7 +163,7 @@ const FreeProvidersEditor = ({
             disabled={visibleProviderRows.length === 0}
             onClick={selectVisibleProviders}
           >
-            Select visible
+            选择可见项
           </Button>
           <Button
             type='button'
@@ -172,7 +172,7 @@ const FreeProvidersEditor = ({
             disabled={selectedProviders.length === 0}
             onClick={clearSelectedProviders}
           >
-            Clear selection
+            清空选择
           </Button>
           <Button
             type='button'
@@ -182,7 +182,7 @@ const FreeProvidersEditor = ({
             disabled={selectedProviders.length === 0}
             onClick={() => applyBulkEnabled(true)}
           >
-            Enable selected
+            批量启用
           </Button>
           <Button
             type='button'
@@ -192,11 +192,11 @@ const FreeProvidersEditor = ({
             disabled={selectedProviders.length === 0}
             onClick={() => applyBulkEnabled(false)}
           >
-            Disable selected
+            批量停用
           </Button>
           {selectedProviders.length > 0 && (
             <Label basic size='mini'>
-              {selectedProviders.length} selected
+              已选择 {selectedProviders.length} 项
             </Label>
           )}
         </div>
@@ -209,22 +209,22 @@ const FreeProvidersEditor = ({
       <Table compact celled striped>
         <Table.Header>
           <Table.Row>
-            <Table.HeaderCell>Select</Table.HeaderCell>
-            <Table.HeaderCell>Enabled</Table.HeaderCell>
-            <Table.HeaderCell>Provider</Table.HeaderCell>
-            <Table.HeaderCell>Keys</Table.HeaderCell>
-            <Table.HeaderCell>Capabilities</Table.HeaderCell>
-            <Table.HeaderCell>Effective Limits</Table.HeaderCell>
-            <Table.HeaderCell>Override Limits</Table.HeaderCell>
-            <Table.HeaderCell>Replace Keys</Table.HeaderCell>
-            <Table.HeaderCell>Status</Table.HeaderCell>
+            <Table.HeaderCell>选择</Table.HeaderCell>
+            <Table.HeaderCell>启用</Table.HeaderCell>
+            <Table.HeaderCell>供应商</Table.HeaderCell>
+            <Table.HeaderCell>密钥数</Table.HeaderCell>
+            <Table.HeaderCell>能力</Table.HeaderCell>
+            <Table.HeaderCell>当前限额</Table.HeaderCell>
+            <Table.HeaderCell>覆盖限额</Table.HeaderCell>
+            <Table.HeaderCell>替换密钥</Table.HeaderCell>
+            <Table.HeaderCell>状态</Table.HeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>
           {visibleProviderRows.length === 0 ? (
             <Table.Row>
               <Table.Cell colSpan='9' textAlign='center'>
-                No providers match the current filters.
+                当前筛选条件下没有匹配的供应商。
               </Table.Cell>
             </Table.Row>
           ) : visibleProviderRows.map((provider) => (
@@ -245,7 +245,7 @@ const FreeProvidersEditor = ({
       </Table>
       <Message info size='small'>
         <Icon name='info circle' />
-        Existing keys are never shown. Empty key input keeps stored keys; pasted keys replace them on save.
+        已保存的密钥不会显示。密钥输入为空会保留已保存密钥；粘贴新密钥会在保存时替换原密钥。
       </Message>
     </div>
   );

@@ -61,6 +61,26 @@ const formatLimit = (value) => {
   return n === 0 ? '不限' : formatNumber(n);
 };
 
+const formatQuotaMode = (value) => {
+  if (!value || value === 'free') return '免费';
+  return value;
+};
+
+const formatRuntimeHealth = (value) => {
+  const health = String(value || '').toLowerCase();
+  const labels = {
+    valid: '正常',
+    healthy: '正常',
+    ok: '正常',
+    invalid: '异常',
+    critical: '严重',
+    failed: '失败',
+    warning: '警告',
+    unknown: '未知',
+  };
+  return labels[health] || value || '已启用';
+};
+
 const FreeModelPool = () => {
   const [config, setConfig] = useState(null);
   const [runtimeRows, setRuntimeRows] = useState([]);
@@ -179,7 +199,15 @@ const FreeModelPool = () => {
       .sort()
       .map((id) => {
         const runtime = runtimeRows.find((row) => row.deployment_id === id) || {};
-        return { id, ...deployments[id], runtime };
+        return {
+          id,
+          ...deployments[id],
+          runtime: {
+            ...runtime,
+            health_raw: runtime.health,
+            health: formatRuntimeHealth(runtime.health),
+          },
+        };
       });
   }, [config, runtimeRows]);
 
@@ -322,21 +350,21 @@ const FreeModelPool = () => {
       <section className='fallback-virtual-panel'>
         <div className='fallback-virtual-header'>
           <div>
-            <h3>Free provider usage</h3>
-            <span>Read-only token and request totals by provider, key hash, model, and period.</span>
+            <h3>免费供应商用量</h3>
+            <span>按供应商、密钥哈希、模型和周期查看只读 token 与请求统计。</span>
           </div>
         </div>
         <Table compact celled striped>
           <Table.Header>
             <Table.Row>
-              <Table.HeaderCell>Provider</Table.HeaderCell>
-              <Table.HeaderCell>Key hash</Table.HeaderCell>
-              <Table.HeaderCell>Model</Table.HeaderCell>
-              <Table.HeaderCell>Period</Table.HeaderCell>
-              <Table.HeaderCell>Total tokens</Table.HeaderCell>
-              <Table.HeaderCell>Requests</Table.HeaderCell>
-              <Table.HeaderCell>Successes</Table.HeaderCell>
-              <Table.HeaderCell>Updated</Table.HeaderCell>
+              <Table.HeaderCell>供应商</Table.HeaderCell>
+              <Table.HeaderCell>密钥哈希</Table.HeaderCell>
+              <Table.HeaderCell>模型</Table.HeaderCell>
+              <Table.HeaderCell>周期</Table.HeaderCell>
+              <Table.HeaderCell>总 token</Table.HeaderCell>
+              <Table.HeaderCell>请求数</Table.HeaderCell>
+              <Table.HeaderCell>成功数</Table.HeaderCell>
+              <Table.HeaderCell>更新时间</Table.HeaderCell>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -346,14 +374,14 @@ const FreeModelPool = () => {
                   <Message
                     warning
                     icon='warning sign'
-                    header='Usage data unavailable'
-                    content={usageError || 'Usage data is unavailable.'}
+                    header='用量数据不可用'
+                    content={usageError || '用量数据不可用。'}
                   />
                 </Table.Cell>
               </Table.Row>
             ) : usageRows.length === 0 ? (
               <Table.Row>
-                <Table.Cell colSpan='8' textAlign='center'>No usage rows for the selected period</Table.Cell>
+                <Table.Cell colSpan='8' textAlign='center'>当前周期暂无用量记录</Table.Cell>
               </Table.Row>
             ) : usageRows.map((row, index) => (
               <Table.Row key={`${row.provider}-${row.key_hash}-${row.model_name}-${row.period}-${index}`}>
@@ -412,7 +440,7 @@ const FreeModelPool = () => {
                     </Table.Cell>
                     <Table.Cell>{PROVIDER_LABELS[provider] || provider}</Table.Cell>
                     <Table.Cell>{dep.real_model || '-'}</Table.Cell>
-                    <Table.Cell>{dep.quota_mode || 'free'}</Table.Cell>
+                    <Table.Cell>{formatQuotaMode(dep.quota_mode)}</Table.Cell>
                     <Table.Cell>{formatLimit(dep.rpm_limit)}</Table.Cell>
                     <Table.Cell>{formatLimit(dep.rpd_limit)}</Table.Cell>
                     <Table.Cell>{formatLimit(dep.tpm_limit)}</Table.Cell>
@@ -421,7 +449,7 @@ const FreeModelPool = () => {
                       {dep.enabled === false ? (
                         <Label basic color='grey'>已停用</Label>
                       ) : (
-                        <Label basic color={dep.runtime?.health === 'invalid' ? 'red' : 'green'}>
+                        <Label basic color={dep.runtime?.health_raw === 'invalid' ? 'red' : 'green'}>
                           {dep.runtime?.health || '已启用'}
                         </Label>
                       )}

@@ -35,7 +35,7 @@ const pickBoolean = (...values) => {
 
 const cloneArray = (value) => (Array.isArray(value) ? [...value] : []);
 
-const USAGE_UNAVAILABLE_MESSAGE = 'Usage data is unavailable.';
+const USAGE_UNAVAILABLE_MESSAGE = '用量数据不可用。';
 
 const applyLimitOverride = (base, overrides, field) => {
   if (!overrides || overrides[field] === undefined || overrides[field] === null || overrides[field] === '') {
@@ -127,13 +127,13 @@ const capabilityFilterField = (capability) => ({
 
 const providerSearchHaystack = (provider = {}) => {
   const capabilityTerms = [
-    provider.keyless ? 'keyless' : '',
-    provider.requires_key ? 'key required needs key' : '',
-    provider.supports_stream ? 'stream' : '',
-    provider.supports_tools ? 'tools tool calling' : '',
+    provider.keyless ? 'keyless 免 key' : '',
+    provider.requires_key ? 'key required needs key 需要 key' : '',
+    provider.supports_stream ? 'stream 流式' : '',
+    provider.supports_tools ? 'tools tool calling 工具' : '',
     provider.supports_json ? 'json' : '',
-    provider.supports_vision ? 'vision image' : '',
-    provider.configured ? 'configured' : 'catalog',
+    provider.supports_vision ? 'vision image 视觉' : '',
+    provider.configured ? 'configured 已配置' : 'catalog 目录',
   ];
   return [
     provider.name,
@@ -249,56 +249,56 @@ export const buildFreePoolWorkflowSummary = ({
     risks.push({
       key: 'virtual-model-missing',
       level: 'critical',
-      text: 'cct/free virtual model is missing.',
+      text: '缺少 cct/free 虚拟模型。',
     });
-    nextActions.push('Create cct/free virtual model.');
+    nextActions.push('创建 cct/free 虚拟模型。');
   } else if (!virtualModelReady) {
     risks.push({
       key: 'virtual-model-disabled',
       level: 'critical',
-      text: 'cct/free virtual model is disabled.',
+      text: 'cct/free 虚拟模型已停用。',
     });
-    nextActions.push('Enable cct/free virtual model.');
+    nextActions.push('启用 cct/free 虚拟模型。');
   }
 
   if (!providerReady) {
     risks.push({
       key: 'no-ready-provider',
       level: 'critical',
-      text: 'No enabled provider has a stored key or keyless access.',
+      text: '没有已启用且可用的供应商，需要已保存密钥或支持免 key。',
     });
-    nextActions.push('Enable at least one provider with a stored key or keyless access.');
+    nextActions.push('至少启用一个已保存密钥或支持免 key 的供应商。');
   }
 
   if (!deploymentReady) {
     risks.push({
       key: 'no-enabled-deployment',
       level: 'critical',
-      text: 'No generated free deployment is enabled.',
+      text: '没有已启用的自动生成免费部署。',
     });
-    nextActions.push('Sync the free pool to generate deployments.');
+    nextActions.push('同步免费池以生成部署。');
   }
 
   if (invalidRuntimeCount > 0) {
     risks.push({
       key: 'runtime-invalid',
       level: 'warning',
-      text: `${invalidRuntimeCount} generated deployment(s) report unhealthy runtime state.`,
+      text: `${invalidRuntimeCount} 个自动生成部署报告运行状态异常。`,
     });
-    nextActions.push('Review unhealthy generated deployments before routing production traffic.');
+    nextActions.push('在生产流量进入前检查异常的自动生成部署。');
   }
 
   if (!telemetryReady) {
     risks.push({
       key: 'usage-unavailable',
       level: 'warning',
-      text: 'Usage telemetry is unavailable.',
+      text: '用量统计不可用。',
     });
-    nextActions.push('Check the free-pool usage endpoint before relying on quota signals.');
+    nextActions.push('检查免费池用量接口，再依赖额度信号。');
   }
 
   if (nextActions.length === 0 || usageRows.length > 0) {
-    nextActions.push('Run a small request through cct/free and watch usage grow.');
+    nextActions.push('通过 cct/free 发送一次小请求，并观察用量是否增长。');
   }
 
   return {
@@ -316,27 +316,27 @@ export const buildFreePoolWorkflowSummary = ({
     steps: [
       {
         key: 'virtual-model',
-        label: 'cct/free virtual model',
+        label: 'cct/free 虚拟模型',
         complete: virtualModelReady,
-        detail: virtualModelReady ? 'enabled' : 'needs attention',
+        detail: virtualModelReady ? '已启用' : '需要处理',
       },
       {
         key: 'providers',
-        label: 'ready providers',
+        label: '就绪供应商',
         complete: providerReady,
         detail: `${readyProviders.length} / ${providerRows.length}`,
       },
       {
         key: 'deployments',
-        label: 'generated deployments',
+        label: '已生成部署',
         complete: deploymentReady,
         detail: `${enabledDeployments.length} / ${Array.isArray(freeDeployments) ? freeDeployments.length : 0}`,
       },
       {
         key: 'usage',
-        label: 'usage telemetry',
+        label: '用量统计',
         complete: telemetryReady,
-        detail: telemetryReady ? `${Array.isArray(usageRows) ? usageRows.length : 0} rows` : 'unavailable',
+        detail: telemetryReady ? `${Array.isArray(usageRows) ? usageRows.length : 0} 条` : '不可用',
       },
     ],
   };

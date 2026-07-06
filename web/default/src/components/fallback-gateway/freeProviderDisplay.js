@@ -42,7 +42,7 @@ export const formatNumber = (value) => {
 export const formatLimit = (value) => {
   const n = Number(value);
   if (!Number.isFinite(n)) return '-';
-  return n === 0 ? 'unlimited' : formatNumber(n);
+  return n === 0 ? '不限' : formatNumber(n);
 };
 
 export const validateLimits = (limits) => {

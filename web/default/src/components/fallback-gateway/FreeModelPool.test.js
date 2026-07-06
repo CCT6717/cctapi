@@ -127,9 +127,9 @@ describe('FreeModelPool', () => {
       root.render(<FreeModelPool />);
     });
 
-    expect(container.textContent).toContain('Usage data unavailable');
-    expect(container.textContent).toContain('Usage data is unavailable.');
-    expect(container.textContent).not.toContain('No usage rows for the selected period');
+    expect(container.textContent).toContain('用量数据不可用');
+    expect(container.textContent).toContain('用量数据不可用。');
+    expect(container.textContent).not.toContain('当前周期暂无用量记录');
   });
 
   test('renders workflow readiness and recommended next actions', async () => {
@@ -160,10 +160,10 @@ describe('FreeModelPool', () => {
       root.render(<FreeModelPool />);
     });
 
-    expect(container.textContent).toContain('Integration readiness');
-    expect(container.textContent).toContain('0/4 complete');
-    expect(container.textContent).toContain('Enable cct/free virtual model.');
-    expect(container.textContent).toContain('Sync the free pool to generate deployments.');
+    expect(container.textContent).toContain('接入就绪度');
+    expect(container.textContent).toContain('0/4 已完成');
+    expect(container.textContent).toContain('启用 cct/free 虚拟模型。');
+    expect(container.textContent).toContain('同步免费池以生成部署。');
   });
 
   test('filters provider rows and stages bulk disable for selected visible providers', async () => {
@@ -199,7 +199,7 @@ describe('FreeModelPool', () => {
     });
 
     await act(async () => {
-      const searchInput = container.querySelector('input[aria-label="Search free providers"]');
+      const searchInput = container.querySelector('input[aria-label="搜索免费供应商"]');
       expect(searchInput).not.toBeNull();
       const setValue = Object.getOwnPropertyDescriptor(
         window.HTMLInputElement.prototype,
@@ -214,20 +214,20 @@ describe('FreeModelPool', () => {
 
     await act(async () => {
       const selectVisibleButton = Array.from(container.querySelectorAll('button'))
-        .find((button) => button.textContent.includes('Select visible'))
+        .find((button) => button.textContent.includes('选择可见项'))
       expect(selectVisibleButton).toBeDefined();
       selectVisibleButton.click();
     });
 
     await act(async () => {
       const disableSelectedButton = Array.from(container.querySelectorAll('button'))
-        .find((button) => button.textContent.includes('Disable selected'))
+        .find((button) => button.textContent.includes('批量停用'))
       expect(disableSelectedButton).toBeDefined();
       disableSelectedButton.click();
     });
 
-    expect(container.textContent).toContain('Staged 1 provider');
-    expect(container.textContent).toContain('disabled');
+    expect(container.textContent).toContain('已暂存 1 个供应商');
+    expect(container.textContent).toContain('已停用');
     expect(container.textContent).not.toContain('openrouterconfigured');
   });
 });

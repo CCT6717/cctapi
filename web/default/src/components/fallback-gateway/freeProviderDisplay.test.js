@@ -2,7 +2,7 @@ import { formatLimit, validateLimits } from './freeProviderDisplay';
 
 describe('freeProviderDisplay', () => {
   test('formatLimit treats zero as unlimited', () => {
-    expect(formatLimit(0)).toBe('unlimited');
+    expect(formatLimit(0)).toBe('不限');
   });
 
   test('formatLimit formats missing values as dash', () => {

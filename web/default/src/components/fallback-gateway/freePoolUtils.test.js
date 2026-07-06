@@ -299,7 +299,7 @@ describe('freePoolUtils', () => {
     expect(result.runtimeData.data).toEqual([{ deployment_id: 'free:groq-1' }]);
     expect(result.usageRows).toEqual([]);
     expect(result.usageAvailable).toBe(false);
-    expect(result.usageError).toBe('Usage data is unavailable.');
+    expect(result.usageError).toBe('用量数据不可用。');
   });
 
   it('reports usage unavailable when usage response is unsuccessful', async () => {
@@ -317,7 +317,7 @@ describe('freePoolUtils', () => {
 
     expect(result.usageRows).toEqual([]);
     expect(result.usageAvailable).toBe(false);
-    expect(result.usageError).toBe('Usage data is unavailable.');
+    expect(result.usageError).toBe('用量数据不可用。');
   });
 
   it('summarizes a ready free pool workflow', () => {
@@ -348,7 +348,7 @@ describe('freePoolUtils', () => {
     expect(summary.readyProviderCount).toBe(2);
     expect(summary.enabledDeploymentCount).toBe(2);
     expect(summary.risks).toEqual([]);
-    expect(summary.nextActions).toContain('Run a small request through cct/free and watch usage grow.');
+    expect(summary.nextActions).toContain('通过 cct/free 发送一次小请求，并观察用量是否增长。');
   });
 
   it('reports missing workflow pieces as risks and next actions', () => {
@@ -375,10 +375,10 @@ describe('freePoolUtils', () => {
       'usage-unavailable',
     ]);
     expect(summary.nextActions).toEqual([
-      'Enable cct/free virtual model.',
-      'Enable at least one provider with a stored key or keyless access.',
-      'Sync the free pool to generate deployments.',
-      'Check the free-pool usage endpoint before relying on quota signals.',
+      '启用 cct/free 虚拟模型。',
+      '至少启用一个已保存密钥或支持免 key 的供应商。',
+      '同步免费池以生成部署。',
+      '检查免费池用量接口，再依赖额度信号。',
     ]);
   });
 });

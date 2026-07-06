@@ -20,12 +20,12 @@ const readySummary = {
   usageRowCount: 24,
   invalidRuntimeCount: 0,
   risks: [],
-  nextActions: ['Run a small request through cct/free and watch usage grow.'],
+  nextActions: ['通过 cct/free 发送一次小请求，并观察用量是否增长。'],
   steps: [
-    { key: 'virtual-model', label: 'cct/free virtual model', complete: true, detail: 'enabled' },
-    { key: 'providers', label: 'ready providers', complete: true, detail: '3 / 5' },
-    { key: 'deployments', label: 'generated deployments', complete: true, detail: '8 / 8' },
-    { key: 'usage', label: 'usage telemetry', complete: true, detail: '24 rows' },
+    { key: 'virtual-model', label: 'cct/free 虚拟模型', complete: true, detail: '已启用' },
+    { key: 'providers', label: '就绪供应商', complete: true, detail: '3 / 5' },
+    { key: 'deployments', label: '已生成部署', complete: true, detail: '8 / 8' },
+    { key: 'usage', label: '用量统计', complete: true, detail: '24 条' },
   ],
 };
 
@@ -40,19 +40,19 @@ const needsActionSummary = {
   usageRowCount: 0,
   invalidRuntimeCount: 0,
   risks: [
-    { key: 'no-ready-provider', level: 'critical', text: 'No enabled provider has a stored key.' },
-    { key: 'usage-unavailable', level: 'warning', text: 'Usage telemetry is unavailable.' },
+    { key: 'no-ready-provider', level: 'critical', text: '没有已启用且可用的供应商。' },
+    { key: 'usage-unavailable', level: 'warning', text: '用量统计不可用。' },
   ],
   nextActions: [
-    'Enable at least one provider with a stored key or keyless access.',
-    'Sync the free pool to generate deployments.',
-    'Check the free-pool usage endpoint before relying on quota signals.',
+    '至少启用一个已保存密钥或支持免 key 的供应商。',
+    '同步免费池以生成部署。',
+    '检查免费池用量接口，再依赖额度信号。',
   ],
   steps: [
-    { key: 'virtual-model', label: 'cct/free virtual model', complete: true, detail: 'enabled' },
-    { key: 'providers', label: 'ready providers', complete: false, detail: '0 / 4' },
-    { key: 'deployments', label: 'generated deployments', complete: false, detail: '0 / 0' },
-    { key: 'usage', label: 'usage telemetry', complete: false, detail: 'unavailable' },
+    { key: 'virtual-model', label: 'cct/free 虚拟模型', complete: true, detail: '已启用' },
+    { key: 'providers', label: '就绪供应商', complete: false, detail: '0 / 4' },
+    { key: 'deployments', label: '已生成部署', complete: false, detail: '0 / 0' },
+    { key: 'usage', label: '用量统计', complete: false, detail: '不可用' },
   ],
 };
 

@@ -1,29 +1,28 @@
 import React from 'react';
 
-const statusText = (complete) => (complete ? 'Ready' : 'Needs action');
+const statusText = (complete) => (complete ? '就绪' : '需要处理');
 
 const FreePoolWorkflowDashboard = ({ summary }) => {
   if (!summary) return null;
 
-  const readinessLabel = `${summary.readinessScore}/${summary.readinessTotal} complete`;
+  const readinessLabel = `${summary.readinessScore}/${summary.readinessTotal} 已完成`;
   const riskCountLabel = summary.risks.length === 0
-    ? 'No blocking risks'
-    : `${summary.risks.length} risk${summary.risks.length > 1 ? 's' : ''}`;
+    ? '无阻塞风险'
+    : `${summary.risks.length} 项风险`;
 
   return (
     <section className='free-pool-workflow-dashboard'>
       <div className='free-pool-workflow-hero'>
         <div>
-          <span className='free-pool-workflow-eyebrow'>FreeLLMAPI workflow</span>
-          <h3>Integration readiness</h3>
+          <span className='free-pool-workflow-eyebrow'>FreeLLMAPI 工作流</span>
+          <h3>接入就绪度</h3>
           <p>
-            Track whether cct/free can route traffic, whether providers are usable,
-            and whether quota telemetry is safe to trust.
+            检查 cct/free 是否可以路由流量、供应商是否可用，以及额度统计是否可信。
           </p>
         </div>
         <div className='free-pool-readiness-meter'>
           <strong>{readinessLabel}</strong>
-          <span>{summary.readinessPercent}% ready</span>
+          <span>{summary.readinessPercent}% 就绪</span>
           <div className='free-pool-readiness-track'>
             <i style={{ width: `${summary.readinessPercent}%` }} />
           </div>
@@ -32,26 +31,26 @@ const FreePoolWorkflowDashboard = ({ summary }) => {
 
       <div className='free-pool-workflow-metrics'>
         <div>
-          <span>Ready providers</span>
+          <span>就绪供应商</span>
           <strong>{summary.readyProviderCount} / {summary.providerCount}</strong>
         </div>
         <div>
-          <span>Enabled deployments</span>
+          <span>已启用部署</span>
           <strong>{summary.enabledDeploymentCount} / {summary.deploymentCount}</strong>
         </div>
         <div>
-          <span>Usage rows</span>
+          <span>用量记录</span>
           <strong>{summary.usageRowCount}</strong>
         </div>
         <div>
-          <span>Runtime risks</span>
+          <span>运行风险</span>
           <strong>{riskCountLabel}</strong>
         </div>
       </div>
 
       <div className='free-pool-workflow-body'>
         <div className='free-pool-workflow-steps'>
-          <h4>Setup checklist</h4>
+          <h4>配置检查清单</h4>
           {summary.steps.map((step) => (
             <div
               className={`free-pool-workflow-step ${step.complete ? 'complete' : 'blocked'}`}
@@ -67,7 +66,7 @@ const FreePoolWorkflowDashboard = ({ summary }) => {
         </div>
 
         <div className='free-pool-workflow-actions-panel'>
-          <h4>Recommended next actions</h4>
+          <h4>建议下一步</h4>
           <ol>
             {summary.nextActions.map((action) => (
               <li key={action}>{action}</li>
