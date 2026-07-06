@@ -861,6 +861,37 @@
   gap: 10px;
 }
 
+.free-pool-status-strip {
+  display: grid;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: var(--fb-radius-sm);
+  border: 1px solid var(--fb-border);
+  background: var(--fb-bg);
+}
+
+.free-pool-status-strip strong {
+  color: var(--fb-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.free-pool-status-strip span {
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.free-pool-status-strip.success {
+  border-color: var(--fb-success-border);
+  background: var(--fb-success-bg);
+}
+
+.free-pool-status-strip.warning {
+  border-color: var(--fb-warning-border);
+  background: var(--fb-warning-bg);
+}
+
 .free-pool-workflow-metrics > div {
   display: grid;
   gap: 6px;

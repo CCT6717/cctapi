@@ -173,6 +173,9 @@ describe('FreeModelPool', () => {
     expect(workflowText).toContain('接入就绪度');
     expect(workflowText).toContain('建议下一步');
     expect(container.querySelector('.free-pool-readiness-meter strong')?.textContent).toMatch(/^0\/4/);
+    expect(container.querySelector('.free-pool-status-strip.warning strong')?.textContent).toContain('需要处理');
+    expect(container.querySelector('.free-pool-status-strip.warning span')?.textContent)
+      .toContain('cct/free');
     expect(container.querySelectorAll('.free-pool-workflow-step.blocked').length).toBeGreaterThan(0);
     expect(actionItems.length).toBeGreaterThan(0);
     expect(actionItems).toEqual(expect.arrayContaining([

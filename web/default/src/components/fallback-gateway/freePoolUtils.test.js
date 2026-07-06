@@ -345,6 +345,8 @@ describe('freePoolUtils', () => {
 
     expect(summary.readinessScore).toBe(4);
     expect(summary.readinessTotal).toBe(4);
+    expect(summary.statusTone).toBe('success');
+    expect(summary.statusText).toBe('免费池已就绪');
     expect(summary.readyProviderCount).toBe(2);
     expect(summary.enabledDeploymentCount).toBe(2);
     expect(summary.risks).toEqual([]);
@@ -368,6 +370,8 @@ describe('freePoolUtils', () => {
     });
 
     expect(summary.readinessScore).toBe(0);
+    expect(summary.statusTone).toBe('warning');
+    expect(summary.statusText).toContain('需要处理');
     expect(summary.risks.map((risk) => risk.key)).toEqual([
       'virtual-model-disabled',
       'no-ready-provider',

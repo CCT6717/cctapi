@@ -305,6 +305,12 @@ export const buildFreePoolWorkflowSummary = ({
     readinessScore,
     readinessTotal: readinessChecks.length,
     readinessPercent: Math.round((readinessScore / readinessChecks.length) * 100),
+    statusTone: risks.length > 0 ? 'warning' : readinessScore === readinessChecks.length ? 'success' : 'info',
+    statusText: risks.length > 0
+      ? `还有 ${risks.length} 项需要处理`
+      : readinessScore === readinessChecks.length
+        ? '免费池已就绪'
+        : '免费池接入中',
     providerCount: providerRows.length,
     readyProviderCount: readyProviders.length,
     deploymentCount: Array.isArray(freeDeployments) ? freeDeployments.length : 0,

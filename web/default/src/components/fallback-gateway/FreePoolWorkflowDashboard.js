@@ -29,6 +29,11 @@ const FreePoolWorkflowDashboard = ({ summary }) => {
         </div>
       </div>
 
+      <div className={`free-pool-status-strip ${summary.statusTone}`}>
+        <strong>{summary.statusText}</strong>
+        <span>{summary.nextActions.length > 0 ? summary.nextActions[0] : '可以进入小流量验证。'}</span>
+      </div>
+
       <div className='free-pool-workflow-metrics'>
         <div>
           <span>就绪供应商</span>
