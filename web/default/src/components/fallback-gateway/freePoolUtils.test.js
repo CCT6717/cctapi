@@ -98,7 +98,7 @@ describe('freePoolUtils', () => {
       {
         nvidia: {
           enabled: true,
-          keys: ['nvapi-staged-key'],
+          keys: ['staged-key-placeholder'],
         },
       },
       [{ name: 'nvidia', key_count: 0, requires_key: true }],
@@ -172,10 +172,10 @@ describe('freePoolUtils', () => {
         },
       },
       'groq',
-      'gsk-new-key\n****stored-key\n another-new-key ',
+      'replacement-key-one\n****stored-key\n replacement-key-two ',
     );
 
-    expect(next.groq.keys).toEqual(['gsk-new-key', 'another-new-key']);
+    expect(next.groq.keys).toEqual(['replacement-key-one', 'replacement-key-two']);
     expect(next.groq.clear_keys).toBeUndefined();
   });
 
@@ -206,7 +206,7 @@ describe('freePoolUtils', () => {
         data: { success: true, data: [] },
       }),
       getFreePoolUsage: jest.fn().mockResolvedValue({
-        data: { success: false, message: 'raw provider key sk-test-key failed' },
+        data: { success: false, message: 'sanitized usage lookup failed' },
       }),
     });
 
