@@ -122,4 +122,38 @@ describe('FreeModelPool', () => {
     expect(container.textContent).toContain('Usage data is unavailable.');
     expect(container.textContent).not.toContain('No usage rows for the selected period');
   });
+
+  test('renders workflow readiness and recommended next actions', async () => {
+    getGatewayConfig.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          free_providers: {
+            groq: { enabled: true, key_count: 0 },
+          },
+          free_provider_catalog: [{ name: 'groq', requires_key: true }],
+          virtual_models: {
+            'cct/free': {
+              enabled: false,
+              pools: ['free'],
+              strategy: 'free_first',
+            },
+          },
+          deployments: {},
+        },
+      },
+    });
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: false, message: 'usage unavailable' },
+    });
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    expect(container.textContent).toContain('Integration readiness');
+    expect(container.textContent).toContain('0/4 complete');
+    expect(container.textContent).toContain('Enable cct/free virtual model.');
+    expect(container.textContent).toContain('Sync the free pool to generate deployments.');
+  });
 });

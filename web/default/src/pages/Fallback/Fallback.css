@@ -762,6 +762,209 @@
 }
 
 /* ============================================================
+   Free Pool Workflow Dashboard
+   ============================================================ */
+.free-pool-workflow-dashboard {
+  display: grid;
+  gap: 14px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid rgba(22, 131, 255, 0.22);
+  border-radius: var(--fb-radius-lg);
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(232, 243, 255, 0.96) 52%, rgba(236, 253, 245, 0.94) 100%);
+  box-shadow: var(--fb-shadow-md);
+}
+
+.free-pool-workflow-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 220px;
+  gap: 18px;
+  align-items: center;
+}
+
+.free-pool-workflow-eyebrow {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: var(--fb-primary-strong);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: inset 0 0 0 1px rgba(22, 131, 255, 0.14);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.free-pool-workflow-hero h3 {
+  margin: 8px 0 5px;
+  color: var(--fb-text);
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.free-pool-workflow-hero p {
+  max-width: 760px;
+  margin: 0;
+  color: var(--fb-text-secondary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.free-pool-readiness-meter {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid rgba(22, 131, 255, 0.18);
+  border-radius: var(--fb-radius-sm);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.free-pool-readiness-meter strong {
+  color: var(--fb-primary-strong);
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.free-pool-readiness-meter span {
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.free-pool-readiness-track {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: #dbeafe;
+}
+
+.free-pool-readiness-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--fb-gradient);
+  transition: width 0.25s ease;
+}
+
+.free-pool-workflow-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.free-pool-workflow-metrics > div {
+  display: grid;
+  gap: 6px;
+  min-height: 82px;
+  padding: 12px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.free-pool-workflow-metrics span {
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.free-pool-workflow-metrics strong {
+  color: var(--fb-text);
+  font-size: 20px;
+  line-height: 1.15;
+}
+
+.free-pool-workflow-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(280px, 0.95fr);
+  gap: 12px;
+}
+
+.free-pool-workflow-steps,
+.free-pool-workflow-actions-panel {
+  padding: 14px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: rgba(255, 255, 255, 0.86);
+}
+
+.free-pool-workflow-steps h4,
+.free-pool-workflow-actions-panel h4 {
+  margin: 0 0 10px;
+  color: var(--fb-text);
+  font-size: 14px;
+}
+
+.free-pool-workflow-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px 0;
+  border-top: 1px solid var(--fb-border-light);
+}
+
+.free-pool-workflow-step:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.free-pool-workflow-step > span {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.free-pool-workflow-step.complete > span {
+  color: #047857;
+  background: #dcfce7;
+}
+
+.free-pool-workflow-step.blocked > span {
+  color: #be123c;
+  background: #ffe4e9;
+}
+
+.free-pool-workflow-step strong,
+.free-pool-workflow-step em {
+  display: block;
+  line-height: 1.35;
+}
+
+.free-pool-workflow-step strong {
+  color: var(--fb-text);
+  font-size: 13px;
+}
+
+.free-pool-workflow-step em {
+  margin-top: 3px;
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+  font-style: normal;
+}
+
+.free-pool-workflow-actions-panel ol {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--fb-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.free-pool-workflow-actions-panel li::marker {
+  color: var(--fb-primary-strong);
+  font-weight: 700;
+}
+
+/* ============================================================
    Summary Bar
    ============================================================ */
 .fallback-summary-bar {
@@ -1974,6 +2177,15 @@
   .fallback-top3-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .free-pool-workflow-hero,
+  .free-pool-workflow-body {
+    grid-template-columns: 1fr;
+  }
+
+  .free-pool-workflow-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media screen and (max-width: 950px) {
@@ -2067,6 +2279,18 @@
   .fallback-summary-bar {
     padding: 10px 12px;
     font-size: 13px;
+  }
+
+  .free-pool-workflow-dashboard {
+    padding: 12px;
+  }
+
+  .free-pool-workflow-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .free-pool-readiness-meter strong {
+    font-size: 22px;
   }
 }
 

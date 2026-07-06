@@ -12,11 +12,13 @@ import {
 } from './gatewayConfigApi';
 import FreeProvidersEditor from './FreeProvidersEditor';
 import {
+  buildFreePoolWorkflowSummary,
   indexUsageRows,
   isAutoFreeDeployment,
   loadFreePoolDashboardData,
   providerFromDeploymentId,
 } from './freePoolUtils';
+import FreePoolWorkflowDashboard from './FreePoolWorkflowDashboard';
 
 const POOL_LABELS = {
   free: '免费池',
@@ -182,6 +184,12 @@ const FreeModelPool = () => {
   }, [config, runtimeRows]);
 
   const enabledFreeCount = freeDeployments.filter((dep) => dep.enabled !== false).length;
+  const workflowSummary = useMemo(() => buildFreePoolWorkflowSummary({
+    config,
+    freeDeployments,
+    usageRows,
+    usageAvailable,
+  }), [config, freeDeployments, usageRows, usageAvailable]);
 
   if (loading) {
     return (
@@ -251,6 +259,8 @@ const FreeModelPool = () => {
           </Button>
         </div>
       </div>
+
+      <FreePoolWorkflowDashboard summary={workflowSummary} />
 
       <section className='fallback-virtual-panel'>
         <div className='fallback-virtual-header'>

@@ -1,5 +1,6 @@
 import {
   buildClearKeysProviderConfig,
+  buildFreePoolWorkflowSummary,
   buildFreeProviderRows,
   buildReplaceKeysProviderConfig,
   indexUsageRows,
@@ -213,5 +214,67 @@ describe('freePoolUtils', () => {
     expect(result.usageRows).toEqual([]);
     expect(result.usageAvailable).toBe(false);
     expect(result.usageError).toBe('Usage data is unavailable.');
+  });
+
+  it('summarizes a ready free pool workflow', () => {
+    const summary = buildFreePoolWorkflowSummary({
+      config: {
+        free_providers: {
+          groq: { enabled: true, key_count: 2 },
+          aihorde: { enabled: true, keyless: true },
+        },
+        free_provider_catalog: [
+          { name: 'groq', requires_key: true },
+          { name: 'aihorde', keyless: true },
+        ],
+        virtual_models: {
+          'cct/free': { enabled: true, pools: ['free'], strategy: 'free_first' },
+        },
+      },
+      freeDeployments: [
+        { id: 'free:groq-1', enabled: true, runtime: { health: 'valid' } },
+        { id: 'free:aihorde-1', enabled: true, runtime: { health: 'valid' } },
+      ],
+      usageRows: [{ provider: 'groq', total_tokens: 120, request_count: 3 }],
+      usageAvailable: true,
+    });
+
+    expect(summary.readinessScore).toBe(4);
+    expect(summary.readinessTotal).toBe(4);
+    expect(summary.readyProviderCount).toBe(2);
+    expect(summary.enabledDeploymentCount).toBe(2);
+    expect(summary.risks).toEqual([]);
+    expect(summary.nextActions).toContain('Run a small request through cct/free and watch usage grow.');
+  });
+
+  it('reports missing workflow pieces as risks and next actions', () => {
+    const summary = buildFreePoolWorkflowSummary({
+      config: {
+        free_providers: {
+          groq: { enabled: true, key_count: 0 },
+        },
+        free_provider_catalog: [{ name: 'groq', requires_key: true }],
+        virtual_models: {
+          'cct/free': { enabled: false, pools: ['free'], strategy: 'free_first' },
+        },
+      },
+      freeDeployments: [],
+      usageRows: [],
+      usageAvailable: false,
+    });
+
+    expect(summary.readinessScore).toBe(0);
+    expect(summary.risks.map((risk) => risk.key)).toEqual([
+      'virtual-model-disabled',
+      'no-ready-provider',
+      'no-enabled-deployment',
+      'usage-unavailable',
+    ]);
+    expect(summary.nextActions).toEqual([
+      'Enable cct/free virtual model.',
+      'Enable at least one provider with a stored key or keyless access.',
+      'Sync the free pool to generate deployments.',
+      'Check the free-pool usage endpoint before relying on quota signals.',
+    ]);
   });
 });

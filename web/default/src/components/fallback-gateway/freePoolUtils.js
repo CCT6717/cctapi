@@ -106,6 +106,138 @@ export const buildFreeProviderRows = (freeProviders = {}, catalog = []) => {
   return rows;
 };
 
+export const buildFreePoolWorkflowSummary = ({
+  config = {},
+  freeDeployments = [],
+  usageRows = [],
+  usageAvailable = true,
+} = {}) => {
+  const freeModel = config?.virtual_models?.['cct/free'];
+  const providerRows = buildFreeProviderRows(
+    config?.free_providers || {},
+    config?.free_provider_catalog || [],
+  );
+  const readyProviders = providerRows.filter((provider) =>
+    provider.enabled && (provider.keyless || Number(provider.key_count || 0) > 0)
+  );
+  const enabledDeployments = (Array.isArray(freeDeployments) ? freeDeployments : [])
+    .filter((deployment) => deployment.enabled !== false);
+  const invalidRuntimeCount = enabledDeployments.filter((deployment) =>
+    ['invalid', 'critical', 'failed'].includes(String(deployment.runtime?.health || '').toLowerCase())
+  ).length;
+
+  const hasFreeModel = !!freeModel;
+  const virtualModelReady = hasFreeModel && freeModel.enabled !== false;
+  const providerReady = readyProviders.length > 0;
+  const deploymentReady = enabledDeployments.length > 0;
+  const telemetryReady = usageAvailable !== false;
+  const readinessChecks = [
+    virtualModelReady,
+    providerReady,
+    deploymentReady,
+    telemetryReady,
+  ];
+  const readinessScore = readinessChecks.filter(Boolean).length;
+  const risks = [];
+  const nextActions = [];
+
+  if (!hasFreeModel) {
+    risks.push({
+      key: 'virtual-model-missing',
+      level: 'critical',
+      text: 'cct/free virtual model is missing.',
+    });
+    nextActions.push('Create cct/free virtual model.');
+  } else if (!virtualModelReady) {
+    risks.push({
+      key: 'virtual-model-disabled',
+      level: 'critical',
+      text: 'cct/free virtual model is disabled.',
+    });
+    nextActions.push('Enable cct/free virtual model.');
+  }
+
+  if (!providerReady) {
+    risks.push({
+      key: 'no-ready-provider',
+      level: 'critical',
+      text: 'No enabled provider has a stored key or keyless access.',
+    });
+    nextActions.push('Enable at least one provider with a stored key or keyless access.');
+  }
+
+  if (!deploymentReady) {
+    risks.push({
+      key: 'no-enabled-deployment',
+      level: 'critical',
+      text: 'No generated free deployment is enabled.',
+    });
+    nextActions.push('Sync the free pool to generate deployments.');
+  }
+
+  if (invalidRuntimeCount > 0) {
+    risks.push({
+      key: 'runtime-invalid',
+      level: 'warning',
+      text: `${invalidRuntimeCount} generated deployment(s) report unhealthy runtime state.`,
+    });
+    nextActions.push('Review unhealthy generated deployments before routing production traffic.');
+  }
+
+  if (!telemetryReady) {
+    risks.push({
+      key: 'usage-unavailable',
+      level: 'warning',
+      text: 'Usage telemetry is unavailable.',
+    });
+    nextActions.push('Check the free-pool usage endpoint before relying on quota signals.');
+  }
+
+  if (nextActions.length === 0 || usageRows.length > 0) {
+    nextActions.push('Run a small request through cct/free and watch usage grow.');
+  }
+
+  return {
+    readinessScore,
+    readinessTotal: readinessChecks.length,
+    readinessPercent: Math.round((readinessScore / readinessChecks.length) * 100),
+    providerCount: providerRows.length,
+    readyProviderCount: readyProviders.length,
+    deploymentCount: Array.isArray(freeDeployments) ? freeDeployments.length : 0,
+    enabledDeploymentCount: enabledDeployments.length,
+    usageRowCount: Array.isArray(usageRows) ? usageRows.length : 0,
+    invalidRuntimeCount,
+    risks,
+    nextActions,
+    steps: [
+      {
+        key: 'virtual-model',
+        label: 'cct/free virtual model',
+        complete: virtualModelReady,
+        detail: virtualModelReady ? 'enabled' : 'needs attention',
+      },
+      {
+        key: 'providers',
+        label: 'ready providers',
+        complete: providerReady,
+        detail: `${readyProviders.length} / ${providerRows.length}`,
+      },
+      {
+        key: 'deployments',
+        label: 'generated deployments',
+        complete: deploymentReady,
+        detail: `${enabledDeployments.length} / ${Array.isArray(freeDeployments) ? freeDeployments.length : 0}`,
+      },
+      {
+        key: 'usage',
+        label: 'usage telemetry',
+        complete: telemetryReady,
+        detail: telemetryReady ? `${Array.isArray(usageRows) ? usageRows.length : 0} rows` : 'unavailable',
+      },
+    ],
+  };
+};
+
 export const indexUsageRows = (rows = []) => {
   const index = {};
   (Array.isArray(rows) ? rows : []).forEach((row) => {
