@@ -549,6 +549,15 @@
   box-shadow: var(--fb-shadow-md);
 }
 
+.fallback-page .fallback-virtual-panel,
+.fallback-page .fallback-subsection {
+  padding: 14px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+}
+
 .fallback-content-toolbar {
   display: flex;
   align-items: center;
@@ -2437,6 +2446,15 @@
   border: 1px solid var(--fb-border) !important;
 }
 
+.fallback-page .ui.table td,
+.fallback-page .ui.table th {
+  vertical-align: top !important;
+}
+
+.fallback-page .ui.table td {
+  overflow-wrap: anywhere;
+}
+
 .fallback-page .ui.table thead th {
   background: #eef3fb !important;
   color: #335070 !important;
@@ -2459,6 +2477,15 @@
 .fallback-page .ui.label {
   border-radius: 999px !important;
   font-weight: 500 !important;
+}
+
+.fallback-page .ui.input > input,
+.fallback-page .ui.form textarea,
+.fallback-page select {
+  border-color: var(--fb-border) !important;
+  border-radius: var(--fb-radius-sm) !important;
+  color: var(--fb-text) !important;
+  background: var(--fb-surface) !important;
 }
 
 /* --- Ant Design shell compatibility --- */

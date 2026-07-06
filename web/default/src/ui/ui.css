@@ -78,9 +78,12 @@
   gap: 10px;
 }
 
+.cct-admin-card {
+  border-radius: 8px;
+}
+
 .cct-admin-card.ant-card {
   border-color: rgba(37, 99, 235, 0.16);
-  border-radius: 8px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
   box-shadow: 0 6px 16px rgba(37, 99, 235, 0.06);
 }
