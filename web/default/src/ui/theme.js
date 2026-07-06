@@ -1,16 +1,16 @@
 export const cctAntdTheme = {
   token: {
-    colorPrimary: '#1683ff',
-    colorPrimaryHover: '#006dff',
-    colorPrimaryActive: '#005bd8',
-    colorSuccess: '#10b981',
-    colorWarning: '#f97316',
-    colorError: '#f43f5e',
-    colorInfo: '#0ea5e9',
+    colorPrimary: '#2563eb',
+    colorPrimaryHover: '#1d4ed8',
+    colorPrimaryActive: '#1e40af',
+    colorSuccess: '#16a34a',
+    colorWarning: '#d97706',
+    colorError: '#dc2626',
+    colorInfo: '#0284c7',
     colorText: '#172033',
     colorTextSecondary: '#53627a',
-    colorBorder: '#cbd8ea',
-    colorBgLayout: '#f4f8ff',
+    colorBorder: '#c8d3e3',
+    colorBgLayout: '#f6f8fc',
     colorBgContainer: '#ffffff',
     borderRadius: 8,
     fontFamily:
@@ -20,18 +20,18 @@ export const cctAntdTheme = {
     Button: {
       borderRadius: 8,
       controlHeight: 34,
-      primaryShadow: '0 8px 18px rgba(22, 131, 255, 0.18)',
+      primaryShadow: '0 4px 12px rgba(37, 99, 235, 0.14)',
     },
     Card: {
       borderRadiusLG: 8,
       paddingLG: 18,
-      boxShadowTertiary: '0 8px 22px rgba(22, 131, 255, 0.09)',
+      boxShadowTertiary: '0 6px 16px rgba(37, 99, 235, 0.06)',
     },
     Table: {
       borderRadius: 8,
-      headerBg: '#edf6ff',
+      headerBg: '#eef3fb',
       headerColor: '#335070',
-      rowHoverBg: '#f1f8ff',
+      rowHoverBg: '#f7faff',
     },
     Tag: {
       borderRadiusSM: 999,
