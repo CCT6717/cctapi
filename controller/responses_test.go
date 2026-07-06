@@ -331,3 +331,39 @@ func TestRelayResponsesStreamConvertsSSEAndUsesFinalHeadersOnly(t *testing.T) {
 		t.Fatalf("expected response.completed event, got %q", body)
 	}
 }
+
+func TestRelayResponsesStreamEmitsFailedEventForEmptyNonOKCapture(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalRelay := relayResponsesRelay
+	relayResponsesRelay = func(c *gin.Context) {
+		c.Writer.WriteHeader(http.StatusBadGateway)
+	}
+	defer func() {
+		relayResponsesRelay = originalRelay
+	}()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(`{"model":"cct/free","input":"ping","stream":true}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	RelayResponses(c)
+
+	if rec.Code != http.StatusBadGateway {
+		t.Fatalf("expected status 502, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: response.failed\n") {
+		t.Fatalf("expected response.failed event, got %q", body)
+	}
+	if strings.Contains(body, "event: response.created\n") {
+		t.Fatalf("did not expect response.created event, got %q", body)
+	}
+	if strings.Contains(body, "event: response.completed\n") {
+		t.Fatalf("did not expect response.completed event, got %q", body)
+	}
+	if !strings.Contains(body, "\"status_code\":502") {
+		t.Fatalf("expected preserved status in failure payload, got %q", body)
+	}
+}

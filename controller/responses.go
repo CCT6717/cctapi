@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -177,6 +178,29 @@ func RelayResponses(c *gin.Context) {
 }
 
 func writeResponsesStream(c *gin.Context, raw []byte, modelName string, status int) {
+	if status < http.StatusOK || status >= http.StatusMultipleChoices {
+		if !responsesStreamHasUsefulDataFrame(raw) {
+			events := []relaymodel.ResponsesSSEEvent{{
+				Event: "response.failed",
+				Data: map[string]any{
+					"status_code": status,
+					"error": map[string]any{
+						"message": fmt.Sprintf("upstream stream returned HTTP %d without any SSE data", status),
+						"type":    "upstream_error",
+					},
+				},
+			}}
+			c.Writer.Header().Set("Content-Type", "text/event-stream")
+			c.Writer.Header().Set("Cache-Control", "no-cache")
+			c.Writer.Header().Set("Connection", "keep-alive")
+			c.Status(status)
+			if err := relaymodel.WriteResponsesSSE(c.Writer, events); err != nil {
+				c.Error(err)
+			}
+			return
+		}
+	}
+
 	events, err := relaymodel.ChatCompletionStreamToResponsesEvents(raw, modelName)
 	if err != nil {
 		claudeutil.WriteClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_error", err.Error())
@@ -189,4 +213,27 @@ func writeResponsesStream(c *gin.Context, raw []byte, modelName string, status i
 	if err := relaymodel.WriteResponsesSSE(c.Writer, events); err != nil {
 		c.Error(err)
 	}
+}
+
+func responsesStreamHasUsefulDataFrame(raw []byte) bool {
+	var errPayload struct {
+		StatusCode int              `json:"status_code"`
+		Error      relaymodel.Error `json:"error"`
+	}
+	if err := json.Unmarshal(raw, &errPayload); err == nil && errPayload.Error.Message != "" {
+		return true
+	}
+
+	for _, line := range bytes.Split(raw, []byte{'\n'}) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		payload := bytes.TrimSpace(bytes.TrimPrefix(line, []byte("data:")))
+		if len(payload) == 0 || bytes.Equal(payload, []byte("[DONE]")) {
+			continue
+		}
+		return true
+	}
+	return false
 }
