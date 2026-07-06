@@ -68,3 +68,17 @@ func TestBuildHealthProbeRequestAppliesMaxOutputTokenQuirk(t *testing.T) {
 		t.Fatalf("health body must not stream, got %s", string(body))
 	}
 }
+
+func TestBuildHealthProbeBodyAppliesMaxOutputTokenQuirk(t *testing.T) {
+	body := buildHealthProbeBody(
+		DeploymentConfig{RealModel: "synthetic-model"},
+		&FreeProviderQuirks{MaxOutputTokens: 7},
+		13,
+	)
+	if !strings.Contains(body, `"max_tokens":7`) {
+		t.Fatalf("expected max_tokens capped by quirk, got %s", body)
+	}
+	if !strings.Contains(body, `"model":"synthetic-model"`) {
+		t.Fatalf("expected model in body, got %s", body)
+	}
+}

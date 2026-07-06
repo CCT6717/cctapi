@@ -181,7 +181,7 @@ func buildHealthProbeRequest(deploymentID string, channel *dbmodel.Channel, dep 
 	}
 	providerName, _ := FreeProviderNameFromDeploymentID(deploymentID)
 	quirks := freeProviderQuirks(providerName)
-	body := buildHealthProbeBody(dep, quirks)
+	body := buildHealthProbeBody(dep, quirks, 1)
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/chat/completions", strings.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -196,8 +196,11 @@ func buildHealthProbeRequest(deploymentID string, channel *dbmodel.Channel, dep 
 	return req, nil
 }
 
-func buildHealthProbeBody(dep DeploymentConfig, quirks *FreeProviderQuirks) string {
-	maxTokens := 1
+func buildHealthProbeBody(dep DeploymentConfig, quirks *FreeProviderQuirks, requestedMaxTokens int) string {
+	maxTokens := requestedMaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 1
+	}
 	if quirks != nil && quirks.MaxOutputTokens > 0 && quirks.MaxOutputTokens < maxTokens {
 		maxTokens = quirks.MaxOutputTokens
 	}
