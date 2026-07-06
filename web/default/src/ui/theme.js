@@ -1,6 +1,8 @@
 export const cctAntdTheme = {
   token: {
     colorPrimary: '#1683ff',
+    colorPrimaryHover: '#006dff',
+    colorPrimaryActive: '#005bd8',
     colorSuccess: '#10b981',
     colorWarning: '#f97316',
     colorError: '#f43f5e',
@@ -18,10 +20,12 @@ export const cctAntdTheme = {
     Button: {
       borderRadius: 8,
       controlHeight: 34,
+      primaryShadow: '0 8px 18px rgba(22, 131, 255, 0.18)',
     },
     Card: {
       borderRadiusLG: 8,
       paddingLG: 18,
+      boxShadowTertiary: '0 8px 22px rgba(22, 131, 255, 0.09)',
     },
     Table: {
       borderRadius: 8,
