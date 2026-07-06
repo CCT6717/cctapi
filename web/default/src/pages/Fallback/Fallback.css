@@ -5,39 +5,40 @@
 
 /* --- CSS Variables --- */
 :root {
-  --fb-primary: #3b82f6;
-  --fb-primary-light: rgba(59, 130, 246, 0.08);
-  --fb-primary-lighter: #eff6ff;
-  --fb-purple: #8b5cf6;
-  --fb-gradient: linear-gradient(135deg, #3b82f6, #8b5cf6);
-  --fb-bg: #f8fafc;
+  --fb-primary: #1683ff;
+  --fb-primary-light: rgba(22, 131, 255, 0.14);
+  --fb-primary-lighter: #e8f3ff;
+  --fb-purple: #a855f7;
+  --fb-cyan: #06b6d4;
+  --fb-gradient: linear-gradient(135deg, #1683ff, #06b6d4 48%, #a855f7);
+  --fb-bg: #f4f8ff;
   --fb-surface: #ffffff;
-  --fb-border: #e3e8ef;
-  --fb-border-light: #eef2f6;
-  --fb-border-medium: #d9e0ea;
+  --fb-border: #d8e4f3;
+  --fb-border-light: #edf4fb;
+  --fb-border-medium: #cbd8ea;
   --fb-text: #172033;
   --fb-text-secondary: #53627a;
   --fb-text-muted: #8a9bb5;
   --fb-text-light: #94a3b8;
-  --fb-shadow-sm: 0 1px 3px rgba(16, 24, 40, 0.05);
-  --fb-shadow-md: 0 4px 12px rgba(16, 24, 40, 0.07);
-  --fb-shadow-lg: 0 12px 28px rgba(16, 24, 40, 0.10);
+  --fb-shadow-sm: 0 6px 18px rgba(22, 131, 255, 0.07);
+  --fb-shadow-md: 0 10px 24px rgba(22, 131, 255, 0.11);
+  --fb-shadow-lg: 0 18px 38px rgba(22, 131, 255, 0.15);
   --fb-radius-sm: 8px;
   --fb-radius-md: 10px;
   --fb-radius-lg: 12px;
   --fb-radius-xl: 14px;
   --fb-font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --fb-font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
-  --fb-success: #22c55e;
+  --fb-success: #10b981;
   --fb-success-bg: #dcfce7;
-  --fb-success-border: #bbf7d0;
-  --fb-warning: #f59e0b;
-  --fb-warning-bg: #fef3c7;
-  --fb-warning-border: #fde68a;
-  --fb-danger: #ef4444;
-  --fb-danger-bg: #fee2e2;
-  --fb-danger-border: #fecaca;
-  --fb-info: #3b82f6;
+  --fb-success-border: #86efac;
+  --fb-warning: #f97316;
+  --fb-warning-bg: #ffedd5;
+  --fb-warning-border: #fdba74;
+  --fb-danger: #f43f5e;
+  --fb-danger-bg: #ffe4e9;
+  --fb-danger-border: #fda4af;
+  --fb-info: #0ea5e9;
 }
 
 /* --- Font Stack - Inter (loaded via public/index.html) + system CJK --- */
@@ -85,7 +86,8 @@
   padding: 20px 24px 40px;
   color: var(--fb-text);
   background: var(--fb-bg);
-  border-top: 2px solid var(--fb-primary);
+  border-top: 3px solid transparent;
+  border-image: var(--fb-gradient) 1;
 }
 
 /* ============================================================
@@ -169,13 +171,13 @@
   padding: 14px;
   border: 1px solid var(--fb-border);
   border-radius: var(--fb-radius-sm);
-  background: linear-gradient(180deg, var(--fb-surface) 0%, #fbfcfe 100%);
+  background: linear-gradient(180deg, var(--fb-surface) 0%, #f6fbff 100%);
   transition: all 0.2s ease;
 }
 
 .fallback-guide-card:hover {
-  border-color: var(--fb-border-medium);
-  box-shadow: var(--fb-shadow-sm);
+  border-color: rgba(22, 131, 255, 0.35);
+  box-shadow: var(--fb-shadow-md);
 }
 
 .fallback-guide-icon {
@@ -400,14 +402,14 @@
   color: var(--fb-text);
   border-color: var(--panel-accent, var(--fb-primary));
   box-shadow: var(--fb-shadow-md);
-  background: var(--fb-bg);
+  background: linear-gradient(180deg, #ffffff 0%, #f2f8ff 100%);
 }
 
 .fallback-nav-card.active {
-  background: var(--fb-primary-lighter);
+  background: linear-gradient(180deg, #ffffff 0%, var(--fb-primary-lighter) 100%);
   border-color: var(--panel-accent, var(--fb-primary));
   border-width: 1px;
-  box-shadow: none;
+  box-shadow: 0 12px 28px rgba(22, 131, 255, 0.14);
   color: var(--fb-text);
 }
 
@@ -420,29 +422,30 @@
   border: none;
   border-radius: 50%;
   color: var(--panel-accent, var(--fb-primary));
-  background: rgba(59, 130, 246, 0.1);
+  background: rgba(22, 131, 255, 0.14);
   transition: all 0.2s ease;
 }
 
 /* Per-card icon background color based on accent */
-.fallback-nav-card[style*="--panel-accent: #2563eb"] .fallback-nav-icon,
-.fallback-nav-card:nth-child(1) .fallback-nav-icon {
-  background: #eff6ff;
+.fallback-nav-card[style*="--panel-accent: #0ea5e9"] .fallback-nav-icon {
+  background: #e0f2fe;
 }
-.fallback-nav-card[style*="--panel-accent: #0f9f9a"] .fallback-nav-icon,
-.fallback-nav-card:nth-child(2) .fallback-nav-icon {
+.fallback-nav-card[style*="--panel-accent: #16a34a"] .fallback-nav-icon {
+  background: #dcfce7;
+}
+.fallback-nav-card[style*="--panel-accent: #2563eb"] .fallback-nav-icon {
+  background: #dbeafe;
+}
+.fallback-nav-card[style*="--panel-accent: #0f9f9a"] .fallback-nav-icon {
   background: #f0fdfa;
 }
-.fallback-nav-card[style*="--panel-accent: #7c3aed"] .fallback-nav-icon,
-.fallback-nav-card:nth-child(3) .fallback-nav-icon {
-  background: #f5f3ff;
+.fallback-nav-card[style*="--panel-accent: #7c3aed"] .fallback-nav-icon {
+  background: #ede9fe;
 }
-.fallback-nav-card[style*="--panel-accent: #d97706"] .fallback-nav-icon,
-.fallback-nav-card:nth-child(4) .fallback-nav-icon {
-  background: #fffbeb;
+.fallback-nav-card[style*="--panel-accent: #d97706"] .fallback-nav-icon {
+  background: #ffedd5;
 }
-.fallback-nav-card[style*="--panel-accent: #475569"] .fallback-nav-icon,
-.fallback-nav-card:nth-child(5) .fallback-nav-icon {
+.fallback-nav-card[style*="--panel-accent: #475569"] .fallback-nav-icon {
   background: #f1f5f9;
 }
 
@@ -491,7 +494,7 @@
 .fallback-nav-card:hover .fallback-nav-refresh-badge,
 .fallback-nav-card.active .fallback-nav-refresh-badge {
   color: var(--panel-accent, var(--fb-primary));
-  background: rgba(59, 130, 246, 0.08);
+  background: var(--fb-primary-light);
 }
 
 /* ============================================================
@@ -577,13 +580,13 @@
   background: var(--fb-primary) !important;
   border-color: var(--fb-primary) !important;
   color: var(--fb-surface) !important;
-  box-shadow: 0 2px 6px rgba(59, 130, 246, 0.25) !important;
+  box-shadow: 0 4px 12px rgba(22, 131, 255, 0.28) !important;
 }
 .fallback-content-toolbar .ui.button.primary:hover,
 .fallback-content-panel .ui.button.primary:hover {
-  background: #2563eb !important;
-  border-color: #2563eb !important;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35) !important;
+  background: #006fee !important;
+  border-color: #006fee !important;
+  box-shadow: 0 8px 18px rgba(22, 131, 255, 0.38) !important;
 }
 
 /* Button group spacing */
@@ -1174,8 +1177,8 @@
   width: 9px;
   height: 18px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #3b82f6, #8b5cf6);
-  box-shadow: 0 0 0 4px #eff6ff;
+  background: var(--fb-gradient);
+  box-shadow: 0 0 0 4px #e8f3ff;
 }
 
 .fallback-subsection:has(.fallback-score-summary) h3::after {
@@ -1301,8 +1304,8 @@
   width: 9px;
   height: 18px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #3b82f6, #8b5cf6);
-  box-shadow: 0 0 0 4px #eff6ff;
+  background: var(--fb-gradient);
+  box-shadow: 0 0 0 4px #e8f3ff;
 }
 
 .fallback-score-card-title span {
@@ -1430,7 +1433,7 @@
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  background: var(--fb-gradient);
   transition: transform 0.35s ease, filter 0.2s ease;
 }
 
@@ -1457,7 +1460,7 @@
 }
 
 .fallback-score-trend-row .fallback-score-trend-meta strong {
-  color: #2563eb;
+  color: var(--fb-primary);
 }
 
 .fallback-score-trend-row[data-score-band='high'] .fallback-score-trend-meta strong {
@@ -1465,7 +1468,7 @@
 }
 
 .fallback-score-trend-row[data-score-band='mid'] .fallback-score-trend-meta strong {
-  color: #2563eb;
+  color: var(--fb-primary);
 }
 
 .fallback-score-trend-row[data-score-band='low'] .fallback-score-trend-meta strong {
@@ -1629,7 +1632,7 @@
 }
 
 .fallback-subsection:has(.fallback-score-summary) .fallback-score-summary-value:not(.fallback-score-high):not(.fallback-score-low) {
-  color: #2563eb;
+  color: var(--fb-primary);
 }
 
 .fallback-subsection:has(.fallback-score-summary) .fallback-score-summary-value.fallback-score-high {
@@ -1693,7 +1696,7 @@
   inset: 0 auto 0 0;
   width: var(--score-percent, 0%);
   border-radius: inherit;
-  background: linear-gradient(90deg, #3b82f6, #8b5cf6);
+  background: var(--fb-gradient);
   transition: transform 0.35s ease, filter 0.2s ease;
 }
 
@@ -2038,7 +2041,7 @@
   line-height: 1.5;
 }
 .fallback-alert-tag.info {
-  background: #eff6ff;
+  background: #e8f3ff;
   color: #1d4ed8;
 }
 .fallback-alert-tag.warning {
@@ -2093,7 +2096,7 @@
   padding: 0;
   border-color: var(--fb-border-medium);
   background: var(--fb-surface);
-  box-shadow: var(--fb-shadow-sm);
+  box-shadow: var(--fb-shadow-md);
 }
 
 .fallback-guide-panel.cct-admin-card.ant-card {

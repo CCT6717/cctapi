@@ -1,14 +1,14 @@
 export const cctAntdTheme = {
   token: {
-    colorPrimary: '#2563eb',
-    colorSuccess: '#16a34a',
-    colorWarning: '#d97706',
-    colorError: '#dc2626',
-    colorInfo: '#2563eb',
+    colorPrimary: '#1683ff',
+    colorSuccess: '#10b981',
+    colorWarning: '#f97316',
+    colorError: '#f43f5e',
+    colorInfo: '#0ea5e9',
     colorText: '#172033',
     colorTextSecondary: '#53627a',
-    colorBorder: '#d9e0ea',
-    colorBgLayout: '#f8fafc',
+    colorBorder: '#cbd8ea',
+    colorBgLayout: '#f4f8ff',
     colorBgContainer: '#ffffff',
     borderRadius: 8,
     fontFamily:
@@ -25,9 +25,9 @@ export const cctAntdTheme = {
     },
     Table: {
       borderRadius: 8,
-      headerBg: '#f8fafc',
-      headerColor: '#475569',
-      rowHoverBg: '#f8fafc',
+      headerBg: '#edf6ff',
+      headerColor: '#335070',
+      rowHoverBg: '#f1f8ff',
     },
     Tag: {
       borderRadiusSM: 999,
