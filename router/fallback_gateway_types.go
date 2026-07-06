@@ -90,6 +90,7 @@ type gatewayV2ConfigInput struct {
 type gatewayV2FreeProviderInput struct {
 	Enabled        bool                     `json:"enabled"`
 	Keys           []string                 `json:"keys,omitempty"`
+	ClearKeys      bool                     `json:"clear_keys,omitempty"`
 	Models         []string                 `json:"models,omitempty"`
 	LimitsOverride *gatewayV2LimitsOverride `json:"limits_override,omitempty"`
 }

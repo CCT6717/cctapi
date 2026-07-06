@@ -835,6 +835,7 @@ func TestGatewayUpdateConfig_ValidLimitsOverrideAccepted(t *testing.T) {
 				"free_providers": map[string]interface{}{
 					"groq": map[string]interface{}{
 						"enabled":         true,
+						"keys":            []string{"gsk_limits_test_key_not_real"},
 						"limits_override": tt.override,
 					},
 				},
@@ -874,6 +875,100 @@ func TestGatewayUpdateConfig_ValidLimitsOverrideAccepted(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGatewayUpdateConfig_UnknownFreeProviderRejected(t *testing.T) {
+	setupGatewayConfigReadOnly(t, baseValidConfigJSON)
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"not-real": {"enabled": true}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "unknown free provider") {
+		t.Fatalf("expected unknown provider message, got %s", w.Body.String())
+	}
+}
+
+func TestGatewayUpdateConfig_RequiresKeyEnabledWithoutKeysRejected(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigJSON)
+	defer cleanup()
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": true}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "requires at least one key") {
+		t.Fatalf("expected requires-key message, got %s", w.Body.String())
+	}
+}
+
+func TestGatewayUpdateConfig_KeylessProviderCanEnableWithoutKeys(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigJSON)
+	defer cleanup()
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"pollinations": {"enabled": true}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	fp := fallback.GetConfig().FreeProviders["pollinations"]
+	if !fp.Enabled || len(fp.Keys) != 0 {
+		t.Fatalf("expected enabled keyless provider with no keys, got %+v", fp)
+	}
+}
+
+func TestGatewayUpdateConfig_ClearKeysDeletesStoredKeys(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigWithFreeProviderJSON)
+	defer cleanup()
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": false, "clear_keys": true}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if got := fallback.GetConfig().FreeProviders["groq"].Keys; len(got) != 0 {
+		t.Fatalf("expected stored keys cleared, got %v", got)
+	}
+}
+
+func TestGatewayUpdateConfig_ClearKeysWithReplacementKeysRejected(t *testing.T) {
+	setupGatewayConfigReadOnly(t, baseValidConfigWithFreeProviderJSON)
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": false, "clear_keys": true, "keys": ["gsk_new"]}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "clear_keys cannot be combined with keys") {
+		t.Fatalf("expected clear conflict message, got %s", w.Body.String())
 	}
 }
 

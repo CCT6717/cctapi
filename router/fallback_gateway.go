@@ -59,21 +59,13 @@ func updateManualConfig(c *gin.Context) {
 		return
 	}
 
-	for name, fp := range payload.FreeProviders {
-		if fp.LimitsOverride != nil {
-			if err := fallback.ValidateFreeProviderLimits(toFreeProviderLimits(fp.LimitsOverride)); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"success": false,
-					"message": fmt.Sprintf("free_provider %q limits_override: %v", name, err),
-				})
-				return
-			}
-		}
-	}
-
 	current := fallback.CloneConfig()
 	if current == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "fallback config is not loaded"})
+		return
+	}
+	if err := validateGatewayFreeProviders(current.FreeProviders, payload.FreeProviders); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 
@@ -306,23 +298,14 @@ func updateGatewayConfig(c *gin.Context) {
 		return
 	}
 
-	// Step 3: validate free_provider limits_override.
-	for name, fp := range payload.FreeProviders {
-		if fp.LimitsOverride != nil {
-			if err := fallback.ValidateFreeProviderLimits(toFreeProviderLimits(fp.LimitsOverride)); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{
-					"success": false,
-					"message": fmt.Sprintf("free_provider %q limits_override: %v", name, err),
-				})
-				return
-			}
-		}
-	}
-
-	// Step 4: load current config and merge.
+	// Step 3: load current config and merge.
 	current := fallback.CloneConfig()
 	if current == nil {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": "fallback config is not loaded"})
+		return
+	}
+	if err := validateGatewayFreeProviders(current.FreeProviders, payload.FreeProviders); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "message": err.Error()})
 		return
 	}
 

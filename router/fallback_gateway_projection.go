@@ -1,6 +1,7 @@
 package router
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/songquanpeng/one-api/fallback"
@@ -48,20 +49,56 @@ func toFreeProviderLimits(v *gatewayV2LimitsOverride) *fallback.FreeProviderLimi
 	}
 }
 
+func sanitizedGatewayProviderKeys(keys []string) []string {
+	freshKeys := make([]string, 0, len(keys))
+	for _, k := range keys {
+		k = strings.TrimSpace(k)
+		if k == "" || strings.Contains(k, "*") {
+			continue
+		}
+		freshKeys = append(freshKeys, k)
+	}
+	return freshKeys
+}
+
+func validateGatewayFreeProviders(current map[string]fallback.FreeProviderConfig, payload map[string]gatewayV2FreeProviderInput) error {
+	for name, input := range payload {
+		if err := fallback.ValidateFreeProviderName(name); err != nil {
+			return err
+		}
+		replacementKeys := sanitizedGatewayProviderKeys(input.Keys)
+		if input.ClearKeys && len(replacementKeys) > 0 {
+			return fmt.Errorf("free_provider %q clear_keys cannot be combined with keys", name)
+		}
+		if input.LimitsOverride != nil {
+			if err := fallback.ValidateFreeProviderLimits(toFreeProviderLimits(input.LimitsOverride)); err != nil {
+				return fmt.Errorf("free_provider %q limits_override: %w", name, err)
+			}
+		}
+		meta := fallback.BuiltinFreeProviders[name]
+		existingKeys := 0
+		if current != nil {
+			existingKeys = len(current[name].Keys)
+		}
+		keyCountAfterSave := existingKeys
+		if input.ClearKeys {
+			keyCountAfterSave = 0
+		} else if len(replacementKeys) > 0 {
+			keyCountAfterSave = len(replacementKeys)
+		}
+		if input.Enabled && meta.RequiresKey && !meta.Keyless && keyCountAfterSave == 0 {
+			return fmt.Errorf("free_provider %q requires at least one key before it can be enabled", name)
+		}
+	}
+	return nil
+}
+
 func mergeGatewayFreeProviderInput(existing fallback.FreeProviderConfig, input gatewayV2FreeProviderInput) fallback.FreeProviderConfig {
 	keys := append([]string{}, existing.Keys...)
-	if len(input.Keys) > 0 {
-		freshKeys := make([]string, 0, len(input.Keys))
-		for _, k := range input.Keys {
-			k = strings.TrimSpace(k)
-			if k == "" || strings.Contains(k, "*") {
-				continue
-			}
-			freshKeys = append(freshKeys, k)
-		}
-		if len(freshKeys) > 0 {
-			keys = freshKeys
-		}
+	if input.ClearKeys {
+		keys = []string{}
+	} else if freshKeys := sanitizedGatewayProviderKeys(input.Keys); len(freshKeys) > 0 {
+		keys = freshKeys
 	}
 
 	models := append([]string{}, existing.Models...)
