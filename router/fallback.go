@@ -216,6 +216,8 @@ func SetFallbackRouter(router *gin.Engine) {
 			c.JSON(http.StatusOK, gin.H{"success": true, "message": "free pool synced successfully"})
 		})
 
+		adminGroup.GET("/free-pool/usage", getFreePoolUsage)
+
 		adminGroup.POST("/free-pool/cleanup/dry-run", func(c *gin.Context) {
 			report, err := fallback.DryRunCleanStale()
 			if err != nil {

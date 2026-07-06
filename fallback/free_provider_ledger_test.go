@@ -103,6 +103,47 @@ func TestRecordFreeProviderUsageIgnoresManualFreeDeploymentIDs(t *testing.T) {
 	}
 }
 
+func TestListFreeProviderUsageFiltersByProviderAndPeriod(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("InitFreeProviderLedgerStore failed: %v", err)
+	}
+	if err := RecordFreeProviderUsage("free:groq-001122ff", "llama-free", UsageInfo{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3}); err != nil {
+		t.Fatalf("record groq: %v", err)
+	}
+	if err := RecordFreeProviderUsage("free:nvidia-deadbeef", "qwen-free", UsageInfo{PromptTokens: 4, CompletionTokens: 5, TotalTokens: 9}); err != nil {
+		t.Fatalf("record nvidia: %v", err)
+	}
+
+	rows, err := ListFreeProviderUsage(FreeProviderUsageFilter{Provider: "groq", Period: todayString()})
+	if err != nil {
+		t.Fatalf("ListFreeProviderUsage failed: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Provider != "groq" || rows[0].KeyHash != "001122ff" {
+		t.Fatalf("unexpected rows: %+v", rows)
+	}
+}
+
+func TestListFreeProviderUsageDefaultsToToday(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("InitFreeProviderLedgerStore failed: %v", err)
+	}
+	if err := RecordFreeProviderUsage("free:groq-001122ff", "llama-free", UsageInfo{TotalTokens: 3}); err != nil {
+		t.Fatalf("record: %v", err)
+	}
+
+	rows, err := ListFreeProviderUsage(FreeProviderUsageFilter{})
+	if err != nil {
+		t.Fatalf("ListFreeProviderUsage failed: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Period != todayString() {
+		t.Fatalf("expected one current-period row, got %+v", rows)
+	}
+}
+
 func TestRecordFallbackDeploymentSuccessUpdatesDeploymentStateAndFreeProviderLedger(t *testing.T) {
 	cleanupDB := setupFreeProviderLedgerTestDB(t)
 	defer cleanupDB()

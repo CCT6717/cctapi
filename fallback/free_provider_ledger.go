@@ -26,6 +26,13 @@ type FreeProviderUsageLedger struct {
 	UpdatedAt        time.Time `json:"updated_at" gorm:"column:updated_at"`
 }
 
+type FreeProviderUsageFilter struct {
+	Provider  string
+	KeyHash   string
+	ModelName string
+	Period    string
+}
+
 func InitFreeProviderLedgerStore() error {
 	if model.DB == nil {
 		return fmt.Errorf("database is not initialized")
@@ -100,6 +107,34 @@ func RecordFreeProviderUsage(deploymentID string, modelName string, usage UsageI
 			"updated_at":        now,
 		}),
 	}).Create(&row).Error
+}
+
+func ListFreeProviderUsage(filter FreeProviderUsageFilter) ([]FreeProviderUsageLedger, error) {
+	if model.DB == nil {
+		return nil, fmt.Errorf("database is not initialized")
+	}
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		return nil, err
+	}
+	period := strings.TrimSpace(filter.Period)
+	if period == "" {
+		period = todayString()
+	}
+	query := model.DB.Model(&FreeProviderUsageLedger{}).Where("period = ?", period)
+	if provider := strings.TrimSpace(filter.Provider); provider != "" {
+		query = query.Where("provider = ?", provider)
+	}
+	if keyHash := strings.TrimSpace(filter.KeyHash); keyHash != "" {
+		query = query.Where("key_hash = ?", keyHash)
+	}
+	if modelName := strings.TrimSpace(filter.ModelName); modelName != "" {
+		query = query.Where("model_name = ?", modelName)
+	}
+	var rows []FreeProviderUsageLedger
+	if err := query.Order("updated_at DESC").Limit(500).Find(&rows).Error; err != nil {
+		return nil, err
+	}
+	return rows, nil
 }
 
 func GetFreeProviderUsage(provider string, keyHash string, modelName string, period string) (*FreeProviderUsageLedger, error) {
