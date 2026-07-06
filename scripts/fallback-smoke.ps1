@@ -374,3 +374,11 @@ try {
 
 Write-Host ''
 Write-Host 'Fallback smoke and fault scenarios passed.'
+
+# Route A smoke examples:
+# Invoke-RestMethod -Method Post "$BaseUrl/v1/responses" -Headers @{ Authorization = "Bearer $Token" } -ContentType "application/json" -Body (@{
+#   model = "cct/free"
+#   input = "ping"
+# } | ConvertTo-Json)
+#
+# Invoke-RestMethod -Method Get "$BaseUrl/api/fallback/free-pool/usage?provider=groq" -Headers @{ Authorization = "Bearer $AdminAccessToken" }
