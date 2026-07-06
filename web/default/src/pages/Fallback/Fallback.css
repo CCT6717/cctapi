@@ -2086,3 +2086,71 @@
   border-radius: 999px !important;
   font-weight: 500 !important;
 }
+
+/* --- Ant Design shell compatibility --- */
+.fallback-guide-panel.cct-admin-card.ant-card,
+.fallback-content-panel.cct-admin-card.ant-card {
+  padding: 0;
+  border-color: var(--fb-border-medium);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+}
+
+.fallback-guide-panel.cct-admin-card.ant-card {
+  margin-bottom: 14px;
+}
+
+.fallback-content-panel.cct-admin-card.ant-card {
+  border-radius: var(--fb-radius-lg);
+}
+
+.fallback-guide-panel.cct-admin-card.ant-card .ant-card-body {
+  padding: 12px 16px;
+}
+
+.fallback-content-panel.cct-admin-card.ant-card .ant-card-body {
+  padding: 18px;
+}
+
+.fallback-guide-head .ant-btn,
+.fallback-header-actions .ant-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-color: var(--fb-border);
+  color: var(--fb-text-secondary);
+  background: var(--fb-surface);
+  box-shadow: none;
+}
+
+.fallback-guide-head .ant-btn:hover,
+.fallback-header-actions .ant-btn:hover {
+  border-color: var(--fb-primary);
+  color: var(--fb-primary);
+  background: var(--fb-primary-lighter);
+}
+
+.fallback-header-actions .cct-status-tag {
+  font-family: var(--fb-font-mono);
+}
+
+.fallback-nav-icon svg,
+.fallback-guide-icon svg,
+.fallback-header-actions svg {
+  flex: 0 0 auto;
+}
+
+.fallback-nav-card:hover .fallback-nav-icon svg,
+.fallback-nav-card.active .fallback-nav-icon svg {
+  color: var(--fb-surface);
+}
+
+@media screen and (max-width: 768px) {
+  .fallback-guide-head .ant-btn {
+    margin-top: 10px;
+  }
+
+  .fallback-content-panel.cct-admin-card.ant-card .ant-card-body {
+    padding: 12px;
+  }
+}
