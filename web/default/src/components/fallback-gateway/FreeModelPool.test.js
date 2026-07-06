@@ -81,6 +81,9 @@ jest.mock('semantic-ui-react', () => {
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
+const findButtonByText = (scope, label) => Array.from(scope.querySelectorAll('button'))
+  .find((button) => button.textContent.trim() === label);
+
 describe('FreeModelPool', () => {
   let container;
   let root;
@@ -128,10 +131,9 @@ describe('FreeModelPool', () => {
       root.render(<FreeModelPool />);
     });
 
-    const panels = container.querySelectorAll('section.fallback-virtual-panel');
-    expect(panels.length).toBe(4);
-    expect(panels[2].querySelector('tbody tr div')).not.toBeNull();
-    expect(panels[2].querySelectorAll('tbody tr').length).toBe(1);
+    expect(container.textContent).toContain('用量数据不可用');
+    expect(container.textContent).toContain('用量数据不可用。');
+    expect(container.textContent).not.toContain('当前周期暂无用量记录');
   });
 
   test('renders workflow readiness and recommended next actions', async () => {
@@ -201,9 +203,17 @@ describe('FreeModelPool', () => {
     });
 
     const ops = container.querySelector('.free-provider-ops');
-    const searchInput = container.querySelector('.free-provider-filter-row input');
     expect(ops).not.toBeNull();
+    const searchInput = ops.querySelector('input[aria-label="搜索免费供应商"]');
     expect(searchInput).not.toBeNull();
+    expect(searchInput.getAttribute('placeholder')).toContain('搜索供应商');
+
+    const selectVisibleButton = findButtonByText(ops, '选择可见项');
+    const enableSelectedButton = findButtonByText(ops, '批量启用');
+    const disableSelectedButton = findButtonByText(ops, '批量停用');
+    expect(selectVisibleButton).toBeDefined();
+    expect(enableSelectedButton).toBeDefined();
+    expect(disableSelectedButton).toBeDefined();
     expect(container.textContent).toContain('Groq');
     expect(container.textContent).toContain('OpenRouter');
 
@@ -216,28 +226,23 @@ describe('FreeModelPool', () => {
       searchInput.dispatchEvent(new Event('input', { bubbles: true }));
     });
 
+    const providerRows = Array.from(container.querySelectorAll('tr.free-provider-row'));
     expect(container.textContent).toContain('Groq');
+    expect(providerRows.map((row) => row.textContent).join(' ')).not.toContain('OpenRouter');
     expect(container.querySelector('.free-provider-count strong')?.textContent).toBe('1');
-    expect(container.querySelectorAll('tr.free-provider-row').length).toBe(1);
+    expect(providerRows.length).toBe(1);
     expect(container.querySelector('tr.free-provider-row.is-enabled.needs-key')).not.toBeNull();
 
-    const bulkButtons = Array.from(
-      container.querySelectorAll('.free-provider-bulk-row button'),
-    );
-
     await act(async () => {
-      const selectVisibleButton = bulkButtons[0];
-      expect(selectVisibleButton).toBeDefined();
       selectVisibleButton.click();
     });
 
     await act(async () => {
-      const disableSelectedButton = bulkButtons[3];
-      expect(disableSelectedButton).toBeDefined();
       disableSelectedButton.click();
     });
 
-    expect(container.querySelector('.free-provider-selected-count')?.textContent).toContain('1');
+    expect(container.querySelector('.free-provider-selected-count')?.textContent).toContain('已选择 1 项');
+    expect(container.textContent).toContain('已停用');
     expect(container.querySelector('tr.free-provider-row.is-disabled.needs-key')).not.toBeNull();
   });
 });
