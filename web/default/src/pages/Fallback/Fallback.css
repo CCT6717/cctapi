@@ -2488,6 +2488,14 @@
   background: var(--fb-surface) !important;
 }
 
+.fallback-page .ui.input.focus > input,
+.fallback-page .ui.input > input:focus,
+.fallback-page .ui.form textarea:focus,
+.fallback-page select:focus {
+  border-color: var(--fb-primary) !important;
+  box-shadow: 0 0 0 3px var(--fb-primary-light) !important;
+}
+
 /* --- Ant Design shell compatibility --- */
 .fallback-guide-panel.cct-admin-card.ant-card,
 .fallback-content-panel.cct-admin-card.ant-card {

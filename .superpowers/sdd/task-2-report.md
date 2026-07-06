@@ -106,3 +106,13 @@ This task was explicitly constrained to CSS-owned files plus a covering test run
 
 1. `fallback-virtual-panel` still has older component-local styling in `src/components/FallbackConfigPanel.css`; Task 2 resolves the visual mismatch by overriding it only inside `.fallback-page`.
 2. The table readability improvement is intentionally conservative. It reduces layout strain for long strings without changing specialized score-table row treatments.
+
+## Review Follow-up
+
+Fix note:
+
+- Added a fallback-scoped focus override in `web/default/src/pages/Fallback/Fallback.css` so `.fallback-page` Semantic UI inputs, `textarea`, and `select` controls restore the fallback primary border plus soft focus ring even with the base `border-color: var(--fb-border) !important` rule in place.
+
+Test result:
+
+- `npm test -- --watchAll=false src/pages/Fallback/Fallback.test.js` -> PASS (`1` suite, `4` tests)
