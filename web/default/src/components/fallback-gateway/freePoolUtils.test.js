@@ -1,5 +1,7 @@
 import {
+  buildClearKeysProviderConfig,
   buildFreeProviderRows,
+  indexUsageRows,
   isAutoFreeDeploymentId,
   isAutoFreeDeployment,
   providerFromDeploymentId,
@@ -129,5 +131,32 @@ describe('freePoolUtils', () => {
     expect(rows[0].rpd_limit).toBe(1000);
     expect(rows[0].tpm_limit).toBe(6000);
     expect(rows[0].tpd_limit).toBe(0);
+  });
+
+  it('indexes usage rows by provider and key hash', () => {
+    const index = indexUsageRows([
+      {
+        provider: 'groq',
+        key_hash: '001122ff',
+        model_name: 'llama-free',
+        total_tokens: 10,
+        request_count: 2,
+        success_count: 2,
+      },
+    ]);
+
+    expect(index['groq:001122ff']).toEqual([
+      expect.objectContaining({ model_name: 'llama-free', total_tokens: 10 }),
+    ]);
+  });
+
+  it('builds explicit clear key payload without raw keys', () => {
+    const next = buildClearKeysProviderConfig(
+      { groq: { enabled: false, key_count: 1 } },
+      'groq',
+    );
+
+    expect(next.groq.clear_keys).toBe(true);
+    expect(next.groq.keys).toBeUndefined();
   });
 });

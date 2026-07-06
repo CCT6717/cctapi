@@ -1,9 +1,17 @@
 import React from 'react';
 import { Icon, Message, Table } from 'semantic-ui-react';
 import FreeProviderRow from './FreeProviderRow';
-import { buildFreeProviderRows } from './freePoolUtils';
+import {
+  buildClearKeysProviderConfig,
+  buildFreeProviderRows,
+} from './freePoolUtils';
 
-const FreeProvidersEditor = ({ freeProviders, freeProviderCatalog, onChange }) => {
+const FreeProvidersEditor = ({
+  freeProviders,
+  freeProviderCatalog,
+  usageByProviderKey = {},
+  onChange,
+}) => {
   const providerConfig = freeProviders && typeof freeProviders === 'object' ? freeProviders : {};
   const providerRows = buildFreeProviderRows(providerConfig, freeProviderCatalog);
 
@@ -35,6 +43,14 @@ const FreeProvidersEditor = ({ freeProviders, freeProviderCatalog, onChange }) =
     updateProvider(providerKey, 'keys', keys);
   };
 
+  const clearKeys = (providerKey) => {
+    onChange(buildClearKeysProviderConfig(providerConfig, providerKey));
+  };
+
+  const usageRowsForProvider = (providerKey) => Object.keys(usageByProviderKey)
+    .filter((usageKey) => usageKey.startsWith(`${providerKey}:`))
+    .flatMap((usageKey) => usageByProviderKey[usageKey] || []);
+
   return (
     <div>
       <Table compact celled striped>
@@ -59,6 +75,8 @@ const FreeProvidersEditor = ({ freeProviders, freeProviderCatalog, onChange }) =
               onUpdateProvider={updateProvider}
               onUpdateLimit={updateLimit}
               onUpdateKeys={updateKeys}
+              onClearKeys={clearKeys}
+              usageRows={usageRowsForProvider(provider.name)}
             />
           ))}
         </Table.Body>

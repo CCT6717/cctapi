@@ -3,6 +3,7 @@ import { Button, Header, Icon, Label, Loader, Message, Table } from 'semantic-ui
 import { showError, showSuccess } from '../../helpers';
 import {
   cleanupDryRun,
+  getFreePoolUsage,
   getGatewayConfig,
   getRuntimeStatus,
   reloadConfig,
@@ -11,6 +12,7 @@ import {
 } from './gatewayConfigApi';
 import FreeProvidersEditor from './FreeProvidersEditor';
 import {
+  indexUsageRows,
   isAutoFreeDeployment,
   providerFromDeploymentId,
 } from './freePoolUtils';
@@ -59,6 +61,7 @@ const formatLimit = (value) => {
 const FreeModelPool = () => {
   const [config, setConfig] = useState(null);
   const [runtimeRows, setRuntimeRows] = useState([]);
+  const [usageRows, setUsageRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actingAction, setActingAction] = useState('');
@@ -66,9 +69,10 @@ const FreeModelPool = () => {
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [configRes, runtimeRes] = await Promise.all([
+      const [configRes, runtimeRes, usageRes] = await Promise.all([
         getGatewayConfig(),
         getRuntimeStatus(),
+        getFreePoolUsage(),
       ]);
       const configData = configRes.data || {};
       if (configData.success !== false && configData.data) {
@@ -79,6 +83,10 @@ const FreeModelPool = () => {
       const runtimeData = runtimeRes.data || {};
       if (runtimeData.success !== false) {
         setRuntimeRows(Array.isArray(runtimeData.data) ? runtimeData.data : []);
+      }
+      const usageData = usageRes.data || {};
+      if (usageData.success !== false) {
+        setUsageRows(Array.isArray(usageData.data) ? usageData.data : []);
       }
     } catch (e) {
       showError(e.message || '加载免费模型池失败');
@@ -155,6 +163,7 @@ const FreeModelPool = () => {
   };
 
   const freeModel = config?.virtual_models?.['cct/free'];
+  const usageByProviderKey = useMemo(() => indexUsageRows(usageRows), [usageRows]);
   const freeDeployments = useMemo(() => {
     const deployments = config?.deployments || {};
     return Object.keys(deployments)
@@ -289,8 +298,50 @@ const FreeModelPool = () => {
         <FreeProvidersEditor
           freeProviders={config.free_providers || {}}
           freeProviderCatalog={config.free_provider_catalog || []}
+          usageByProviderKey={usageByProviderKey}
           onChange={updateFreeProviders}
         />
+      </section>
+
+      <section className='fallback-virtual-panel'>
+        <div className='fallback-virtual-header'>
+          <div>
+            <h3>Free provider usage</h3>
+            <span>Read-only token and request totals by provider, key hash, model, and period.</span>
+          </div>
+        </div>
+        <Table compact celled striped>
+          <Table.Header>
+            <Table.Row>
+              <Table.HeaderCell>Provider</Table.HeaderCell>
+              <Table.HeaderCell>Key hash</Table.HeaderCell>
+              <Table.HeaderCell>Model</Table.HeaderCell>
+              <Table.HeaderCell>Period</Table.HeaderCell>
+              <Table.HeaderCell>Total tokens</Table.HeaderCell>
+              <Table.HeaderCell>Requests</Table.HeaderCell>
+              <Table.HeaderCell>Successes</Table.HeaderCell>
+              <Table.HeaderCell>Updated</Table.HeaderCell>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {usageRows.length === 0 ? (
+              <Table.Row>
+                <Table.Cell colSpan='8' textAlign='center'>No usage rows for the selected period</Table.Cell>
+              </Table.Row>
+            ) : usageRows.map((row, index) => (
+              <Table.Row key={`${row.provider}-${row.key_hash}-${row.model_name}-${row.period}-${index}`}>
+                <Table.Cell>{PROVIDER_LABELS[row.provider] || row.provider}</Table.Cell>
+                <Table.Cell><Label basic>{row.key_hash}</Label></Table.Cell>
+                <Table.Cell>{row.model_name || '-'}</Table.Cell>
+                <Table.Cell>{row.period || '-'}</Table.Cell>
+                <Table.Cell>{formatNumber(row.total_tokens)}</Table.Cell>
+                <Table.Cell>{formatNumber(row.request_count)}</Table.Cell>
+                <Table.Cell>{formatNumber(row.success_count)}</Table.Cell>
+                <Table.Cell>{row.updated_at ? new Date(row.updated_at).toLocaleString() : '-'}</Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
       </section>
 
       <section className='fallback-virtual-panel'>

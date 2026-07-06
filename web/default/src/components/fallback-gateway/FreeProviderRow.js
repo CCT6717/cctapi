@@ -1,5 +1,14 @@
 import React from 'react';
-import { Checkbox, Form, Icon, Input, Label, Message, Table } from 'semantic-ui-react';
+import {
+  Button,
+  Checkbox,
+  Form,
+  Icon,
+  Input,
+  Label,
+  Message,
+  Table,
+} from 'semantic-ui-react';
 import {
   LIMIT_FIELDS,
   PROVIDER_DISPLAY,
@@ -47,6 +56,8 @@ const FreeProviderRow = ({
   onUpdateProvider,
   onUpdateLimit,
   onUpdateKeys,
+  onClearKeys,
+  usageRows = [],
 }) => {
   const key = provider.name;
   const display = PROVIDER_DISPLAY[key] || { title: key, color: 'grey', icon: 'key' };
@@ -128,6 +139,22 @@ const FreeProviderRow = ({
             value={stagedKeys.join('\n')}
             onChange={(_, { value }) => onUpdateKeys(key, value)}
           />
+          <Button
+            type='button'
+            basic
+            size='mini'
+            color='red'
+            icon
+            labelPosition='left'
+            disabled={keyCount === 0 && stagedKeys.length === 0}
+            onClick={() => onClearKeys(key)}
+          >
+            <Icon name='trash' />
+            Clear stored keys
+          </Button>
+          {providerConfig[key]?.clear_keys && (
+            <Label basic color='red' size='mini'>keys will be cleared on save</Label>
+          )}
         </Form>
       </Table.Cell>
       <Table.Cell>
@@ -135,6 +162,13 @@ const FreeProviderRow = ({
           <Label color='green' basic>enabled ({keyCount})</Label>
         ) : (
           <Label color='grey' basic>disabled</Label>
+        )}
+        {usageRows.length > 0 && (
+          <div style={{ marginTop: 6 }}>
+            <Label basic size='mini'>
+              {usageRows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0).toLocaleString()} tokens
+            </Label>
+          </div>
         )}
       </Table.Cell>
     </Table.Row>

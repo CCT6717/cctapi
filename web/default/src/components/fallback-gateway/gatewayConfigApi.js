@@ -21,5 +21,8 @@ export const syncFreePool = () =>
 export const cleanupDryRun = () =>
   API.post('/api/fallback/free-pool/cleanup/dry-run');
 
+export const getFreePoolUsage = (params = {}) =>
+  API.get('/api/fallback/free-pool/usage', { params });
+
 export const getRuntimeStatus = () =>
   API.get('/api/fallback/deployments/runtime-status');

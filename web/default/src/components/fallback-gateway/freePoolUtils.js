@@ -103,3 +103,27 @@ export const buildFreeProviderRows = (freeProviders = {}, catalog = []) => {
 
   return rows;
 };
+
+export const indexUsageRows = (rows = []) => {
+  const index = {};
+  (Array.isArray(rows) ? rows : []).forEach((row) => {
+    const provider = String(row.provider || '').trim().toLowerCase();
+    const keyHash = String(row.key_hash || '').trim();
+    if (!provider || !keyHash) return;
+    const key = `${provider}:${keyHash}`;
+    if (!index[key]) index[key] = [];
+    index[key].push(row);
+  });
+  return index;
+};
+
+export const buildClearKeysProviderConfig = (freeProviders = {}, providerKey) => {
+  const current = freeProviders && typeof freeProviders === 'object' ? freeProviders : {};
+  const existing = current[providerKey] || {};
+  const nextProvider = { ...existing, clear_keys: true };
+  delete nextProvider.keys;
+  return {
+    ...current,
+    [providerKey]: nextProvider,
+  };
+};
