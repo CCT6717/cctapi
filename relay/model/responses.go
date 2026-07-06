@@ -420,7 +420,7 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 					"created_at": createdAt,
 					"status":     "in_progress",
 					"model":      modelName,
-			},
+				},
 			})
 			createdSent = true
 		}
@@ -495,6 +495,9 @@ func WriteResponsesSSE(w io.Writer, events []ResponsesSSEEvent) error {
 		}
 		if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Event, payload); err != nil {
 			return err
+		}
+		if flusher, ok := w.(interface{ Flush() }); ok {
+			flusher.Flush()
 		}
 	}
 	return nil

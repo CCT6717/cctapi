@@ -617,3 +617,37 @@ func TestWriteResponsesSSEWritesEventAndDataLines(t *testing.T) {
 		t.Fatalf("expected marshaled data lines, got %q", body)
 	}
 }
+
+type flushRecordingWriter struct {
+	bytes.Buffer
+	flushCount int
+}
+
+func (w *flushRecordingWriter) Flush() {
+	w.flushCount++
+}
+
+func TestWriteResponsesSSEFlushesAfterEachEvent(t *testing.T) {
+	w := &flushRecordingWriter{}
+	events := []ResponsesSSEEvent{
+		{
+			Event: "response.created",
+			Data: map[string]any{
+				"id": "chatcmpl-1",
+			},
+		},
+		{
+			Event: "response.completed",
+			Data: map[string]any{
+				"id": "chatcmpl-1",
+			},
+		},
+	}
+
+	if err := WriteResponsesSSE(w, events); err != nil {
+		t.Fatalf("WriteResponsesSSE returned error: %v", err)
+	}
+	if w.flushCount != len(events) {
+		t.Fatalf("expected %d flushes, got %d", len(events), w.flushCount)
+	}
+}
