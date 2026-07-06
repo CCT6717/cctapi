@@ -33,6 +33,8 @@ const pickBoolean = (...values) => {
 
 const cloneArray = (value) => (Array.isArray(value) ? [...value] : []);
 
+const USAGE_UNAVAILABLE_MESSAGE = 'Usage data is unavailable.';
+
 const applyLimitOverride = (base, overrides, field) => {
   if (!overrides || overrides[field] === undefined || overrides[field] === null || overrides[field] === '') {
     return base;
@@ -149,17 +151,20 @@ export const loadFreePoolDashboardData = async ({
   getFreePoolUsage,
 }) => {
   const usageRequest = getFreePoolUsage()
-    .then((usageRes) => usageRes)
-    .catch(() => null);
-  const [configRes, runtimeRes, usageRes] = await Promise.all([
+    .then((usageRes) => ({ response: usageRes, failed: false }))
+    .catch(() => ({ response: null, failed: true }));
+  const [configRes, runtimeRes, usageResult] = await Promise.all([
     getGatewayConfig(),
     getRuntimeStatus(),
     usageRequest,
   ]);
-  const usageData = usageRes?.data || {};
+  const usageData = usageResult.response?.data || {};
+  const usageAvailable = !usageResult.failed && usageData.success !== false;
   return {
     configData: configRes.data || {},
     runtimeData: runtimeRes.data || {},
-    usageRows: usageData.success !== false && Array.isArray(usageData.data) ? usageData.data : [],
+    usageRows: usageAvailable && Array.isArray(usageData.data) ? usageData.data : [],
+    usageAvailable,
+    usageError: usageAvailable ? '' : USAGE_UNAVAILABLE_MESSAGE,
   };
 };

@@ -63,6 +63,8 @@ const FreeModelPool = () => {
   const [config, setConfig] = useState(null);
   const [runtimeRows, setRuntimeRows] = useState([]);
   const [usageRows, setUsageRows] = useState([]);
+  const [usageAvailable, setUsageAvailable] = useState(true);
+  const [usageError, setUsageError] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actingAction, setActingAction] = useState('');
@@ -70,7 +72,13 @@ const FreeModelPool = () => {
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const { configData, runtimeData, usageRows: nextUsageRows } = await loadFreePoolDashboardData({
+      const {
+        configData,
+        runtimeData,
+        usageRows: nextUsageRows,
+        usageAvailable: nextUsageAvailable,
+        usageError: nextUsageError,
+      } = await loadFreePoolDashboardData({
         getGatewayConfig,
         getRuntimeStatus,
         getFreePoolUsage,
@@ -84,6 +92,8 @@ const FreeModelPool = () => {
         setRuntimeRows(Array.isArray(runtimeData.data) ? runtimeData.data : []);
       }
       setUsageRows(nextUsageRows);
+      setUsageAvailable(nextUsageAvailable !== false);
+      setUsageError(nextUsageError || '');
     } catch (e) {
       showError(e.message || '加载免费模型池失败');
     } finally {
@@ -320,7 +330,18 @@ const FreeModelPool = () => {
             </Table.Row>
           </Table.Header>
           <Table.Body>
-            {usageRows.length === 0 ? (
+            {!usageAvailable ? (
+              <Table.Row>
+                <Table.Cell colSpan='8'>
+                  <Message
+                    warning
+                    icon='warning sign'
+                    header='Usage data unavailable'
+                    content={usageError || 'Usage data is unavailable.'}
+                  />
+                </Table.Cell>
+              </Table.Row>
+            ) : usageRows.length === 0 ? (
               <Table.Row>
                 <Table.Cell colSpan='8' textAlign='center'>No usage rows for the selected period</Table.Cell>
               </Table.Row>

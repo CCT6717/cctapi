@@ -193,5 +193,25 @@ describe('freePoolUtils', () => {
     expect(result.configData.data.free_providers.groq.enabled).toBe(true);
     expect(result.runtimeData.data).toEqual([{ deployment_id: 'free:groq-1' }]);
     expect(result.usageRows).toEqual([]);
+    expect(result.usageAvailable).toBe(false);
+    expect(result.usageError).toBe('Usage data is unavailable.');
+  });
+
+  it('reports usage unavailable when usage response is unsuccessful', async () => {
+    const result = await loadFreePoolDashboardData({
+      getGatewayConfig: jest.fn().mockResolvedValue({
+        data: { success: true, data: { free_providers: {} } },
+      }),
+      getRuntimeStatus: jest.fn().mockResolvedValue({
+        data: { success: true, data: [] },
+      }),
+      getFreePoolUsage: jest.fn().mockResolvedValue({
+        data: { success: false, message: 'raw provider key sk-test-key failed' },
+      }),
+    });
+
+    expect(result.usageRows).toEqual([]);
+    expect(result.usageAvailable).toBe(false);
+    expect(result.usageError).toBe('Usage data is unavailable.');
   });
 });
