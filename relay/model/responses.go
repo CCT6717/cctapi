@@ -230,6 +230,22 @@ type ResponsesSSEEvent struct {
 	Data  map[string]any `json:"-"`
 }
 
+func ResponsesStreamFailureEvent(message string, statusCode int) ResponsesSSEEvent {
+	data := map[string]any{
+		"error": map[string]any{
+			"message": message,
+			"type":    "upstream_error",
+		},
+	}
+	if statusCode > 0 {
+		data["status_code"] = statusCode
+	}
+	return ResponsesSSEEvent{
+		Event: "response.failed",
+		Data:  data,
+	}
+}
+
 func ChatCompletionToResponses(body []byte, fallbackModel string) (*ResponsesObject, int, error) {
 	var errPayload struct {
 		StatusCode int   `json:"status_code"`
@@ -348,6 +364,27 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 	createdSent := false
 	completedSent := false
 	failedSent := false
+	usefulChunkSeen := false
+
+	emitCreated := func(createdAt int64) {
+		if createdSent {
+			return
+		}
+		if createdAt == 0 {
+			createdAt = time.Now().Unix()
+		}
+		events = append(events, ResponsesSSEEvent{
+			Event: "response.created",
+			Data: map[string]any{
+				"id":         responseID,
+				"object":     "response",
+				"created_at": createdAt,
+				"status":     "in_progress",
+				"model":      modelName,
+			},
+		})
+		createdSent = true
+	}
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -359,7 +396,7 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 			continue
 		}
 		if payload == "[DONE]" {
-			if !completedSent && !failedSent {
+			if usefulChunkSeen && !completedSent && !failedSent {
 				events = append(events, ResponsesSSEEvent{
 					Event: "response.completed",
 					Data: map[string]any{
@@ -407,25 +444,10 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 			completedSent = true
 			continue
 		}
-		if !createdSent {
-			createdAt := chunk.Created
-			if createdAt == 0 {
-				createdAt = time.Now().Unix()
-			}
-			events = append(events, ResponsesSSEEvent{
-				Event: "response.created",
-				Data: map[string]any{
-					"id":         responseID,
-					"object":     "response",
-					"created_at": createdAt,
-					"status":     "in_progress",
-					"model":      modelName,
-				},
-			})
-			createdSent = true
-		}
 		for _, choice := range chunk.Choices {
 			if text := choice.Delta.StringContent(); text != "" {
+				usefulChunkSeen = true
+				emitCreated(chunk.Created)
 				events = append(events, ResponsesSSEEvent{
 					Event: "response.output_text.delta",
 					Data: map[string]any{
@@ -438,6 +460,8 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 			}
 			for _, toolCall := range choice.Delta.ToolCalls {
 				if arg := responseToolCallArguments(toolCall.Function.Arguments); arg != "" {
+					usefulChunkSeen = true
+					emitCreated(chunk.Created)
 					events = append(events, ResponsesSSEEvent{
 						Event: "response.function_call_arguments.delta",
 						Data: map[string]any{
@@ -449,7 +473,7 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 					})
 				}
 			}
-			if choice.FinishReason != nil && *choice.FinishReason != "" && !completedSent && !failedSent {
+			if choice.FinishReason != nil && *choice.FinishReason != "" && usefulChunkSeen && !completedSent && !failedSent {
 				events = append(events, ResponsesSSEEvent{
 					Event: "response.completed",
 					Data: map[string]any{
@@ -463,19 +487,11 @@ func ChatCompletionStreamToResponsesEvents(raw []byte, fallbackModel string) ([]
 		}
 	}
 
-	if !createdSent && !failedSent {
-		events = append(events, ResponsesSSEEvent{
-			Event: "response.created",
-			Data: map[string]any{
-				"id":         responseID,
-				"object":     "response",
-				"created_at": time.Now().Unix(),
-				"status":     "in_progress",
-				"model":      modelName,
-			},
-		})
+	if !usefulChunkSeen && !failedSent {
+		events = append(events, ResponsesStreamFailureEvent("upstream stream ended without any useful SSE data", 0))
+		failedSent = true
 	}
-	if !completedSent && !failedSent {
+	if usefulChunkSeen && !completedSent && !failedSent {
 		events = append(events, ResponsesSSEEvent{
 			Event: "response.completed",
 			Data: map[string]any{

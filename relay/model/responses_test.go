@@ -567,6 +567,40 @@ func TestChatCompletionStreamToResponsesEventsMapsToolCallDelta(t *testing.T) {
 	}
 }
 
+func TestChatCompletionStreamToResponsesEventsFailsEmptyStream(t *testing.T) {
+	events, err := ChatCompletionStreamToResponsesEvents(nil, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionStreamToResponsesEvents returned error: %v", err)
+	}
+	if len(events) != 1 || events[0].Event != "response.failed" {
+		t.Fatalf("expected one response.failed event, got %#v", events)
+	}
+	errorPayload, ok := events[0].Data["error"].(map[string]any)
+	if !ok || !strings.Contains(errorPayload["message"].(string), "without any useful SSE data") {
+		t.Fatalf("expected clear failure message, got %#v", events[0])
+	}
+	for _, event := range events {
+		if event.Event == "response.completed" {
+			t.Fatalf("did not expect response.completed event, got %#v", events)
+		}
+	}
+}
+
+func TestChatCompletionStreamToResponsesEventsFailsDoneOnlyStream(t *testing.T) {
+	events, err := ChatCompletionStreamToResponsesEvents([]byte("data: [DONE]\n\n"), "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionStreamToResponsesEvents returned error: %v", err)
+	}
+	if len(events) != 1 || events[0].Event != "response.failed" {
+		t.Fatalf("expected one response.failed event, got %#v", events)
+	}
+	for _, event := range events {
+		if event.Event == "response.completed" {
+			t.Fatalf("did not expect response.completed event, got %#v", events)
+		}
+	}
+}
+
 func TestChatCompletionStreamToResponsesEventsEmitsFailedBeforeCreatedForErrorChunk(t *testing.T) {
 	raw := []byte("data: {\"error\":{\"message\":\"upstream failed\",\"type\":\"server_error\",\"code\":\"bad_gateway\"}}\n\n")
 

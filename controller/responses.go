@@ -178,27 +178,18 @@ func RelayResponses(c *gin.Context) {
 }
 
 func writeResponsesStream(c *gin.Context, raw []byte, modelName string, status int) {
-	if status < http.StatusOK || status >= http.StatusMultipleChoices {
-		if !responsesStreamHasUsefulDataFrame(raw) {
-			events := []relaymodel.ResponsesSSEEvent{{
-				Event: "response.failed",
-				Data: map[string]any{
-					"status_code": status,
-					"error": map[string]any{
-						"message": fmt.Sprintf("upstream stream returned HTTP %d without any SSE data", status),
-						"type":    "upstream_error",
-					},
-				},
-			}}
-			c.Writer.Header().Set("Content-Type", "text/event-stream")
-			c.Writer.Header().Set("Cache-Control", "no-cache")
-			c.Writer.Header().Set("Connection", "keep-alive")
-			c.Status(status)
-			if err := relaymodel.WriteResponsesSSE(c.Writer, events); err != nil {
-				c.Error(err)
-			}
-			return
+	if !responsesStreamHasUsefulDataFrame(raw) {
+		events := []relaymodel.ResponsesSSEEvent{
+			relaymodel.ResponsesStreamFailureEvent(fmt.Sprintf("upstream stream returned HTTP %d without any useful SSE data", status), status),
 		}
+		c.Writer.Header().Set("Content-Type", "text/event-stream")
+		c.Writer.Header().Set("Cache-Control", "no-cache")
+		c.Writer.Header().Set("Connection", "keep-alive")
+		c.Status(status)
+		if err := relaymodel.WriteResponsesSSE(c.Writer, events); err != nil {
+			c.Error(err)
+		}
+		return
 	}
 
 	events, err := relaymodel.ChatCompletionStreamToResponsesEvents(raw, modelName)

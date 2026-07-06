@@ -367,3 +367,69 @@ func TestRelayResponsesStreamEmitsFailedEventForEmptyNonOKCapture(t *testing.T) 
 		t.Fatalf("expected preserved status in failure payload, got %q", body)
 	}
 }
+
+func TestRelayResponsesStreamEmitsFailedEventForEmptyOKCapture(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalRelay := relayResponsesRelay
+	relayResponsesRelay = func(c *gin.Context) {
+		c.Writer.WriteHeader(http.StatusOK)
+	}
+	defer func() {
+		relayResponsesRelay = originalRelay
+	}()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(`{"model":"cct/free","input":"ping","stream":true}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	RelayResponses(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: response.failed\n") {
+		t.Fatalf("expected response.failed event, got %q", body)
+	}
+	if strings.Contains(body, "event: response.completed\n") {
+		t.Fatalf("did not expect response.completed event, got %q", body)
+	}
+	if !strings.Contains(body, "without any useful SSE data") {
+		t.Fatalf("expected clear failure payload, got %q", body)
+	}
+}
+
+func TestRelayResponsesStreamEmitsFailedEventForDoneOnlyOKCapture(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	originalRelay := relayResponsesRelay
+	relayResponsesRelay = func(c *gin.Context) {
+		c.Writer.WriteHeader(http.StatusOK)
+		if _, err := c.Writer.Write([]byte("data: [DONE]\n\n")); err != nil {
+			t.Fatalf("write captured relay stream: %v", err)
+		}
+	}
+	defer func() {
+		relayResponsesRelay = originalRelay
+	}()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", bytes.NewBufferString(`{"model":"cct/free","input":"ping","stream":true}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	RelayResponses(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: response.failed\n") {
+		t.Fatalf("expected response.failed event, got %q", body)
+	}
+	if strings.Contains(body, "event: response.completed\n") {
+		t.Fatalf("did not expect response.completed event, got %q", body)
+	}
+}
