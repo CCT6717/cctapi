@@ -164,10 +164,21 @@ describe('FreeModelPool', () => {
       root.render(<FreeModelPool />);
     });
 
+    const workflowText = container.textContent;
+    const actionItems = Array.from(
+      container.querySelectorAll('.free-pool-workflow-actions-panel li'),
+    ).map((item) => item.textContent?.trim());
+
     expect(container.querySelector('.free-pool-workflow-dashboard')).not.toBeNull();
+    expect(workflowText).toContain('接入就绪度');
+    expect(workflowText).toContain('建议下一步');
     expect(container.querySelector('.free-pool-readiness-meter strong')?.textContent).toMatch(/^0\/4/);
     expect(container.querySelectorAll('.free-pool-workflow-step.blocked').length).toBeGreaterThan(0);
-    expect(container.querySelectorAll('.free-pool-workflow-actions-panel li').length).toBeGreaterThan(0);
+    expect(actionItems.length).toBeGreaterThan(0);
+    expect(actionItems).toEqual(expect.arrayContaining([
+      '启用 cct/free 虚拟模型。',
+      '同步免费池以生成部署。',
+    ]));
   });
 
   test('filters provider rows and stages bulk disable for selected visible providers', async () => {
