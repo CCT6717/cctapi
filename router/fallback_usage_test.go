@@ -66,3 +66,49 @@ func TestGetFreePoolUsageReturnsRows(t *testing.T) {
 		t.Fatalf("usage API must not expose raw keys: %s", w.Body.String())
 	}
 }
+
+func TestGetFreePoolUsageAppliesCombinedFiltersAndOmitsRawKeySentinel(t *testing.T) {
+	cleanupDB := setupRouterFreeProviderLedgerDB(t)
+	defer cleanupDB()
+	if err := fallback.InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("InitFreeProviderLedgerStore failed: %v", err)
+	}
+	seed := []struct {
+		deploymentID string
+		modelName    string
+	}{
+		{deploymentID: "free:groq-001122ff", modelName: "llama-free"},
+		{deploymentID: "free:groq-aabbccdd", modelName: "llama-free"},
+		{deploymentID: "free:groq-001122ff", modelName: "mixtral-free"},
+		{deploymentID: "free:nvidia-deadbeef", modelName: "llama-free"},
+	}
+	for _, row := range seed {
+		if err := fallback.RecordFreeProviderUsage(row.deploymentID, row.modelName, fallback.UsageInfo{PromptTokens: 1, CompletionTokens: 2, TotalTokens: 3}); err != nil {
+			t.Fatalf("record usage %s/%s: %v", row.deploymentID, row.modelName, err)
+		}
+	}
+
+	w := callFreePoolUsageGET(t, "/api/fallback/free-pool/usage?provider=groq&key_hash=001122ff&model=llama-free")
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Success bool                               `json:"success"`
+		Data    []fallback.FreeProviderUsageLedger `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !resp.Success || len(resp.Data) != 1 {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	row := resp.Data[0]
+	if row.Provider != "groq" || row.KeyHash != "001122ff" || row.ModelName != "llama-free" {
+		t.Fatalf("unexpected combined-filter row: %+v", row)
+	}
+
+	rawKeySentinel := "raw-free-provider-secret-should-not-leak"
+	if searchString(w.Body.String(), rawKeySentinel) {
+		t.Fatalf("usage API must not expose raw provider keys: %s", w.Body.String())
+	}
+}

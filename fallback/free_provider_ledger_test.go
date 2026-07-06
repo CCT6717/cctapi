@@ -125,6 +125,71 @@ func TestListFreeProviderUsageFiltersByProviderAndPeriod(t *testing.T) {
 	}
 }
 
+func TestListFreeProviderUsageFiltersByKeyHashModelAndCombinedFields(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("InitFreeProviderLedgerStore failed: %v", err)
+	}
+	seed := []struct {
+		deploymentID string
+		modelName    string
+	}{
+		{deploymentID: "free:groq-001122ff", modelName: "llama-free"},
+		{deploymentID: "free:groq-aabbccdd", modelName: "llama-free"},
+		{deploymentID: "free:groq-001122ff", modelName: "mixtral-free"},
+		{deploymentID: "free:nvidia-deadbeef", modelName: "llama-free"},
+	}
+	for _, row := range seed {
+		if err := RecordFreeProviderUsage(row.deploymentID, row.modelName, UsageInfo{TotalTokens: 1}); err != nil {
+			t.Fatalf("record %s/%s: %v", row.deploymentID, row.modelName, err)
+		}
+	}
+
+	keyRows, err := ListFreeProviderUsage(FreeProviderUsageFilter{KeyHash: "001122ff"})
+	if err != nil {
+		t.Fatalf("ListFreeProviderUsage by key_hash failed: %v", err)
+	}
+	if len(keyRows) != 2 {
+		t.Fatalf("expected two rows for key_hash filter, got %+v", keyRows)
+	}
+	for _, row := range keyRows {
+		if row.KeyHash != "001122ff" {
+			t.Fatalf("key_hash filter returned wrong row: %+v", row)
+		}
+	}
+
+	modelRows, err := ListFreeProviderUsage(FreeProviderUsageFilter{ModelName: "llama-free"})
+	if err != nil {
+		t.Fatalf("ListFreeProviderUsage by model failed: %v", err)
+	}
+	if len(modelRows) != 3 {
+		t.Fatalf("expected three rows for model filter, got %+v", modelRows)
+	}
+	for _, row := range modelRows {
+		if row.ModelName != "llama-free" {
+			t.Fatalf("model filter returned wrong row: %+v", row)
+		}
+	}
+
+	combinedRows, err := ListFreeProviderUsage(FreeProviderUsageFilter{
+		Provider:  "groq",
+		KeyHash:   "001122ff",
+		ModelName: "llama-free",
+		Period:    todayString(),
+	})
+	if err != nil {
+		t.Fatalf("ListFreeProviderUsage by combined filters failed: %v", err)
+	}
+	if len(combinedRows) != 1 {
+		t.Fatalf("expected one combined-filter row, got %+v", combinedRows)
+	}
+	got := combinedRows[0]
+	if got.Provider != "groq" || got.KeyHash != "001122ff" || got.ModelName != "llama-free" || got.Period != todayString() {
+		t.Fatalf("combined filter returned wrong row: %+v", got)
+	}
+}
+
 func TestListFreeProviderUsageDefaultsToToday(t *testing.T) {
 	cleanupDB := setupFreeProviderLedgerTestDB(t)
 	defer cleanupDB()

@@ -22,14 +22,13 @@ import {
   parseMetrics,
   saveMetricSamples as saveMetricSamplesHelper,
   SCORE_CHART_VISIBLE_LIMIT,
-  sortScoreItems,
   SUCCESS_RATE_CRITICAL_THRESHOLD,
   SUCCESS_RATE_WARNING_THRESHOLD,
   FAILURE_RATE_CRITICAL_THRESHOLD,
   FAILURE_RATE_WARNING_THRESHOLD,
   METRIC_SAMPLE_RETENTION_MS,
 } from '../utils/fallbackHelpers';
-import { clampScore, sortScoreItems as sortScoreItemsFn } from '../utils/scoreUtils';
+import { sortScoreItems as sortScoreItemsFn } from '../utils/scoreUtils';
 
 export const useFallbackPage = () => {
   const { panel } = useParams();
