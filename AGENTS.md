@@ -54,7 +54,7 @@ Last verified handoff: 2026-07-07.
 
 - Branch `feat/freellmapi-native-core` is pushed to `origin/feat/freellmapi-native-core`.
 - Latest UI/runtime diagnostics commit: `6b8cc67 feat: show fallback runtime diagnostics in UI`.
-- Latest backend commit before this handoff update: `8875f66 feat: refresh free pool runtime state on sync`.
+- Latest backend commit before this handoff update: `4f76cd6 feat: surface provider health check errors`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are in progress on this branch.
 
@@ -201,7 +201,7 @@ FreeLLMAPI is not just a thin proxy. Treat the target feature set as:
 
 Recommended next backend tasks after UI acceptance:
 
-- Real free-provider health checks and surfaced error reasons. Manual health checks now write runtime errors for channel, auth, rate-limit, timeout, and 5xx cases.
+- Real free-provider health checks and surfaced error reasons. Manual health checks now write runtime errors for channel, auth, rate-limit, timeout, and 5xx cases; provider JSON/text error bodies are parsed into runtime diagnostics and cooldown reasons.
 - Model sync/status refresh that updates admin-visible state. Admin `/free-pool/sync` now runs resource sync plus dynamic model and credit refresh; dynamic model refresh failures are surfaced through runtime diagnostics.
 - Retry, cooldown, and circuit-breaker behavior aligned with existing fallback routing.
 - Sticky routing and automatic route selection for free providers.
