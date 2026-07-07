@@ -44,6 +44,42 @@ const formatTime = (value) => {
   return d.toLocaleString('zh-CN', { hour12: false });
 };
 
+const getRuntimeIssues = (row = {}) => {
+  const issues = [
+    row.cooldown_reason,
+    row.state_last_error_message,
+    row.last_error,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(issues));
+};
+
+const RuntimeDiagnostics = ({ row }) => {
+  const stickyVirtualModels = Array.isArray(row.sticky_virtual_models)
+    ? row.sticky_virtual_models
+    : [];
+  const hasLabels = row.is_sticky || row.cooldown_active || row.exhausted_active;
+
+  if (!hasLabels) return null;
+
+  return (
+    <div className='gw-runtime-diagnostics'>
+      {row.is_sticky && (
+        <Label basic color='blue' size='mini'>
+          Sticky{stickyVirtualModels.length > 0 ? ` ${stickyVirtualModels.join(', ')}` : ''}
+        </Label>
+      )}
+      {row.cooldown_active && (
+        <Label basic color='yellow' size='mini'>Cooldown</Label>
+      )}
+      {row.exhausted_active && (
+        <Label basic color='red' size='mini'>Exhausted</Label>
+      )}
+    </div>
+  );
+};
+
 // quota cell: used / limit, 0 means unchecked
 const QuotaCell = ({ used, limit }) => {
   if (!limit || limit <= 0) {
@@ -217,6 +253,8 @@ const FallbackRuntimePanel = () => {
               ) : (
                 runtimeRows.map((row) => {
                   const health = row.health || 'unknown';
+                  const issues = getRuntimeIssues(row);
+                  const issueTime = row.last_error_at || row.cooldown_updated_at || row.state_updated_at;
                   return (
                     <Table.Row key={row.deployment_id}>
                       <Table.Cell><strong>{row.deployment_id}</strong></Table.Cell>
@@ -231,12 +269,15 @@ const FallbackRuntimePanel = () => {
                           <span className={`gw-health-dot ${HEALTH_CLASS[health] || 'gray'}`} />
                           {HEALTH_TEXT[health] || health}
                         </span>
+                        <RuntimeDiagnostics row={row} />
                       </Table.Cell>
                       <Table.Cell className='gw-last-error'>
-                        {row.last_error ? (
+                        {issues.length > 0 ? (
                           <>
-                            <span>{row.last_error}</span>
-                            <small>{formatTime(row.last_error_at)}</small>
+                            {issues.map((issue) => (
+                              <span key={issue}>{issue}</span>
+                            ))}
+                            {issueTime && <small>{formatTime(issueTime)}</small>}
                           </>
                         ) : '-'}
                       </Table.Cell>

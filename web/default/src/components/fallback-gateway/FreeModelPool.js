@@ -76,9 +76,70 @@ const formatRuntimeHealth = (value) => {
     critical: '严重',
     failed: '失败',
     warning: '警告',
+    rate_limited: '限流',
+    error: '异常',
     unknown: '未知',
   };
   return labels[health] || value || '已启用';
+};
+
+const getRuntimeHealthColor = (value) => {
+  const health = String(value || '').toLowerCase();
+  if (['invalid', 'critical', 'failed', 'error'].includes(health)) return 'red';
+  if (['rate_limited', 'warning'].includes(health)) return 'yellow';
+  if (health === 'unknown') return 'grey';
+  return 'green';
+};
+
+const getRuntimeIssues = (runtime = {}) => {
+  const issues = [
+    runtime.cooldown_reason,
+    runtime.state_last_error_message,
+    runtime.last_error,
+  ]
+    .map((value) => String(value || '').trim())
+    .filter(Boolean);
+  return Array.from(new Set(issues));
+};
+
+const renderRuntimeDiagnostics = (runtime = {}) => {
+  const stickyVirtualModels = Array.isArray(runtime.sticky_virtual_models)
+    ? runtime.sticky_virtual_models
+    : [];
+  const issues = getRuntimeIssues(runtime);
+  const hasDiagnostics = runtime.is_sticky
+    || runtime.cooldown_active
+    || runtime.exhausted_active
+    || issues.length > 0;
+
+  if (!hasDiagnostics) return null;
+
+  return (
+    <div className='free-deployment-runtime-diagnostics'>
+      <div className='free-deployment-runtime-labels'>
+        {runtime.is_sticky && (
+          <Label basic color='blue' size='mini'>
+            Sticky{stickyVirtualModels.length > 0 ? ` ${stickyVirtualModels.join(', ')}` : ''}
+          </Label>
+        )}
+        {runtime.cooldown_active && (
+          <Label basic color='yellow' size='mini'>Cooldown</Label>
+        )}
+        {runtime.exhausted_active && (
+          <Label basic color='red' size='mini'>Exhausted</Label>
+        )}
+      </div>
+      {issues.length > 0 && (
+        <div className='free-deployment-runtime-issues'>
+          {issues.map((issue) => (
+            <div className='free-deployment-runtime-issue' key={issue}>
+              {issue}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const FreeModelPool = () => {
@@ -449,9 +510,12 @@ const FreeModelPool = () => {
                       {dep.enabled === false ? (
                         <Label basic color='grey'>已停用</Label>
                       ) : (
-                        <Label basic color={dep.runtime?.health_raw === 'invalid' ? 'red' : 'green'}>
-                          {dep.runtime?.health || '已启用'}
-                        </Label>
+                        <>
+                          <Label basic color={getRuntimeHealthColor(dep.runtime?.health_raw)}>
+                            {dep.runtime?.health || '已启用'}
+                          </Label>
+                          {renderRuntimeDiagnostics(dep.runtime)}
+                        </>
                       )}
                     </Table.Cell>
                   </Table.Row>

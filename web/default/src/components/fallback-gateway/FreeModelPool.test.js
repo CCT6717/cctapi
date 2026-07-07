@@ -259,4 +259,60 @@ describe('FreeModelPool', () => {
     expect(container.textContent).toContain('已停用');
     expect(container.querySelector('tr.free-provider-row.is-disabled.needs-key')).not.toBeNull();
   });
+
+  test('renders runtime diagnostics for free deployments', async () => {
+    getGatewayConfig.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          free_providers: {},
+          free_provider_catalog: [],
+          virtual_models: {
+            'cct/free': {
+              enabled: true,
+              pools: ['free'],
+              strategy: 'free_first',
+            },
+          },
+          deployments: {
+            'free:groq-runtime-visible': {
+              enabled: true,
+              pool: 'free',
+              real_model: 'llama-free',
+              quota_mode: 'free',
+            },
+          },
+        },
+      },
+    });
+    getRuntimeStatus.mockResolvedValue({
+      data: {
+        success: true,
+        data: [{
+          deployment_id: 'free:groq-runtime-visible',
+          health: 'rate_limited',
+          cooldown_active: true,
+          cooldown_reason: 'rate limited by provider',
+          exhausted_active: true,
+          state_last_error_message: 'daily quota exceeded',
+          is_sticky: true,
+          sticky_virtual_models: ['cct/free'],
+        }],
+      },
+    });
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: true, data: [] },
+    });
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    expect(container.textContent).toContain('Sticky');
+    expect(container.textContent).toContain('cct/free');
+    expect(container.textContent).toContain('Cooldown');
+    expect(container.textContent).toContain('rate limited by provider');
+    expect(container.textContent).toContain('Exhausted');
+    expect(container.textContent).toContain('daily quota exceeded');
+  });
 });
