@@ -3,6 +3,7 @@ package router
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -431,37 +432,7 @@ func SetFallbackRouter(router *gin.Engine) {
 				return
 			}
 			healthSnap := fallback.SnapshotAllHealth()
-			rows := make([]map[string]interface{}, 0, len(cfg.Deployments))
-			for id, dep := range cfg.Deployments {
-				rt := fallback.SnapshotRuntimeState(id)
-				rows = append(rows, map[string]interface{}{
-					"deployment_id":    id,
-					"enabled":          dep.Enabled,
-					"pool":             dep.Pool,
-					"real_model":       dep.RealModel,
-					"quality_tier":     dep.QualityTier,
-					"cost_tier":        dep.CostTier,
-					"supports_vision":  dep.SupportsVision,
-					"supports_tools":   dep.SupportsTools,
-					"supports_json":    dep.SupportsJSON,
-					"supports_stream":  dep.SupportsStream,
-					"context_length":   dep.ContextLength,
-					"rpm_limit":        dep.RPMLimit,
-					"rpd_limit":        dep.RPDLimit,
-					"tpm_limit":        dep.TPMLimit,
-					"tpd_limit":        dep.TPDLimit,
-					"minute_requests":  rt.MinuteRequests,
-					"day_requests":     rt.DayRequests,
-					"minute_tokens":    rt.MinuteTokens,
-					"day_tokens":       rt.DayTokens,
-					"success_count":    rt.SuccessCount,
-					"failure_count":    rt.FailureCount,
-					"rate_limit_score": rt.RateLimitScore,
-					"health":           string(fallback.GetHealthStatus(id)),
-					"last_error":       rt.LastError,
-					"last_error_at":    rt.LastErrorAt,
-				})
-			}
+			rows := buildFallbackRuntimeStatusRows(cfg)
 			c.JSON(http.StatusOK, gin.H{"success": true, "data": rows, "health": healthSnap})
 		})
 
@@ -487,6 +458,66 @@ func SetFallbackRouter(router *gin.Engine) {
 	router.GET("/fallback/dashboard", func(c *gin.Context) {
 		c.Redirect(http.StatusTemporaryRedirect, "/fallback/status")
 	})
+}
+
+func buildFallbackRuntimeStatusRows(cfg *fallback.Config) []map[string]interface{} {
+	if cfg == nil {
+		return []map[string]interface{}{}
+	}
+
+	deploymentIDs := make([]string, 0, len(cfg.Deployments))
+	for id := range cfg.Deployments {
+		deploymentIDs = append(deploymentIDs, id)
+	}
+	sort.Strings(deploymentIDs)
+
+	rows := make([]map[string]interface{}, 0, len(deploymentIDs))
+	for _, id := range deploymentIDs {
+		dep := cfg.Deployments[id]
+		rt := fallback.SnapshotRuntimeState(id)
+		state := fallback.SnapshotDeploymentPersistentState(id)
+		cooldown := fallback.SnapshotDeploymentCooldown(id)
+		stickyVirtualModels := fallback.GetStickyVirtualModelsForDeployment(id)
+		rows = append(rows, map[string]interface{}{
+			"deployment_id":            id,
+			"enabled":                  dep.Enabled,
+			"pool":                     dep.Pool,
+			"real_model":               dep.RealModel,
+			"quality_tier":             dep.QualityTier,
+			"cost_tier":                dep.CostTier,
+			"supports_vision":          dep.SupportsVision,
+			"supports_tools":           dep.SupportsTools,
+			"supports_json":            dep.SupportsJSON,
+			"supports_stream":          dep.SupportsStream,
+			"context_length":           dep.ContextLength,
+			"rpm_limit":                dep.RPMLimit,
+			"rpd_limit":                dep.RPDLimit,
+			"tpm_limit":                dep.TPMLimit,
+			"tpd_limit":                dep.TPDLimit,
+			"minute_requests":          rt.MinuteRequests,
+			"day_requests":             rt.DayRequests,
+			"minute_tokens":            rt.MinuteTokens,
+			"day_tokens":               rt.DayTokens,
+			"success_count":            rt.SuccessCount,
+			"failure_count":            rt.FailureCount,
+			"rate_limit_score":         rt.RateLimitScore,
+			"health":                   string(fallback.GetHealthStatus(id)),
+			"last_error":               rt.LastError,
+			"last_error_at":            rt.LastErrorAt,
+			"state_last_error_code":    state.LastErrorCode,
+			"state_last_error_message": state.LastErrorMessage,
+			"state_updated_at":         state.LastStateUpdateAt,
+			"exhausted_until":          state.ExhaustedUntil,
+			"exhausted_active":         state.ExhaustedActive,
+			"cooldown_until":           cooldown.CooldownUntil,
+			"cooldown_active":          cooldown.CooldownActive,
+			"cooldown_reason":          cooldown.Reason,
+			"cooldown_updated_at":      cooldown.UpdatedAt,
+			"is_sticky":                len(stickyVirtualModels) > 0,
+			"sticky_virtual_models":    stickyVirtualModels,
+		})
+	}
+	return rows
 }
 
 func triggerDeploymentHealthCheck(c *gin.Context) {

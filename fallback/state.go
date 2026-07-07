@@ -3,6 +3,7 @@ package fallback
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,23 @@ type DeploymentCooldownState struct {
 	CooldownUntil *time.Time `gorm:"column:cooldown_until"`
 	CreatedAt     time.Time  `gorm:"column:created_at"`
 	UpdatedAt     time.Time  `gorm:"column:updated_at"`
+}
+
+type DeploymentPersistentStateSnapshot struct {
+	DeploymentID      string
+	ExhaustedUntil    *time.Time
+	ExhaustedActive   bool
+	LastErrorCode     string
+	LastErrorMessage  string
+	LastStateUpdateAt time.Time
+}
+
+type DeploymentCooldownSnapshot struct {
+	DeploymentID   string
+	CooldownUntil  *time.Time
+	CooldownActive bool
+	Reason         string
+	UpdatedAt      time.Time
 }
 
 type UsageInfo struct {
@@ -336,6 +354,47 @@ func GetDeploymentCooldown(deploymentID string) (*time.Time, string, error) {
 	return state.CooldownUntil, state.Reason, nil
 }
 
+func SnapshotDeploymentPersistentState(deploymentID string) DeploymentPersistentStateSnapshot {
+	snapshot := DeploymentPersistentStateSnapshot{DeploymentID: deploymentID}
+	if model.DB == nil {
+		return snapshot
+	}
+
+	var state DeploymentState
+	err := model.DB.Where("deployment_id = ? AND date = ?", deploymentID, todayString()).First(&state).Error
+	if err != nil {
+		return snapshot
+	}
+
+	now := time.Now().UTC()
+	snapshot.ExhaustedUntil = state.ExhaustedUntil
+	snapshot.ExhaustedActive = state.ExhaustedUntil != nil && state.ExhaustedUntil.After(now)
+	snapshot.LastErrorCode = state.LastErrorCode
+	snapshot.LastErrorMessage = state.LastErrorMessage
+	snapshot.LastStateUpdateAt = state.UpdatedAt
+	return snapshot
+}
+
+func SnapshotDeploymentCooldown(deploymentID string) DeploymentCooldownSnapshot {
+	snapshot := DeploymentCooldownSnapshot{DeploymentID: deploymentID}
+	if model.DB == nil {
+		return snapshot
+	}
+
+	var state DeploymentCooldownState
+	err := model.DB.Where("deployment_id = ?", deploymentID).First(&state).Error
+	if err != nil {
+		return snapshot
+	}
+
+	now := time.Now().UTC()
+	snapshot.CooldownUntil = state.CooldownUntil
+	snapshot.CooldownActive = state.CooldownUntil != nil && state.CooldownUntil.After(now)
+	snapshot.Reason = state.Reason
+	snapshot.UpdatedAt = state.UpdatedAt
+	return snapshot
+}
+
 func EnsureDeploymentCooldownState(deploymentID string) (*DeploymentCooldownState, error) {
 	if model.DB == nil {
 		return nil, fmt.Errorf("database is not initialized")
@@ -556,6 +615,23 @@ func ClearStickyDeploymentForDeployment(deploymentID string) {
 			delete(stickyDep, virtualModel)
 		}
 	}
+}
+
+func GetStickyVirtualModelsForDeployment(deploymentID string) []string {
+	stickyDepMu.RLock()
+	defer stickyDepMu.RUnlock()
+	if stickyDep == nil {
+		return []string{}
+	}
+
+	virtualModels := make([]string, 0)
+	for virtualModel, stickyDeploymentID := range stickyDep {
+		if stickyDeploymentID == deploymentID {
+			virtualModels = append(virtualModels, virtualModel)
+		}
+	}
+	sort.Strings(virtualModels)
+	return virtualModels
 }
 
 // WarmUpStickyState pre-populates sticky deployment preferences after a restart.

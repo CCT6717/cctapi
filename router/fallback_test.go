@@ -1,12 +1,14 @@
 package router
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/fallback"
@@ -165,6 +167,92 @@ func TestTriggerDeploymentHealthCheckReturnsRuntimeErrorDetails(t *testing.T) {
 	if !strings.Contains(w.Body.String(), `"last_error"`) || !strings.Contains(w.Body.String(), "health check channel") {
 		t.Fatalf("expected last_error details in health-check response, got %s", w.Body.String())
 	}
+}
+
+func TestBuildFallbackRuntimeStatusRowsIncludesRuntimeVisibilityFields(t *testing.T) {
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open in-memory DB: %v", err)
+	}
+	dbmodel.DB = db
+	defer func() {
+		dbmodel.DB = originalDB
+		fallback.ClearStickyDeployment("cct/free")
+	}()
+	if err := fallback.InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	coolingDeploymentID := "free:groq-runtime-visible"
+	stickyDeploymentID := "free:routeway-runtime-visible"
+	fallback.RecordFailure(coolingDeploymentID, "provider returned 429", true)
+	if err := fallback.RecordDeploymentError(coolingDeploymentID, errors.New("provider returned 429")); err != nil {
+		t.Fatalf("RecordDeploymentError failed: %v", err)
+	}
+	if err := fallback.MarkDeploymentCooldown(coolingDeploymentID, "rate limited", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("MarkDeploymentCooldown failed: %v", err)
+	}
+	fallback.SetStickyDeployment("cct/free", stickyDeploymentID)
+
+	rows := buildFallbackRuntimeStatusRows(&fallback.Config{
+		Enabled: true,
+		VirtualModels: map[string]fallback.VirtualModelConfig{
+			"cct/free": {Enabled: true, Pools: []string{"free"}},
+		},
+		Deployments: map[string]fallback.DeploymentConfig{
+			coolingDeploymentID: {
+				Enabled:   true,
+				Pool:      "free",
+				RealModel: "llama-free",
+			},
+			stickyDeploymentID: {
+				Enabled:   true,
+				Pool:      "free",
+				RealModel: "routeway-free",
+			},
+		},
+	})
+
+	coolingRow := findRuntimeStatusRow(t, rows, coolingDeploymentID)
+	if coolingRow["last_error"] != "provider returned 429" {
+		t.Fatalf("expected runtime last_error, got %#v", coolingRow["last_error"])
+	}
+	if coolingRow["state_last_error_message"] != "provider returned 429" {
+		t.Fatalf("expected persistent last error message, got %#v", coolingRow["state_last_error_message"])
+	}
+	if coolingRow["state_last_error_code"] != "unknown" {
+		t.Fatalf("expected persistent last error code, got %#v", coolingRow["state_last_error_code"])
+	}
+	if coolingRow["cooldown_reason"] != "rate limited" {
+		t.Fatalf("expected cooldown reason, got %#v", coolingRow["cooldown_reason"])
+	}
+	if coolingRow["cooldown_active"] != true {
+		t.Fatalf("expected active cooldown, got %#v", coolingRow["cooldown_active"])
+	}
+	if coolingRow["cooldown_until"] == nil {
+		t.Fatal("expected cooldown_until to be populated")
+	}
+
+	stickyRow := findRuntimeStatusRow(t, rows, stickyDeploymentID)
+	if stickyRow["is_sticky"] != true {
+		t.Fatalf("expected sticky deployment flag, got %#v", stickyRow["is_sticky"])
+	}
+	stickyVirtualModels, ok := stickyRow["sticky_virtual_models"].([]string)
+	if !ok || len(stickyVirtualModels) != 1 || stickyVirtualModels[0] != "cct/free" {
+		t.Fatalf("expected sticky virtual model list, got %#v", stickyRow["sticky_virtual_models"])
+	}
+}
+
+func findRuntimeStatusRow(t *testing.T, rows []map[string]interface{}, deploymentID string) map[string]interface{} {
+	t.Helper()
+	for _, row := range rows {
+		if row["deployment_id"] == deploymentID {
+			return row
+		}
+	}
+	t.Fatalf("runtime status row %s not found in %#v", deploymentID, rows)
+	return nil
 }
 
 func TestSplitFallbackEditorChannelModels(t *testing.T) {
