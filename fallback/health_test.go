@@ -14,6 +14,28 @@ import (
 
 func strPtr(s string) *string { return &s }
 
+func setupHealthCheckStateTestDB(t *testing.T) func() {
+	t.Helper()
+	cleanupDB := setupFreePoolTestDB(t)
+	if err := dbmodel.DB.AutoMigrate(&DeploymentState{}, &DeploymentCooldownState{}); err != nil {
+		cleanupDB()
+		t.Fatalf("failed to migrate health check state tables: %v", err)
+	}
+	resetRuntimeForTest()
+	resetHealthStatusForTest()
+	return func() {
+		resetRuntimeForTest()
+		resetHealthStatusForTest()
+		cleanupDB()
+	}
+}
+
+func resetHealthStatusForTest() {
+	globalHealth.mu.Lock()
+	defer globalHealth.mu.Unlock()
+	globalHealth.status = make(map[string]HealthStatus)
+}
+
 func TestBuildHealthProbeRequestKeylessOmitsAuthorization(t *testing.T) {
 	channel := &dbmodel.Channel{
 		Id:      1,
@@ -145,5 +167,136 @@ func TestCheckOneDeploymentClearsRuntimeErrorWhenHealthy(t *testing.T) {
 	snap := SnapshotRuntimeState(deploymentID)
 	if snap.LastError != "" {
 		t.Fatalf("expected healthy health check to clear runtime last_error, got %q", snap.LastError)
+	}
+}
+
+func TestCheckOneDeploymentRecordsProviderErrorBodyForRateLimit(t *testing.T) {
+	cleanupDB := setupHealthCheckStateTestDB(t)
+	defer cleanupDB()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"free tier quota exceeded","type":"rate_limit_error","code":"rate_limit_exceeded"}}`))
+	}))
+	defer server.Close()
+
+	baseURL := server.URL
+	channel := dbmodel.Channel{
+		Name:    "health-check-rate-limit",
+		Type:    channeltype.OpenAICompatible,
+		BaseURL: &baseURL,
+		Status:  dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create test channel: %v", err)
+	}
+
+	deploymentID := "free:nvidia-001122ff"
+	checkOneDeployment(deploymentID, DeploymentConfig{
+		ID:        deploymentID,
+		ChannelID: channel.Id,
+		RealModel: "free-model",
+	}, time.Second)
+
+	if got := GetHealthStatus(deploymentID); got != HealthRateLimited {
+		t.Fatalf("expected rate_limited status, got %s", got)
+	}
+	snap := SnapshotRuntimeState(deploymentID)
+	if !strings.Contains(snap.LastError, "HTTP 429") ||
+		!strings.Contains(snap.LastError, "free tier quota exceeded") ||
+		!strings.Contains(snap.LastError, "rate_limit_exceeded") {
+		t.Fatalf("expected provider rate-limit body in runtime error, got %q", snap.LastError)
+	}
+	cooldown := SnapshotDeploymentCooldown(deploymentID)
+	if !cooldown.CooldownActive || !strings.Contains(cooldown.Reason, "free tier quota exceeded") {
+		t.Fatalf("expected cooldown reason to include provider body, got active=%v reason=%q",
+			cooldown.CooldownActive, cooldown.Reason)
+	}
+}
+
+func TestCheckOneDeploymentRecordsProviderErrorBodyForUnauthorized(t *testing.T) {
+	cleanupDB := setupHealthCheckStateTestDB(t)
+	defer cleanupDB()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"invalid API key","type":"auth_error","code":"invalid_api_key"}}`))
+	}))
+	defer server.Close()
+
+	baseURL := server.URL
+	channel := dbmodel.Channel{
+		Name:    "health-check-unauthorized",
+		Type:    channeltype.OpenAICompatible,
+		BaseURL: &baseURL,
+		Status:  dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create test channel: %v", err)
+	}
+
+	deploymentID := "free:nvidia-001122aa"
+	checkOneDeployment(deploymentID, DeploymentConfig{
+		ID:        deploymentID,
+		ChannelID: channel.Id,
+		RealModel: "free-model",
+	}, time.Second)
+
+	if got := GetHealthStatus(deploymentID); got != HealthInvalid {
+		t.Fatalf("expected invalid status, got %s", got)
+	}
+	snap := SnapshotRuntimeState(deploymentID)
+	if !strings.Contains(snap.LastError, "HTTP 401") ||
+		!strings.Contains(snap.LastError, "invalid API key") ||
+		!strings.Contains(snap.LastError, "invalid_api_key") {
+		t.Fatalf("expected provider auth body in runtime error, got %q", snap.LastError)
+	}
+	cooldown := SnapshotDeploymentCooldown(deploymentID)
+	if !cooldown.CooldownActive || !strings.Contains(cooldown.Reason, "invalid API key") {
+		t.Fatalf("expected invalid cooldown reason to include provider body, got active=%v reason=%q",
+			cooldown.CooldownActive, cooldown.Reason)
+	}
+}
+
+func TestCheckOneDeploymentRecordsPlainTextProviderErrorBodyForServerError(t *testing.T) {
+	cleanupDB := setupHealthCheckStateTestDB(t)
+	defer cleanupDB()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "upstream overloaded", http.StatusBadGateway)
+	}))
+	defer server.Close()
+
+	baseURL := server.URL
+	channel := dbmodel.Channel{
+		Name:    "health-check-5xx",
+		Type:    channeltype.OpenAICompatible,
+		BaseURL: &baseURL,
+		Status:  dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create test channel: %v", err)
+	}
+
+	deploymentID := "free:nvidia-001122bb"
+	checkOneDeployment(deploymentID, DeploymentConfig{
+		ID:        deploymentID,
+		ChannelID: channel.Id,
+		RealModel: "free-model",
+	}, time.Second)
+
+	if got := GetHealthStatus(deploymentID); got != HealthError {
+		t.Fatalf("expected error status, got %s", got)
+	}
+	snap := SnapshotRuntimeState(deploymentID)
+	if !strings.Contains(snap.LastError, "HTTP 502") || !strings.Contains(snap.LastError, "upstream overloaded") {
+		t.Fatalf("expected provider text body in runtime error, got %q", snap.LastError)
+	}
+	cooldown := SnapshotDeploymentCooldown(deploymentID)
+	if !cooldown.CooldownActive || !strings.Contains(cooldown.Reason, "upstream overloaded") {
+		t.Fatalf("expected 5xx cooldown reason to include provider body, got active=%v reason=%q",
+			cooldown.CooldownActive, cooldown.Reason)
 	}
 }

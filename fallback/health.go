@@ -2,7 +2,9 @@ package fallback
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -23,6 +25,9 @@ const (
 	HealthError       HealthStatus = "error"
 	HealthUnknown     HealthStatus = "unknown"
 )
+
+const maxHealthProbeErrorBodyBytes = 4096
+const maxHealthProbeErrorDetailRunes = 500
 
 type HealthCheckConfig struct {
 	Enabled     bool `json:"enabled"`
@@ -139,7 +144,7 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 	// pingDeployment keeps per-ping cost ~1 token). Previously skipped to
 	// avoid quota consumption, but that left free deployments without any
 	// active probing — failures were only discovered by real requests.
-	statusCode, err := pingDeployment(deploymentID, channel, dep, timeout)
+	statusCode, responseBody, err := pingDeployment(deploymentID, channel, dep, timeout)
 	if err != nil {
 		logger.SysError(fmt.Sprintf("[health] ping %s failed: %v", deploymentID, err))
 		RecordFailure(deploymentID, fmt.Sprintf("health check failed: %v", err), false)
@@ -153,36 +158,120 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 		clearRuntimeError(deploymentID)
 		setHealthStatus(deploymentID, HealthHealthy)
 	case statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden:
-		RecordFailure(deploymentID, fmt.Sprintf("health check unauthorized: HTTP %d", statusCode), false)
+		reason := healthProbeFailureReason("health check unauthorized", statusCode, responseBody)
+		RecordFailure(deploymentID, reason, false)
 		setHealthStatus(deploymentID, HealthInvalid)
-		_ = MarkInvalid(deploymentID, "health check unauthorized")
+		_ = MarkInvalid(deploymentID, reason)
 	case statusCode == http.StatusTooManyRequests:
-		RecordFailure(deploymentID, "health check rate limited: HTTP 429", true)
+		reason := healthProbeFailureReason("health check rate limited", statusCode, responseBody)
+		RecordFailure(deploymentID, reason, true)
 		setHealthStatus(deploymentID, HealthRateLimited)
-		_ = MarkDeploymentCooldownForDuration(deploymentID, "health check rate limited", 60*time.Second)
+		_ = MarkDeploymentCooldownForDuration(deploymentID, reason, 60*time.Second)
 	case statusCode >= 500:
-		RecordFailure(deploymentID, fmt.Sprintf("health check upstream error: HTTP %d", statusCode), false)
+		reason := healthProbeFailureReason("health check upstream error", statusCode, responseBody)
+		RecordFailure(deploymentID, reason, false)
 		setHealthStatus(deploymentID, HealthError)
-		_ = MarkDeploymentCooldownForDuration(deploymentID, "health check 5xx", 30*time.Second)
+		_ = MarkDeploymentCooldownForDuration(deploymentID, reason, 30*time.Second)
 	default:
 		setHealthStatus(deploymentID, HealthHealthy)
 	}
 }
 
 // pingDeployment builds a minimal chat completion against the deployment's
-// channel and returns the HTTP status code. It does NOT parse the body.
-func pingDeployment(deploymentID string, channel *dbmodel.Channel, dep DeploymentConfig, timeout time.Duration) (int, error) {
+// channel and returns the HTTP status code plus a small response-body sample.
+func pingDeployment(deploymentID string, channel *dbmodel.Channel, dep DeploymentConfig, timeout time.Duration) (int, []byte, error) {
 	req, err := buildHealthProbeRequest(deploymentID, channel, dep)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode, nil
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, maxHealthProbeErrorBodyBytes))
+	return resp.StatusCode, body, nil
+}
+
+func healthProbeFailureReason(prefix string, statusCode int, body []byte) string {
+	reason := fmt.Sprintf("%s: HTTP %d", prefix, statusCode)
+	if detail := parseHealthProbeErrorDetail(body); detail != "" {
+		reason += ": " + detail
+	}
+	return reason
+}
+
+func parseHealthProbeErrorDetail(body []byte) string {
+	raw := sanitizeHealthProbeErrorText(string(body))
+	if raw == "" {
+		return ""
+	}
+
+	var root map[string]interface{}
+	if err := json.Unmarshal(body, &root); err != nil {
+		return raw
+	}
+
+	if detail := parseHealthProbeJSONError(root["error"]); detail != "" {
+		return detail
+	}
+	if detail := jsonValueString(root["message"]); detail != "" {
+		return sanitizeHealthProbeErrorText(detail)
+	}
+	if detail := jsonValueString(root["detail"]); detail != "" {
+		return sanitizeHealthProbeErrorText(detail)
+	}
+	return raw
+}
+
+func parseHealthProbeJSONError(value interface{}) string {
+	switch typed := value.(type) {
+	case string:
+		return sanitizeHealthProbeErrorText(typed)
+	case map[string]interface{}:
+		message := jsonValueString(typed["message"])
+		var attrs []string
+		if errorType := jsonValueString(typed["type"]); errorType != "" {
+			attrs = append(attrs, "type="+errorType)
+		}
+		if code := jsonValueString(typed["code"]); code != "" {
+			attrs = append(attrs, "code="+code)
+		}
+		if message != "" && len(attrs) > 0 {
+			return sanitizeHealthProbeErrorText(fmt.Sprintf("%s (%s)", message, strings.Join(attrs, ", ")))
+		}
+		if message != "" {
+			return sanitizeHealthProbeErrorText(message)
+		}
+		if len(attrs) > 0 {
+			return sanitizeHealthProbeErrorText(strings.Join(attrs, ", "))
+		}
+	}
+	return ""
+}
+
+func jsonValueString(value interface{}) string {
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case float64, bool:
+		return strings.TrimSpace(fmt.Sprint(typed))
+	default:
+		return ""
+	}
+}
+
+func sanitizeHealthProbeErrorText(value string) string {
+	value = strings.Join(strings.Fields(value), " ")
+	if value == "" {
+		return ""
+	}
+	runes := []rune(value)
+	if len(runes) > maxHealthProbeErrorDetailRunes {
+		return string(runes[:maxHealthProbeErrorDetailRunes]) + "..."
+	}
+	return value
 }
 
 func buildHealthProbeRequest(deploymentID string, channel *dbmodel.Channel, dep DeploymentConfig) (*http.Request, error) {
