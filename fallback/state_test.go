@@ -50,3 +50,60 @@ func TestIsDoubaoDeploymentMatchesIDOrModel(t *testing.T) {
 		t.Fatal("expected non-doubao deployment not to match")
 	}
 }
+
+func TestClearDeploymentCooldownClearsPersistentCooldown(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+
+	if err := InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	deploymentID := "free:groq-001122ff"
+	if err := MarkDeploymentCooldown(deploymentID, "rate limited", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("MarkDeploymentCooldown failed: %v", err)
+	}
+
+	cooldownUntil, reason, err := GetDeploymentCooldown(deploymentID)
+	if err != nil || cooldownUntil == nil || reason != "rate limited" {
+		t.Fatalf("expected active cooldown before clear, until=%v reason=%q err=%v", cooldownUntil, reason, err)
+	}
+
+	if err := ClearDeploymentCooldown(deploymentID); err != nil {
+		t.Fatalf("ClearDeploymentCooldown failed: %v", err)
+	}
+
+	cooldownUntil, reason, err = GetDeploymentCooldown(deploymentID)
+	if err != nil {
+		t.Fatalf("GetDeploymentCooldown failed: %v", err)
+	}
+	if cooldownUntil != nil || reason != "" {
+		t.Fatalf("expected persistent cooldown cleared, until=%v reason=%q", cooldownUntil, reason)
+	}
+}
+
+func TestResetDeploymentStateClearsPersistentCooldown(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+
+	if err := InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	deploymentID := "free:routeway-aabbccdd"
+	if err := MarkDeploymentCooldown(deploymentID, "manual cooldown", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("MarkDeploymentCooldown failed: %v", err)
+	}
+
+	if err := ResetDeploymentState(deploymentID); err != nil {
+		t.Fatalf("ResetDeploymentState failed: %v", err)
+	}
+
+	cooldownUntil, reason, err := GetDeploymentCooldown(deploymentID)
+	if err != nil {
+		t.Fatalf("GetDeploymentCooldown failed: %v", err)
+	}
+	if cooldownUntil != nil || reason != "" {
+		t.Fatalf("expected reset to clear persistent cooldown, until=%v reason=%q", cooldownUntil, reason)
+	}
+}

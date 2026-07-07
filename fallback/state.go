@@ -429,7 +429,10 @@ func ResetDeploymentState(deploymentID string) error {
 	state.LastErrorMessage = ""
 	state.UpdatedAt = time.Now().UTC()
 
-	return model.DB.Save(state).Error
+	if err := model.DB.Save(state).Error; err != nil {
+		return err
+	}
+	return clearDeploymentCooldownState(deploymentID)
 }
 
 // ClearDeploymentExhausted clears only the exhausted_until field
@@ -445,13 +448,30 @@ func ClearDeploymentExhausted(deploymentID string) error {
 	return model.DB.Save(state).Error
 }
 
-// ClearDeploymentCooldown clears only the cooldown_until field
+// ClearDeploymentCooldown clears both legacy daily-state cooldowns and the
+// persistent cooldown row used by routing checks.
 func ClearDeploymentCooldown(deploymentID string) error {
 	state, err := EnsureDeploymentState(deploymentID, todayString())
 	if err != nil {
 		return err
 	}
 
+	state.CooldownUntil = nil
+	state.UpdatedAt = time.Now().UTC()
+
+	if err := model.DB.Save(state).Error; err != nil {
+		return err
+	}
+	return clearDeploymentCooldownState(deploymentID)
+}
+
+func clearDeploymentCooldownState(deploymentID string) error {
+	state, err := EnsureDeploymentCooldownState(deploymentID)
+	if err != nil {
+		return err
+	}
+
+	state.Reason = ""
 	state.CooldownUntil = nil
 	state.UpdatedAt = time.Now().UTC()
 
