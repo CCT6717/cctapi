@@ -154,34 +154,6 @@ func relayWithFallback(c *gin.Context) {
 		return
 	}
 
-	// Get all deployments for this virtual model
-	deployments, err := fallback.GetDeploymentsForVirtualModel(virtualModel)
-	vmConfig, hasVMConfig := fallback.GetVirtualModel(virtualModel)
-	preferredID := ""
-	if hasVMConfig {
-		preferredID = vmConfig.PreferredDeployment
-		if preferredID == "" {
-			preferredID = vmConfig.FixedDeployment
-		}
-	}
-	// Sticky routing: prefer last successful deployment; skip only when it hits soft limit, error, or becomes unavailable.
-	stickyID := fallback.GetStickyDeployment(virtualModel)
-	if stickyID != "" && preferredID == "" {
-		for i, dep := range deployments {
-			if dep.ID == stickyID {
-				if i > 0 {
-					deployments = append([]fallback.DeploymentConfig{dep}, append(deployments[:i], deployments[i+1:]...)...)
-					logger.Infof(ctx, "[fallback] sticky routing: virtual model %s pinned to deployment %s", virtualModel, stickyID)
-				}
-				break
-			}
-		}
-	}
-	if err != nil {
-		claudeutil.WriteClaudeOrOpenAIError(c, http.StatusServiceUnavailable, "one_api_error", fmt.Sprintf("No available deployments for virtual model %s: %s", virtualModel, err.Error()))
-		return
-	}
-
 	// Read the original request body once
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
@@ -204,32 +176,28 @@ func relayWithFallback(c *gin.Context) {
 	if caps.MaxTokens == 0 && estimatedTokens > 0 {
 		caps.MaxTokens = estimatedTokens
 	}
-	beforeCap := len(deployments)
-	deployments = fallback.FilterByCapability(deployments, caps)
-	if len(deployments) < beforeCap {
+
+	plan, err := fallback.PrepareDeploymentPlanForRequest(virtualModel, caps)
+	if err != nil {
+		claudeutil.WriteClaudeOrOpenAIError(c, http.StatusServiceUnavailable, "one_api_error", fmt.Sprintf("No available deployments for virtual model %s: %s", virtualModel, err.Error()))
+		return
+	}
+	deployments := plan.Deployments
+
+	if plan.CapabilityAfter < plan.CapabilityBefore {
 		logger.Infof(ctx, "[fallback] capability filter: %d -> %d deployments (vision=%v tools=%v json=%v stream=%v)",
-			beforeCap, len(deployments), caps.Vision, caps.Tools, caps.JSON, caps.Stream)
+			plan.CapabilityBefore, plan.CapabilityAfter, caps.Vision, caps.Tools, caps.JSON, caps.Stream)
 	}
 
-	// Health filter: drop deployments marked invalid or in error state by the
-	// background health checker. healthy/unknown are allowed to route.
-	beforeHealth := len(deployments)
-	deployments = filterHealthyDeployments(deployments)
-	if len(deployments) < beforeHealth {
-		logger.Infof(ctx, "[fallback] health filter: %d -> %d deployments", beforeHealth, len(deployments))
+	if plan.HealthAfter < plan.HealthBefore {
+		logger.Infof(ctx, "[fallback] health filter: %d -> %d deployments", plan.HealthBefore, plan.HealthAfter)
 	}
 
-	// Strategy-aware sort (quality_first / cost_first / free_first).
-	// Preferred deployment is promoted to first position after sort.
-	if hasVMConfig && len(deployments) > 1 {
-		deployments = fallback.SortByStrategy(deployments, vmConfig.Strategy)
-		if preferredID != "" {
-			deployments = fallback.PreferDeployment(deployments, preferredID)
+	if plan.StickyDeploymentID != "" && plan.PreferredDeploymentID == "" {
+		if len(deployments) > 0 && deployments[0].ID == plan.StickyDeploymentID {
+			logger.Infof(ctx, "[fallback] sticky routing: virtual model %s pinned to deployment %s", virtualModel, plan.StickyDeploymentID)
 		}
-	}
-
-	if stickyID != "" && preferredID == "" {
-		logger.Infof(ctx, "[fallback] sticky active for %s -> %s", virtualModel, stickyID)
+		logger.Infof(ctx, "[fallback] sticky active for %s -> %s", virtualModel, plan.StickyDeploymentID)
 	} else if len(deployments) > 0 {
 		logger.Infof(ctx, "[fallback] strategy-based start deployment for %s: %s", virtualModel, deployments[0].ID)
 	}
@@ -357,6 +325,12 @@ func relayWithFallback(c *gin.Context) {
 		c.Set(ctxkey.FallbackVirtualModel, virtualModel)
 		c.Set(ctxkey.FallbackDeploymentID, dep.ID)
 		c.Set(ctxkey.FallbackRealModel, dep.RealModel)
+		freeProviderName, hasFreeProviderName := fallback.FreeProviderNameFromDeploymentID(dep.ID)
+		if hasFreeProviderName {
+			c.Set(ctxkey.FallbackFreeProviderName, freeProviderName)
+		} else {
+			c.Set(ctxkey.FallbackFreeProviderName, "")
+		}
 		c.Set(ctxkey.FallbackChannelID, dep.ChannelID)
 		c.Set(ctxkey.FallbackDeploymentIndex, i)
 		c.Set(ctxkey.FallbackAttemptCount, attempts)
@@ -370,6 +344,9 @@ func relayWithFallback(c *gin.Context) {
 		newCtx := context.WithValue(ctx, ctxkey.FallbackVirtualModel, virtualModel)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackDeploymentID, dep.ID)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackRealModel, dep.RealModel)
+		if hasFreeProviderName {
+			newCtx = context.WithValue(newCtx, ctxkey.FallbackFreeProviderName, freeProviderName)
+		}
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackChannelID, dep.ChannelID)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackDeploymentIndex, i)
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackAttemptCount, attempts)
@@ -400,7 +377,7 @@ func relayWithFallback(c *gin.Context) {
 			// Success - report to monitor and record for smart sorting
 			monitor.Emit(dep.ChannelID, true)
 			if !relayModeRecordsFallbackUsage(relayMode) {
-				fallback.RecordDeploymentSuccess(dep.ID, fallback.UsageInfo{})
+				fallback.RecordFallbackDeploymentSuccess(dep.ID, dep.RealModel, fallback.UsageInfo{})
 			}
 			// Record runtime usage for RPM/RPD/TPM/TPD tracking.
 			// Use estimated tokens when upstream usage isn't reported via UsageInfo path.
@@ -637,18 +614,6 @@ func effectiveTokenCount(estimated int) int {
 		return estimated
 	}
 	return 1024
-}
-
-// filterHealthyDeployments drops deployments that the background health checker
-// has marked invalid or in a persistent error state. healthy/unknown pass through.
-func filterHealthyDeployments(deployments []fallback.DeploymentConfig) []fallback.DeploymentConfig {
-	out := make([]fallback.DeploymentConfig, 0, len(deployments))
-	for _, dep := range deployments {
-		if fallback.IsDeploymentHealthy(dep.ID) {
-			out = append(out, dep)
-		}
-	}
-	return out
 }
 
 func estimateTokenCount(req *model.GeneralOpenAIRequest) int {

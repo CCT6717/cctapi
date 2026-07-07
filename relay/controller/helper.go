@@ -184,7 +184,7 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	// Record fallback deployment usage if this is a fallback request
 	deploymentIDValue := ctx.Value(ctxkey.FallbackDeploymentID)
 	if deploymentID, ok := deploymentIDValue.(string); ok {
-		fallback.RecordDeploymentSuccess(deploymentID, fallback.UsageInfo{
+		fallback.RecordFallbackDeploymentSuccess(deploymentID, realModelName, fallback.UsageInfo{
 			PromptTokens:     promptTokens,
 			CompletionTokens: completionTokens,
 			TotalTokens:      totalTokens,

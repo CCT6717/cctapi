@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Container, Segment } from 'semantic-ui-react';
 import { getFooterHTML, getSystemName } from '../helpers';
+import { sanitizeHtml } from '../helpers/sanitize';
 
 const Footer = () => {
   const { t } = useTranslation();
@@ -34,7 +35,7 @@ const Footer = () => {
         {footer ? (
           <div
             className='custom-footer'
-            dangerouslySetInnerHTML={{ __html: footer }}
+            dangerouslySetInnerHTML={{ __html: sanitizeHtml(footer) }}
           ></div>
         ) : (
           <div className='custom-footer'>

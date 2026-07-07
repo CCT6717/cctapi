@@ -67,7 +67,10 @@ func InitStateStore() error {
 	if err := InitAlertHistoryStore(); err != nil {
 		return err
 	}
-	return InitScoreHistoryStore()
+	if err := InitScoreHistoryStore(); err != nil {
+		return err
+	}
+	return InitFreeProviderLedgerStore()
 }
 
 // MigrateStateStore cleans duplicate records and ensures DB unique constraint.
@@ -244,6 +247,13 @@ func RecordDeploymentSuccess(deploymentID string, usage UsageInfo) error {
 		Where("deployment_id = ? AND date = ?", deploymentID, todayString()).
 		UpdateColumn("success_count", gorm.Expr("success_count + 1")).
 		Error
+}
+
+func RecordFallbackDeploymentSuccess(deploymentID string, modelName string, usage UsageInfo) error {
+	if err := RecordDeploymentSuccess(deploymentID, usage); err != nil {
+		return err
+	}
+	return RecordFreeProviderUsage(deploymentID, modelName, usage)
 }
 
 // RecordDeploymentError records deployment error

@@ -1,6 +1,7 @@
 import { Label, Message } from 'semantic-ui-react';
 import { getChannelOption } from './helper';
 import React from 'react';
+import { sanitizeHtml } from './sanitize';
 
 export function renderText(text, limit) {
   if (text.length > limit) {
@@ -115,7 +116,7 @@ export function renderChannelTip(channelId) {
   }
   return (
     <Message>
-      <div dangerouslySetInnerHTML={{ __html: channel.tip }}></div>
+      <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(channel.tip) }}></div>
     </Message>
   );
 }

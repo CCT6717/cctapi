@@ -68,11 +68,8 @@ func main() {
 
 	// Sync free pool channels and deployments (必须在数据库初始化后)
 	if common.IsFallbackEnabled {
-		cfg := fallback.GetConfig()
-		if cfg != nil {
-			if err := fallback.SyncFreePool(cfg); err != nil {
-				logger.SysError("failed to sync free pool: " + err.Error())
-			}
+		if err := fallback.SyncFreePoolRuntime(); err != nil {
+			logger.SysError("failed to sync free pool: " + err.Error())
 		}
 	}
 

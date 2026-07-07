@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Card } from 'semantic-ui-react';
 import { API, showError } from '../../helpers';
 import { marked } from 'marked';
+import { sanitizeHtml } from '../../helpers/sanitize';
 
 const About = () => {
   const { t } = useTranslation();
@@ -16,7 +17,7 @@ const About = () => {
     if (success) {
       let aboutContent = data;
       if (!data.startsWith('https://')) {
-        aboutContent = marked.parse(data);
+        aboutContent = sanitizeHtml(marked.parse(data));
       }
       setAbout(aboutContent);
       localStorage.setItem('about', aboutContent);
@@ -59,7 +60,7 @@ const About = () => {
                 <Card.Content>
                   <div
                     style={{ fontSize: 'larger' }}
-                    dangerouslySetInnerHTML={{ __html: about }}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(about) }}
                   ></div>
                 </Card.Content>
               </Card>

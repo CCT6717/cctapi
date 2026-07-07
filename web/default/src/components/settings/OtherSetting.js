@@ -12,6 +12,7 @@ import {
 import { Link } from 'react-router-dom';
 import { API, showError, showSuccess, verifyJSON } from '../../helpers';
 import { marked } from 'marked';
+import { sanitizeHtml } from '../../helpers/sanitize';
 
 const OtherSetting = () => {
   const { t } = useTranslation();
@@ -108,7 +109,7 @@ const OtherSetting = () => {
     } else {
       setUpdateData({
         tag_name: tag_name,
-        content: marked.parse(body),
+        content: sanitizeHtml(marked.parse(body)),
       });
       setShowUpdateModal(true);
     }
@@ -232,7 +233,7 @@ const OtherSetting = () => {
         <Modal.Header>新版本：{updateData.tag_name}</Modal.Header>
         <Modal.Content>
           <Modal.Description>
-            <div dangerouslySetInnerHTML={{ __html: updateData.content }}></div>
+            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(updateData.content) }}></div>
           </Modal.Description>
         </Modal.Content>
         <Modal.Actions>

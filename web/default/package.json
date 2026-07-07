@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "antd": "^6.5.0",
     "axios": "^0.27.2",
+    "dompurify": "^3.4.11",
     "history": "^5.3.0",
     "i18next": "^24.2.2",
     "i18next-browser-languagedetector": "^8.0.2",
+    "lucide-react": "^1.23.0",
     "marked": "^4.1.1",
     "moment": "^2.30.1",
     "react": "^18.2.0",
@@ -25,6 +28,8 @@
     "start": "react-scripts start",
     "build": "react-scripts build && node scripts/sync-build.js",
     "test": "react-scripts test",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -32,6 +37,12 @@
       "react-app",
       "react-app/jest"
     ]
+  },
+  "jest": {
+    "moduleNameMapper": {
+      "^@rc-component/([^/]+)/locale/(.*)$": "@rc-component/$1/lib/locale/$2",
+      "^@rc-component/([^/]+)/(?!lib/|es/)(.*)$": "@rc-component/$1/lib/$2"
+    }
   },
   "browserslist": {
     "production": [
@@ -46,9 +57,14 @@
     ]
   },
   "devDependencies": {
+    "@storybook/addon-essentials": "^8.6.14",
+    "@storybook/preset-create-react-app": "^8.6.14",
+    "@storybook/react-webpack5": "^8.6.14",
+    "@storybook/test": "^8.6.14",
     "ajv": "^6.15.0",
     "ajv-keywords": "^3.5.2",
-    "prettier": "^2.7.1"
+    "prettier": "^2.7.1",
+    "storybook": "^8.6.14"
   },
   "prettier": {
     "singleQuote": true,

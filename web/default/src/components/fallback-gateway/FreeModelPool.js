@@ -3,6 +3,7 @@ import { Button, Header, Icon, Label, Loader, Message, Table } from 'semantic-ui
 import { showError, showSuccess } from '../../helpers';
 import {
   cleanupDryRun,
+  getFreePoolUsage,
   getGatewayConfig,
   getRuntimeStatus,
   reloadConfig,
@@ -11,9 +12,13 @@ import {
 } from './gatewayConfigApi';
 import FreeProvidersEditor from './FreeProvidersEditor';
 import {
+  buildFreePoolWorkflowSummary,
+  indexUsageRows,
   isAutoFreeDeployment,
+  loadFreePoolDashboardData,
   providerFromDeploymentId,
 } from './freePoolUtils';
+import FreePoolWorkflowDashboard from './FreePoolWorkflowDashboard';
 
 const POOL_LABELS = {
   free: '免费池',
@@ -26,6 +31,21 @@ const STRATEGY_LABELS = {
 const PROVIDER_LABELS = {
   openrouter: 'OpenRouter',
   groq: 'Groq',
+  google: 'Google AI',
+  kilo: 'Kilo',
+  pollinations: 'Pollinations',
+  ovh: 'OVH Cloud',
+  nvidia: 'NVIDIA',
+  cohere: 'Cohere',
+  huggingface: 'Hugging Face',
+  llm7: 'LLM7',
+  opencode: 'OpenCode',
+  aihorde: 'AI Horde',
+  routeway: 'Routeway',
+  bazaarlink: 'Bazaarlink',
+  ainative: 'AINative',
+  agnes: 'Agnes',
+  reka: 'Reka',
 };
 
 const formatNumber = (value) => {
@@ -41,9 +61,32 @@ const formatLimit = (value) => {
   return n === 0 ? '不限' : formatNumber(n);
 };
 
+const formatQuotaMode = (value) => {
+  if (!value || value === 'free') return '免费';
+  return value;
+};
+
+const formatRuntimeHealth = (value) => {
+  const health = String(value || '').toLowerCase();
+  const labels = {
+    valid: '正常',
+    healthy: '正常',
+    ok: '正常',
+    invalid: '异常',
+    critical: '严重',
+    failed: '失败',
+    warning: '警告',
+    unknown: '未知',
+  };
+  return labels[health] || value || '已启用';
+};
+
 const FreeModelPool = () => {
   const [config, setConfig] = useState(null);
   const [runtimeRows, setRuntimeRows] = useState([]);
+  const [usageRows, setUsageRows] = useState([]);
+  const [usageAvailable, setUsageAvailable] = useState(true);
+  const [usageError, setUsageError] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [actingAction, setActingAction] = useState('');
@@ -51,20 +94,28 @@ const FreeModelPool = () => {
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
     try {
-      const [configRes, runtimeRes] = await Promise.all([
-        getGatewayConfig(),
-        getRuntimeStatus(),
-      ]);
-      const configData = configRes.data || {};
+      const {
+        configData,
+        runtimeData,
+        usageRows: nextUsageRows,
+        usageAvailable: nextUsageAvailable,
+        usageError: nextUsageError,
+      } = await loadFreePoolDashboardData({
+        getGatewayConfig,
+        getRuntimeStatus,
+        getFreePoolUsage,
+      });
       if (configData.success !== false && configData.data) {
         setConfig(configData.data);
       } else {
         showError(configData.message || '加载免费模型池失败');
       }
-      const runtimeData = runtimeRes.data || {};
       if (runtimeData.success !== false) {
         setRuntimeRows(Array.isArray(runtimeData.data) ? runtimeData.data : []);
       }
+      setUsageRows(nextUsageRows);
+      setUsageAvailable(nextUsageAvailable !== false);
+      setUsageError(nextUsageError || '');
     } catch (e) {
       showError(e.message || '加载免费模型池失败');
     } finally {
@@ -140,6 +191,7 @@ const FreeModelPool = () => {
   };
 
   const freeModel = config?.virtual_models?.['cct/free'];
+  const usageByProviderKey = useMemo(() => indexUsageRows(usageRows), [usageRows]);
   const freeDeployments = useMemo(() => {
     const deployments = config?.deployments || {};
     return Object.keys(deployments)
@@ -147,11 +199,25 @@ const FreeModelPool = () => {
       .sort()
       .map((id) => {
         const runtime = runtimeRows.find((row) => row.deployment_id === id) || {};
-        return { id, ...deployments[id], runtime };
+        return {
+          id,
+          ...deployments[id],
+          runtime: {
+            ...runtime,
+            health_raw: runtime.health,
+            health: formatRuntimeHealth(runtime.health),
+          },
+        };
       });
   }, [config, runtimeRows]);
 
   const enabledFreeCount = freeDeployments.filter((dep) => dep.enabled !== false).length;
+  const workflowSummary = useMemo(() => buildFreePoolWorkflowSummary({
+    config,
+    freeDeployments,
+    usageRows,
+    usageAvailable,
+  }), [config, freeDeployments, usageRows, usageAvailable]);
 
   if (loading) {
     return (
@@ -222,6 +288,8 @@ const FreeModelPool = () => {
         </div>
       </div>
 
+      <FreePoolWorkflowDashboard summary={workflowSummary} />
+
       <section className='fallback-virtual-panel'>
         <div className='fallback-virtual-header'>
           <div>
@@ -273,8 +341,62 @@ const FreeModelPool = () => {
         </div>
         <FreeProvidersEditor
           freeProviders={config.free_providers || {}}
+          freeProviderCatalog={config.free_provider_catalog || []}
+          usageByProviderKey={usageByProviderKey}
           onChange={updateFreeProviders}
         />
+      </section>
+
+      <section className='fallback-virtual-panel'>
+        <div className='fallback-virtual-header'>
+          <div>
+            <h3>免费供应商用量</h3>
+            <span>按供应商、密钥哈希、模型和周期查看只读 token 与请求统计。</span>
+          </div>
+        </div>
+        <Table compact celled striped>
+          <Table.Header>
+            <Table.Row>
+              <Table.HeaderCell>供应商</Table.HeaderCell>
+              <Table.HeaderCell>密钥哈希</Table.HeaderCell>
+              <Table.HeaderCell>模型</Table.HeaderCell>
+              <Table.HeaderCell>周期</Table.HeaderCell>
+              <Table.HeaderCell>总 token</Table.HeaderCell>
+              <Table.HeaderCell>请求数</Table.HeaderCell>
+              <Table.HeaderCell>成功数</Table.HeaderCell>
+              <Table.HeaderCell>更新时间</Table.HeaderCell>
+            </Table.Row>
+          </Table.Header>
+          <Table.Body>
+            {!usageAvailable ? (
+              <Table.Row>
+                <Table.Cell colSpan='8'>
+                  <Message
+                    warning
+                    icon='warning sign'
+                    header='用量数据不可用'
+                    content={usageError || '用量数据不可用。'}
+                  />
+                </Table.Cell>
+              </Table.Row>
+            ) : usageRows.length === 0 ? (
+              <Table.Row>
+                <Table.Cell colSpan='8' textAlign='center'>当前周期暂无用量记录</Table.Cell>
+              </Table.Row>
+            ) : usageRows.map((row, index) => (
+              <Table.Row key={`${row.provider}-${row.key_hash}-${row.model_name}-${row.period}-${index}`}>
+                <Table.Cell>{PROVIDER_LABELS[row.provider] || row.provider}</Table.Cell>
+                <Table.Cell><Label basic>{row.key_hash}</Label></Table.Cell>
+                <Table.Cell>{row.model_name || '-'}</Table.Cell>
+                <Table.Cell>{row.period || '-'}</Table.Cell>
+                <Table.Cell>{formatNumber(row.total_tokens)}</Table.Cell>
+                <Table.Cell>{formatNumber(row.request_count)}</Table.Cell>
+                <Table.Cell>{formatNumber(row.success_count)}</Table.Cell>
+                <Table.Cell>{row.updated_at ? new Date(row.updated_at).toLocaleString() : '-'}</Table.Cell>
+              </Table.Row>
+            ))}
+          </Table.Body>
+        </Table>
       </section>
 
       <section className='fallback-virtual-panel'>
@@ -318,7 +440,7 @@ const FreeModelPool = () => {
                     </Table.Cell>
                     <Table.Cell>{PROVIDER_LABELS[provider] || provider}</Table.Cell>
                     <Table.Cell>{dep.real_model || '-'}</Table.Cell>
-                    <Table.Cell>{dep.quota_mode || 'free'}</Table.Cell>
+                    <Table.Cell>{formatQuotaMode(dep.quota_mode)}</Table.Cell>
                     <Table.Cell>{formatLimit(dep.rpm_limit)}</Table.Cell>
                     <Table.Cell>{formatLimit(dep.rpd_limit)}</Table.Cell>
                     <Table.Cell>{formatLimit(dep.tpm_limit)}</Table.Cell>
@@ -327,7 +449,7 @@ const FreeModelPool = () => {
                       {dep.enabled === false ? (
                         <Label basic color='grey'>已停用</Label>
                       ) : (
-                        <Label basic color={dep.runtime?.health === 'invalid' ? 'red' : 'green'}>
+                        <Label basic color={dep.runtime?.health_raw === 'invalid' ? 'red' : 'green'}>
                           {dep.runtime?.health || '已启用'}
                         </Label>
                       )}

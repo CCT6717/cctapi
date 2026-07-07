@@ -205,7 +205,7 @@ logger.SysLog(fmt.Sprintf("[free_pool] disabled removed auto channel %s (id=%d)"
 | `[free_pool]` | `free_pool.go` | channel 创建/更新/disable |
 | `[config]` | `config.go` | config reload 成功/失败 |
 | `[fallback]` | `relay.go` | 请求路由、部署切换、成功/失败 |
-| `[health]` | `health.go` | 健康检查（free 跳过 ping） |
+| `[health]` | `health.go` | 健康检查、free provider 轻量探测和错误记录 |
 
 ### 关键日志片段解读
 
@@ -247,11 +247,14 @@ logger.SysLog(fmt.Sprintf("[free_pool] disabled removed auto channel %s (id=%d)"
 | `deployment_id` | 如 `free:openrouter-a1b2c3d4` |
 | `enabled` | 是否启用 |
 | `pool` | 应为 `free` |
-| `health` | free deployment 通常为 `unknown` |
+| `health` | `unknown` / `healthy` / `rate_limited` / `invalid` / `error` |
 | `minute_requests` | 当前分钟请求数 |
 | `day_requests` | 当日请求数 |
 | `rate_limit_score` | 速率限制分数 |
 | `last_error` | 最近一次错误信息 |
+
+手动调用 `POST /api/fallback/deployments/:id/health-check` 会返回 `runtime` 快照，包含
+`last_error` / `last_error_at`，用于确认 free provider 真实探测失败原因。
 
 **Migration 确认**：新旧命名迁移后，检查 `deployment_id` 是否全部为新格式（`free:openrouter-{hash}`），旧格式（`free:openrouter-{数字}`）是否仍然存在。旧格式不会被自动删除（向后兼容），需要手动确认是否清理。
 

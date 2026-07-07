@@ -60,7 +60,7 @@ func truncateToDay(now time.Time) time.Time {
 }
 
 // maybeResetWindows rolls over the minute and day counters when their windows expire.
-// Callers must hold no lock; this function locks internally.
+// Callers must hold runtimeStatesMu.
 func (s *DeploymentRuntimeState) maybeResetWindows() {
 	now := time.Now()
 	minuteStart := now.Truncate(time.Minute)
@@ -79,11 +79,15 @@ func (s *DeploymentRuntimeState) maybeResetWindows() {
 
 // PassQuotaCheck returns true if a request of estimatedTokens tokens would fit
 // within the deployment's RPM/RPD/TPM/TPD limits. A limit of 0 means unchecked.
-// It does NOT mutate the state; use RecordUsage after the request succeeds.
+// It may reset expired quota windows, but does not count the pending request;
+// use RecordUsage after the request succeeds.
 func PassQuotaCheck(dep DeploymentConfig, state *DeploymentRuntimeState, estimatedTokens int) bool {
 	if state == nil {
 		return true
 	}
+	runtimeStatesMu.Lock()
+	defer runtimeStatesMu.Unlock()
+	state.maybeResetWindows()
 	if dep.RPMLimit > 0 && state.MinuteRequests+1 > dep.RPMLimit {
 		return false
 	}
@@ -129,6 +133,15 @@ func RecordSuccess(deploymentID string) {
 	if s, ok := runtimeStates[deploymentID]; ok {
 		s.SuccessCount++
 		s.LastError = ""
+	}
+}
+
+func clearRuntimeError(deploymentID string) {
+	runtimeStatesMu.Lock()
+	defer runtimeStatesMu.Unlock()
+	if s, ok := runtimeStates[deploymentID]; ok {
+		s.LastError = ""
+		s.LastErrorAt = time.Time{}
 	}
 }
 

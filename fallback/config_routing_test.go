@@ -68,6 +68,36 @@ func TestNormalizeRoutingMode(t *testing.T) {
 	}
 }
 
+func TestUpdateDeploymentRealModelUpdatesLiveConfig(t *testing.T) {
+	t.Cleanup(func() { resetConfigForTest(nil) })
+	resetConfigForTest(&Config{
+		Enabled: true,
+		Deployments: map[string]DeploymentConfig{
+			"free:provider-key": {ID: "free:provider-key", Enabled: true, ChannelID: 1, RealModel: "old-model", Pool: "free"},
+		},
+	})
+
+	if !UpdateDeploymentRealModel("free:provider-key", "new-model") {
+		t.Fatalf("expected real model update to report changed=true")
+	}
+	dep, ok := CloneDeployment("free:provider-key")
+	if !ok {
+		t.Fatalf("expected deployment to exist")
+	}
+	if dep.RealModel != "new-model" {
+		t.Fatalf("expected real model new-model, got %q", dep.RealModel)
+	}
+	if UpdateDeploymentRealModel("free:provider-key", "new-model") {
+		t.Fatalf("expected unchanged real model to report changed=false")
+	}
+	if UpdateDeploymentRealModel("free:provider-key", "") {
+		t.Fatalf("expected empty real model to report changed=false")
+	}
+	if UpdateDeploymentRealModel("missing", "other-model") {
+		t.Fatalf("expected missing deployment to report changed=false")
+	}
+}
+
 func TestGetDeploymentsForVirtualModelFiltersByPool(t *testing.T) {
 	t.Cleanup(func() {
 		resetConfigForTest(nil)

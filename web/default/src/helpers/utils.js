@@ -2,9 +2,10 @@ import {toast} from 'react-toastify';
 import {toastConstants} from '../constants';
 import React from 'react';
 import {API} from './api';
+import { sanitizeHtml } from './sanitize';
 
 const HTMLToastContent = ({ htmlContent }) => {
-  return <div dangerouslySetInnerHTML={{ __html: htmlContent }} />;
+  return <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(htmlContent) }} />;
 };
 export default HTMLToastContent;
 

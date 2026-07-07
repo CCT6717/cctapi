@@ -1,4 +1,4 @@
-import { sortScoreItems } from './scoreUtils';
+import { sortScoreItems } from './utils/scoreUtils';
 
 describe('sortScoreItems', () => {
   it('按分数从高到低排序，100 分必须排前面', () => {

@@ -4,8 +4,27 @@ import (
 	"strings"
 	"testing"
 
+	dbmodel "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/channeltype"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
+
+func setupFreePoolTestDB(t *testing.T) func() {
+	t.Helper()
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open in-memory DB: %v", err)
+	}
+	if err := db.AutoMigrate(&dbmodel.Channel{}, &dbmodel.Ability{}); err != nil {
+		t.Fatalf("failed to migrate channel table: %v", err)
+	}
+	dbmodel.DB = db
+	return func() {
+		dbmodel.DB = originalDB
+	}
+}
 
 func TestBuiltinFreeProviderRegistry_OpenRouter(t *testing.T) {
 	meta, ok := BuiltinFreeProviders["openrouter"]
@@ -59,6 +78,49 @@ func TestBuiltinFreeProviderRegistry_AllHaveRealModel(t *testing.T) {
 		if meta.DefaultModels[0] == "" {
 			t.Errorf("provider %q: DefaultModels[0] is empty string", name)
 		}
+	}
+}
+
+func TestBuildDesiredFreeProviderResourcesKeylessProvider(t *testing.T) {
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"pollinations": {Enabled: true},
+		},
+	}
+
+	resources, deployments := buildDesiredFreeProviderResources(cfg)
+
+	if len(resources) != 1 {
+		t.Fatalf("resources length = %d, want 1", len(resources))
+	}
+	if resources[0].provider != "pollinations" {
+		t.Fatalf("provider = %q, want pollinations", resources[0].provider)
+	}
+	if resources[0].ch.Key != "" {
+		t.Fatalf("keyless channel key = %q, want empty", resources[0].ch.Key)
+	}
+	depID := deploymentID("pollinations", SafeKeyHash(""))
+	if _, ok := deployments[depID]; !ok {
+		t.Fatalf("missing deployment %s", depID)
+	}
+}
+
+func TestBuildDesiredFreeProviderResourcesSkipsMissingKey(t *testing.T) {
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true},
+		},
+	}
+
+	resources, deployments := buildDesiredFreeProviderResources(cfg)
+
+	if len(resources) != 0 {
+		t.Fatalf("resources length = %d, want 0", len(resources))
+	}
+	if len(deployments) != 0 {
+		t.Fatalf("deployments length = %d, want 0", len(deployments))
 	}
 }
 
@@ -142,6 +204,187 @@ func TestBuiltinFreeProviderRegistry_DisabledProviderNoDeployment(t *testing.T) 
 	}
 }
 
+func TestComputeExpectedAutoResources_KeylessProvider(t *testing.T) {
+	cfg := &Config{
+		FreeProviders: map[string]FreeProviderConfig{
+			"pollinations": {Enabled: true},
+		},
+	}
+
+	channels, deployments := computeExpectedAutoResources(cfg)
+	keyHash := SafeKeyHash("")
+	wantChannel := channelName("pollinations", keyHash)
+	wantDeployment := deploymentID("pollinations", keyHash)
+
+	if !channels[wantChannel] {
+		t.Fatalf("expected keyless channel %q in desired resources", wantChannel)
+	}
+	if !deployments[wantDeployment] {
+		t.Fatalf("expected keyless deployment %q in desired resources", wantDeployment)
+	}
+}
+
+func TestComputeExpectedAutoResources_KeyRequiredProviderWithoutKeysSkipped(t *testing.T) {
+	cfg := &Config{
+		FreeProviders: map[string]FreeProviderConfig{
+			"openrouter": {Enabled: true},
+		},
+	}
+
+	channels, deployments := computeExpectedAutoResources(cfg)
+	if len(channels) != 0 {
+		t.Fatalf("expected no channels for key-required provider without keys, got %v", channels)
+	}
+	if len(deployments) != 0 {
+		t.Fatalf("expected no deployments for key-required provider without keys, got %v", deployments)
+	}
+}
+
+func TestSyncAllProviderModelsKeepsConfiguredModelOverride(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	key := "gsk-test-model-override"
+	keyHash := SafeKeyHash(key)
+	channelName := channelName("groq", keyHash)
+	channel := dbmodel.Channel{
+		Name:   channelName,
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: "custom-model",
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create channel: %v", err)
+	}
+
+	depID := deploymentID("groq", keyHash)
+	resetConfigForTest(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}, Models: []string{"custom-model"}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "custom-model", Pool: "free"},
+		},
+	})
+
+	syncAllProviderModels(GetConfig())
+
+	dep, ok := CloneDeployment(depID)
+	if !ok {
+		t.Fatalf("expected deployment %s to exist", depID)
+	}
+	if dep.RealModel != "custom-model" {
+		t.Fatalf("expected configured real model to remain custom-model, got %q", dep.RealModel)
+	}
+	var refreshed dbmodel.Channel
+	if err := dbmodel.DB.First(&refreshed, channel.Id).Error; err != nil {
+		t.Fatalf("failed to reload channel: %v", err)
+	}
+	if refreshed.Models != "custom-model" {
+		t.Fatalf("expected channel models to keep configured override, got %q", refreshed.Models)
+	}
+}
+
+func TestSyncFreePoolPreservesDeploymentRealModelOverride(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	key := "gsk-test-deployment-override"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name:   channelName("groq", keyHash),
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: BuiltinFreeProviders["groq"].DefaultModels[0],
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create channel: %v", err)
+	}
+
+	depID := deploymentID("groq", keyHash)
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "manual-real-model", Pool: "free"},
+		},
+	}
+
+	if err := SyncFreePool(cfg); err != nil {
+		t.Fatalf("SyncFreePool failed: %v", err)
+	}
+	dep := cfg.Deployments[depID]
+	if dep.RealModel != "manual-real-model" {
+		t.Fatalf("expected SyncFreePool to preserve deployment real_model override, got %q", dep.RealModel)
+	}
+}
+
+func TestSyncAllProviderModelsKeepsDeploymentRealModelOverride(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	key := "gsk-test-dynamic-override"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name:   channelName("groq", keyHash),
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: BuiltinFreeProviders["groq"].DefaultModels[0],
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create channel: %v", err)
+	}
+
+	depID := deploymentID("groq", keyHash)
+	resetConfigForTest(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "manual-real-model", Pool: "free"},
+		},
+	})
+
+	syncAllProviderModels(GetConfig())
+
+	dep, ok := CloneDeployment(depID)
+	if !ok {
+		t.Fatalf("expected deployment %s to exist", depID)
+	}
+	if dep.RealModel != "manual-real-model" {
+		t.Fatalf("expected dynamic model sync to preserve deployment real_model override, got %q", dep.RealModel)
+	}
+}
+
+func TestSyncFreePoolDoesNotDeleteManualFreeProviderLikeDeploymentID(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	cfg := &Config{
+		Enabled:       true,
+		FreeProviders: map[string]FreeProviderConfig{},
+		Deployments: map[string]DeploymentConfig{
+			"free:google-0": {ID: "free:google-0", Enabled: true, ChannelID: 12345, RealModel: "manual-model", Pool: "free"},
+		},
+	}
+
+	if err := SyncFreePool(cfg); err != nil {
+		t.Fatalf("SyncFreePool failed: %v", err)
+	}
+	if _, ok := cfg.Deployments["free:google-0"]; !ok {
+		t.Fatalf("manual deployment free:google-0 should not be removed as stale auto deployment")
+	}
+}
+
 func TestValidateFreeProviderName(t *testing.T) {
 	if err := ValidateFreeProviderName("openrouter"); err != nil {
 		t.Errorf("expected no error for openrouter, got: %v", err)
@@ -202,6 +445,19 @@ func TestIsAutoDeploymentID_HashFormat(t *testing.T) {
 	// Invalid hex → not auto
 	if IsAutoDeploymentID("free:openrouter-zzzzzzzz") {
 		t.Error("expected free:openrouter-zzzzzzzz NOT to be auto (invalid hex)")
+	}
+}
+
+func TestFreeProviderNameFromDeploymentID(t *testing.T) {
+	provider, ok := FreeProviderNameFromDeploymentID("free:groq-001122ff")
+	if !ok || provider != "groq" {
+		t.Fatalf("FreeProviderNameFromDeploymentID = %q, %v; want groq, true", provider, ok)
+	}
+	if _, ok := FreeProviderNameFromDeploymentID("free:unknown-001122ff"); ok {
+		t.Fatalf("unknown provider should not be accepted")
+	}
+	if _, ok := FreeProviderNameFromDeploymentID("manual-free"); ok {
+		t.Fatalf("manual deployment should not be accepted")
 	}
 }
 
@@ -782,6 +1038,136 @@ func TestBuiltinFreeProviderRegistry_OVH(t *testing.T) {
 	}
 	if meta.ContextLength != 262144 {
 		t.Errorf("expected ContextLength 262144, got %d", meta.ContextLength)
+	}
+}
+
+func TestBuiltinFreeProviderRegistry_FreeLLMAPICoreProvidersPresent(t *testing.T) {
+	want := []string{
+		"google", "nvidia", "cohere", "huggingface", "ollama",
+		"llm7", "opencode", "aihorde", "routeway", "bazaarlink",
+		"ainative", "agnes", "reka",
+	}
+	for _, name := range want {
+		if err := ValidateFreeProviderName(name); err != nil {
+			t.Errorf("expected FreeLLMAPI provider %q to be accepted: %v", name, err)
+		}
+	}
+}
+
+func TestKnownFreeProvidersMatchesBuiltinRegistry(t *testing.T) {
+	for name := range BuiltinFreeProviders {
+		if _, ok := knownFreeProviders[name]; !ok {
+			t.Errorf("knownFreeProviders missing builtin provider %q", name)
+		}
+	}
+	for name := range knownFreeProviders {
+		if _, ok := BuiltinFreeProviders[name]; !ok {
+			t.Errorf("knownFreeProviders has provider %q missing from BuiltinFreeProviders", name)
+		}
+	}
+}
+
+func TestBuildFreeProviderCatalogProjectsSafeMetadata(t *testing.T) {
+	rpmOverride := 11
+	cfg := &Config{
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {
+				Enabled:    true,
+				Keys:       []string{"gsk_secret_one", "gsk_secret_two"},
+				Models:     []string{"custom-free-model"},
+				DefaultRPD: 222,
+				DefaultTPM: 3333,
+				DefaultTPD: 4444,
+				LimitsOverride: &FreeProviderLimits{
+					RPMLimit: &rpmOverride,
+				},
+			},
+		},
+	}
+
+	catalog := BuildFreeProviderCatalog(cfg)
+	if len(catalog) != len(BuiltinFreeProviders) {
+		t.Fatalf("expected catalog to include all builtin providers, got %d want %d", len(catalog), len(BuiltinFreeProviders))
+	}
+
+	var groqEntry *FreeProviderCatalogEntry
+	var googleEntry *FreeProviderCatalogEntry
+	for i := range catalog {
+		switch catalog[i].Name {
+		case "groq":
+			groqEntry = &catalog[i]
+		case "google":
+			googleEntry = &catalog[i]
+		}
+	}
+	if groqEntry == nil {
+		t.Fatal("expected groq in catalog")
+	}
+	if googleEntry == nil {
+		t.Fatal("expected google in catalog even when not configured")
+	}
+	if !groqEntry.Enabled {
+		t.Fatal("expected configured groq enabled=true")
+	}
+	if googleEntry.Enabled {
+		t.Fatal("expected unconfigured google enabled=false")
+	}
+	if groqEntry.KeyCount != 2 {
+		t.Fatalf("expected key_count=2, got %d", groqEntry.KeyCount)
+	}
+	if len(groqEntry.Models) != 1 || groqEntry.Models[0] != "custom-free-model" {
+		t.Fatalf("expected configured models to be projected, got %v", groqEntry.Models)
+	}
+	if groqEntry.DefaultModelCount != len(BuiltinFreeProviders["groq"].DefaultModels) {
+		t.Fatalf("expected default_model_count to match registry, got %d", groqEntry.DefaultModelCount)
+	}
+	if groqEntry.RPMLimit != rpmOverride {
+		t.Fatalf("expected rpm limit override %d, got %d", rpmOverride, groqEntry.RPMLimit)
+	}
+	if groqEntry.RPDLimit != 222 || groqEntry.TPMLimit != 3333 || groqEntry.TPDLimit != 4444 {
+		t.Fatalf("expected configured default limits to project, got rpd=%d tpm=%d tpd=%d",
+			groqEntry.RPDLimit, groqEntry.TPMLimit, groqEntry.TPDLimit)
+	}
+	if !groqEntry.SupportsTools || !groqEntry.SupportsJSON || !groqEntry.RequiresKey || groqEntry.Keyless {
+		t.Fatalf("unexpected groq capability/auth metadata: %+v", groqEntry)
+	}
+	if groqEntry.ModelFetchMode != ModelFetchStatic {
+		t.Fatalf("expected model fetch mode %s, got %s", ModelFetchStatic, groqEntry.ModelFetchMode)
+	}
+	rendered := strings.Join([]string{
+		groqEntry.Name,
+		groqEntry.ProviderID,
+		strings.Join(groqEntry.Models, ","),
+		strings.Join(groqEntry.DefaultModels, ","),
+	}, "|")
+	if strings.Contains(rendered, "gsk_secret") {
+		t.Fatalf("catalog must not expose raw keys: %s", rendered)
+	}
+}
+
+func TestBuiltinFreeProviderRegistry_FreeLLMAPIQuirks(t *testing.T) {
+	nvidia := BuiltinFreeProviders["nvidia"]
+	if nvidia.Quirks == nil || nvidia.Quirks.ForceParallelToolCalls == nil || *nvidia.Quirks.ForceParallelToolCalls {
+		t.Fatalf("expected nvidia quirk to force parallel_tool_calls=false, got %+v", nvidia.Quirks)
+	}
+
+	routeway := BuiltinFreeProviders["routeway"]
+	if routeway.Quirks == nil || routeway.Quirks.DefaultUserAgent == "" {
+		t.Fatalf("expected routeway quirk to expose a default user-agent hint, got %+v", routeway.Quirks)
+	}
+
+	aihorde := BuiltinFreeProviders["aihorde"]
+	if aihorde.Quirks == nil {
+		t.Fatal("expected aihorde quirks")
+	}
+	if !aihorde.Quirks.DisableStream {
+		t.Fatalf("expected aihorde quirk to disable stream, got %+v", aihorde.Quirks)
+	}
+	if aihorde.Quirks.MaxOutputTokens <= 0 {
+		t.Fatalf("expected aihorde max output token constraint, got %+v", aihorde.Quirks)
+	}
+	if !aihorde.Quirks.DropStop {
+		t.Fatalf("expected aihorde quirk to drop stop sequences, got %+v", aihorde.Quirks)
 	}
 }
 

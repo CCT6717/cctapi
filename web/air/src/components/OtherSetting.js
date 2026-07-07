@@ -3,7 +3,7 @@ import { Button, Divider, Form, Grid, Header, Message, Modal } from 'semantic-ui
 import { API, showError, showSuccess } from '../helpers';
 import { EXTERNAL_URLS } from '../constants';
 import { marked } from 'marked';
-import DOMPurify from 'dompurify';
+import { sanitizeHtml } from '../helpers/sanitize';
 import { Link } from 'react-router-dom';
 
 const OtherSetting = () => {
@@ -110,7 +110,7 @@ const OtherSetting = () => {
     } else {
       setUpdateData({
         tag_name: tag_name,
-        content: DOMPurify.sanitize(marked.parse(body))
+        content: sanitizeHtml(marked.parse(body))
       });
       setShowUpdateModal(true);
     }
@@ -211,7 +211,7 @@ const OtherSetting = () => {
         <Modal.Header>新版本：{updateData.tag_name}</Modal.Header>
         <Modal.Content>
           <Modal.Description>
-            <div dangerouslySetInnerHTML={{ __html: updateData.content }}></div>
+            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(updateData.content) }}></div>
           </Modal.Description>
         </Modal.Content>
         <Modal.Actions>

@@ -1,12 +1,33 @@
-// ============================================================
-// Fallback/index.js — Fallback 页面主容器
-// ============================================================
-
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Button, Icon, Loader, Message, Popup } from 'semantic-ui-react';
+import { Alert, Spin } from 'antd';
+import {
+  Activity,
+  ArrowRight,
+  ArrowRightLeft,
+  BarChart3,
+  Bell,
+  ChevronUp,
+  Cloud,
+  Edit,
+  HelpCircle,
+  Map,
+  MousePointer,
+  RefreshCw,
+  Rocket,
+  Server,
+  Settings,
+} from 'lucide-react';
 import ModelEditor from '../../components/FallbackConfigPanel';
 import FreeModelPool from '../../components/fallback-gateway/FreeModelPool';
+import {
+  ActionToolbar,
+  AdminCard,
+  IconButton,
+  PageHeader,
+  StatusTag,
+  UiIcon,
+} from '../../ui';
 import {
   GUIDE_SECTIONS,
   PANEL_ITEMS,
@@ -24,12 +45,36 @@ import LogsPanel from './panels/LogsPanel';
 import KpiCards from './panels/KpiCards';
 import './Fallback.css';
 
+const PANEL_ICON_COMPONENTS = {
+  gateway: Edit,
+  'free-pool': Cloud,
+  status: Server,
+  metrics: Activity,
+  scores: BarChart3,
+  alerts: Bell,
+  logs: ArrowRightLeft,
+};
+
+const GUIDE_ICON_COMPONENTS = {
+  rocket: Rocket,
+  settings: Settings,
+  map: Map,
+  'map signs': Map,
+};
+
+const renderPanelIcon = (item) => {
+  const IconComponent = PANEL_ICON_COMPONENTS[item.key] || Server;
+  return <UiIcon icon={IconComponent} />;
+};
+
+const renderGuideIcon = (section) => {
+  const IconComponent = GUIDE_ICON_COMPONENTS[section.icon] || HelpCircle;
+  return <UiIcon icon={IconComponent} />;
+};
+
 const Fallback = () => {
   const {
-    // Router
     activePanel,
-
-    // State
     loading,
     lastUpdated,
     alertEvents,
@@ -42,26 +87,18 @@ const Fallback = () => {
     metricSamples,
     metricRows,
     configMeta,
-
-    // Setters
     setStatusSort,
     setGuideOpen,
-
-    // Computed
     statusDisplayRows,
     runtimeMetrics,
     runtimeHealth,
     metricTrendData,
     scoreTrend,
     scoreTrendGroups,
-
-    // Actions
     loadPanel,
     markAllAlertsRead,
     runDeploymentAction,
     exportMetricsCSV,
-
-    // Meta
     admin,
     refreshInterval,
   } = useFallbackPage();
@@ -75,7 +112,11 @@ const Fallback = () => {
   if (!admin) {
     return (
       <div className='fallback-page'>
-        <Message warning>需要管理员权限才能查看 fallback 面板。</Message>
+        <Alert
+          type='warning'
+          showIcon
+          title='需要管理员权限才能查看 fallback 面板。'
+        />
       </div>
     );
   }
@@ -84,7 +125,7 @@ const Fallback = () => {
     if (loading && activePanel !== 'gateway' && activePanel !== 'free-pool') {
       return (
         <div className='fallback-loading'>
-          <Loader active inline='centered' />
+          <Spin />
         </div>
       );
     }
@@ -140,7 +181,7 @@ const Fallback = () => {
 
   return (
     <div className='fallback-page'>
-      <section className='fallback-guide-panel' id='fallback-guide'>
+      <AdminCard className='fallback-guide-panel' id='fallback-guide'>
         <div className='fallback-guide-head'>
           <div>
             <h2>CCT API Fallback 快速说明</h2>
@@ -148,24 +189,25 @@ const Fallback = () => {
               给第一次接触这个项目的人看的配置说明：这里列出新增能力、配置位置和日常查看入口。
             </p>
           </div>
-          <Button
-            type='button'
-            basic
+          <IconButton
+            type='default'
             size='small'
             aria-expanded={guideOpen}
             aria-controls='fallback-guide-content'
+            icon={guideOpen ? ChevronUp : ArrowRight}
+            iconProps={{ size: 15 }}
+            label={guideOpen ? '收起说明' : '首次配置看这里'}
             onClick={() => setGuideOpen((open) => !open)}
           >
             {guideOpen ? '收起说明' : '首次配置看这里'}
-            <Icon name={guideOpen ? 'angle up' : 'arrow right'} />
-          </Button>
+          </IconButton>
         </div>
         {guideOpen && (
           <div className='fallback-guide-grid' id='fallback-guide-content'>
             {GUIDE_SECTIONS.map((section) => (
               <article className='fallback-guide-card' key={section.title}>
                 <span className='fallback-guide-icon'>
-                  <Icon name={section.icon} />
+                  {renderGuideIcon(section)}
                 </span>
                 <div>
                   <h3>{section.title}</h3>
@@ -179,7 +221,7 @@ const Fallback = () => {
             ))}
           </div>
         )}
-      </section>
+      </AdminCard>
 
       <KpiCards
         configMeta={configMeta}
@@ -189,75 +231,70 @@ const Fallback = () => {
 
       <SummaryBar summary={summary} />
 
-      <div className='fallback-page-header'>
-        <div>
-          <h1>Fallback 面板</h1>
-          <p>{activePanelItem.description}</p>
-          <div className='fallback-page-kicker'>
-            <span>{activePanelItem.title}</span>
-          </div>
-        </div>
-        <div className='fallback-header-actions'>
-          <span>
-            最后刷新：
-            {lastUpdated ? formatTime(lastUpdated) : '-'}
-          </span>
-          <span>自动刷新：{formatInterval(refreshInterval)}</span>
-          <Popup
-            content='功能说明'
-            position='bottom center'
-            trigger={
-              <Button
-                as='a'
-                href='#fallback-guide'
-                basic
-                icon
-                size='small'
-                className='fallback-help-trigger'
-                aria-label='功能说明'
-                onClick={() => setGuideOpen(true)}
-              >
-                <Icon name='hand pointer outline' />
-              </Button>
-            }
-          />
-          <Button
-            basic
-            icon
-            size='small'
-            title={refreshHint}
-            onClick={() => loadPanel(true)}
-          >
-            <Icon name='refresh' />
-          </Button>
-        </div>
-      </div>
+      <PageHeader
+        className='fallback-page-header'
+        title='Fallback 面板'
+        description={activePanelItem.description}
+        kicker={activePanelItem.title}
+        actions={
+          <ActionToolbar className='fallback-header-actions'>
+            <span>
+              最后刷新：
+              {lastUpdated ? formatTime(lastUpdated) : '-'}
+            </span>
+            <StatusTag status='info' showDot={false}>
+              自动刷新：{formatInterval(refreshInterval)}
+            </StatusTag>
+            <IconButton
+              href='#fallback-guide'
+              size='small'
+              className='fallback-help-trigger'
+              icon={MousePointer}
+              iconProps={{ size: 15 }}
+              tooltip='功能说明'
+              onClick={() => setGuideOpen(true)}
+            />
+            <IconButton
+              size='small'
+              icon={RefreshCw}
+              iconProps={{ size: 15 }}
+              label='刷新当前面板'
+              tooltip={refreshHint}
+              onClick={() => loadPanel(true)}
+            />
+          </ActionToolbar>
+        }
+      />
 
       <nav className='fallback-panel-grid'>
-        {PANEL_ITEMS.map((item) => (
-          <Link
-            key={item.key}
-            to={`/fallback/${item.key}`}
-            className={`fallback-nav-card ${
-              activePanel === item.key ? 'active' : ''
-            }`}
-            style={{ '--panel-accent': item.accent }}
-            title={item.description}
-          >
-            <span className='fallback-nav-icon'>
-              <Icon name={item.icon} />
-            </span>
-            <span className='fallback-nav-content'>
-              <span className='fallback-nav-top'>
-                <strong>{item.title}</strong>
-                <span className='fallback-nav-refresh-badge'>每 {formatInterval(PANEL_REFRESH_INTERVALS[item.key])}</span>
+        {PANEL_ITEMS.map((item) => {
+          return (
+            <Link
+              key={item.key}
+              to={`/fallback/${item.key}`}
+              className={`fallback-nav-card ${
+                activePanel === item.key ? 'active' : ''
+              }`}
+              style={{ '--panel-accent': item.accent }}
+              title={item.description}
+            >
+              <span className='fallback-nav-icon'>{renderPanelIcon(item)}</span>
+              <span className='fallback-nav-content'>
+                <span className='fallback-nav-top'>
+                  <strong>{item.title}</strong>
+                  <span className='fallback-nav-refresh-badge'>
+                    每 {formatInterval(PANEL_REFRESH_INTERVALS[item.key])}
+                  </span>
+                </span>
               </span>
-            </span>
-          </Link>
-        ))}
+            </Link>
+          );
+        })}
       </nav>
 
-      <section className='fallback-content-panel'>{renderActivePanel()}</section>
+      <AdminCard className='fallback-content-panel'>
+        {renderActivePanel()}
+      </AdminCard>
     </div>
   );
 };

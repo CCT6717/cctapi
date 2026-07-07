@@ -86,7 +86,8 @@ CooldownUntil *time.Time
 
 内存 map：`deploymentID -> HealthStatus`（healthy / rate_limited / invalid / error / unknown）。
 
-注意：free deployment（`QuotaMode == "free"`）跳过健康检查，状态恒为 `unknown`。
+注意：free deployment 会执行轻量健康检查。未检查过时为 `unknown`；探测后会更新为
+`healthy`、`rate_limited`、`invalid` 或 `error`，失败原因同步记录到 runtime `last_error`。
 
 ### 2.4 分数快照
 

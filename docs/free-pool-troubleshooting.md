@@ -82,7 +82,7 @@ curl -s -X POST -H "Authorization: Bearer admin-token" https://your-api/api/fall
 **原因分析**：
 - OpenRouter Free 有严格的 RPM/RPD 限制（默认 20 RPM / 200 RPD）
 - 多用户同时请求时容易触发
-- Free deployment 在 `checkOneDeployment` 中被跳过 health ping，所以不会提前检测到限流
+- Free deployment 的健康检查会发送轻量真实探测；429 会记录为 `rate_limited` 并进入短 cooldown
 
 **解决方案**：
 
@@ -151,7 +151,9 @@ GET /api/fallback/deployments/runtime-status
    POST /api/fallback/deployments/free:openrouter-xxxxxxxx/health-check
    ```
 
-**注意**：health check 对 free deployment 仅返回 `unknown`（不实际 ping 上游）。invalid 状态通常是 fallback 循环中记录的。手动 recover 或等待 config reload 后自动恢复。
+**注意**：health check 会真实 ping free deployment。401/403 会标记为 `invalid`，429 会标记为
+`rate_limited`，网络错误或 5xx 会标记为 `error`；响应里的 `runtime.last_error` 会说明具体原因。
+更新 key 后可手动 recover，再触发一次 health-check 验证恢复状态。
 
 ---
 
@@ -163,7 +165,7 @@ GET /api/fallback/deployments/runtime-status
 → "health": "unknown"
 ```
 
-**这通常不是问题**。Free deployment 不会参与健康检查 ping（`checkOneDeployment` 中 `QuotaMode == "free"` 时跳过），初始状态为 `unknown`。
+**这通常不是问题**。`unknown` 表示当前进程还没有该 deployment 的健康检查结果，初始状态可能为 `unknown`。
 
 `unknown` 不等于不可用——`IsDeploymentHealthy` 的判定规则：
 
@@ -177,14 +179,14 @@ GET /api/fallback/deployments/runtime-status
 
 只有 `invalid` 或 `error` 才禁止路由。`unknown` 和 `healthy` 等效。
 
-如果希望看到 `healthy`，可以手动触发：
+如果希望看到当前健康状态，可以手动触发：
 
 ```bash
 POST /api/fallback/deployments/free:openrouter-xxxxxxxx/health-check
-# 返回 "health": "unknown"（因为代码强制跳过）
+# 返回 healthy / rate_limited / invalid / error，并带 runtime 快照
 ```
 
-这是设计如此，无法通过手动触发改变。
+手动检查会发起轻量真实探测；失败原因可在返回值或 `runtime-status` 的 `last_error` 中查看。
 
 ---
 

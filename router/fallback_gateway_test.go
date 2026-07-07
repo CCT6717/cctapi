@@ -95,6 +95,36 @@ const baseValidConfigWithFreeProviderJSON = `{
   }
 }`
 
+const baseValidConfigWithFreeProviderModelsJSON = `{
+  "enabled": true,
+  "virtual_models": {
+    "test/auto": {
+      "enabled": true,
+      "strategy": "quality_first",
+      "pools": ["high"]
+    }
+  },
+  "deployments": {
+    "dep-1": {
+      "enabled": true,
+      "channel_id": 1,
+      "real_model": "gpt-4",
+      "pool": "high",
+      "quality_tier": "high",
+      "cost_tier": "paid"
+    }
+  },
+  "free_providers": {
+    "groq": {
+      "enabled": true,
+      "keys": ["gsk_original_test_key_not_real_12345"],
+      "models": ["custom-free-model"],
+      "default_rpm": 12,
+      "default_tpm": 3456
+    }
+  }
+}`
+
 // setupGatewayConfigForSave creates a temp directory with data/fallback.json,
 // changes CWD to it, loads the config via fallback.LoadConfig, and returns a
 // cleanup function that restores the original CWD.
@@ -209,6 +239,29 @@ func TestGatewayGetConfig_Success(t *testing.T) {
 	}
 	if _, ok := vms["test/auto"]; !ok {
 		t.Fatalf("expected virtual model test/auto in response")
+	}
+}
+
+func TestGatewayGetConfig_DoesNotExposeFreeProviderKeys(t *testing.T) {
+	setupGatewayConfigReadOnly(t, baseValidConfigWithFreeProviderJSON)
+
+	w := callGatewayGET(t)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", w.Code)
+	}
+	if searchString(w.Body.String(), "gsk_original_test_key_not_real_12345") {
+		t.Fatalf("gateway GET response must not expose raw free provider keys: %s", w.Body.String())
+	}
+	resp := parseJSON(t, w)
+	data, _ := resp["data"].(map[string]interface{})
+	fps, _ := data["free_providers"].(map[string]interface{})
+	groq, _ := fps["groq"].(map[string]interface{})
+	if groq["key_count"] != float64(1) {
+		t.Fatalf("expected key_count=1, got %v", groq["key_count"])
+	}
+	if _, exists := groq["keys"]; exists {
+		t.Fatalf("free provider response must not include keys field")
 	}
 }
 
@@ -426,6 +479,17 @@ func TestGatewayUpdateConfig_SaveSuccess(t *testing.T) {
 	}
 }
 
+func TestFallbackExampleConfigIsValidJSON(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "data", "fallback.json.example"))
+	if err != nil {
+		t.Fatalf("failed to read example config: %v", err)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("fallback.json.example must be valid JSON: %v", err)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test 6: key_masked not written back as real key
 // ---------------------------------------------------------------------------
@@ -546,6 +610,48 @@ func TestGatewayUpdateConfig_EmptyKeyPreservesOld(t *testing.T) {
 	if len(groqFP.Keys) != 1 || groqFP.Keys[0] != originalKey {
 		t.Fatalf("expected original key %q preserved when empty keys sent, got %v",
 			originalKey, groqFP.Keys)
+	}
+}
+
+func TestGatewayUpdateConfig_FreeProviderModelsPreservedWhenOmitted(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigWithFreeProviderModelsJSON)
+	defer cleanup()
+
+	putPayload := `{
+		"enabled": true,
+		"virtual_models": {
+			"test/auto": {
+				"enabled": true,
+				"strategy": "quality_first",
+				"pools": ["high"]
+			}
+		},
+		"deployments": {
+			"dep-1": {
+				"enabled": true,
+				"channel_id": 1,
+				"real_model": "gpt-4",
+				"pool": "high"
+			}
+		},
+		"free_providers": {
+			"groq": {
+				"enabled": true
+			}
+		}
+	}`
+
+	w := callGatewayPUT(t, putPayload)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+
+	fp := fallback.GetConfig().FreeProviders["groq"]
+	if len(fp.Models) != 1 || fp.Models[0] != "custom-free-model" {
+		t.Fatalf("expected existing models override preserved, got %v", fp.Models)
+	}
+	if fp.DefaultRPM != 12 || fp.DefaultTPM != 3456 {
+		t.Fatalf("expected provider defaults preserved, got rpm=%d tpm=%d", fp.DefaultRPM, fp.DefaultTPM)
 	}
 }
 
@@ -729,6 +835,7 @@ func TestGatewayUpdateConfig_ValidLimitsOverrideAccepted(t *testing.T) {
 				"free_providers": map[string]interface{}{
 					"groq": map[string]interface{}{
 						"enabled":         true,
+						"keys":            []string{"gsk_limits_test_key_not_real"},
 						"limits_override": tt.override,
 					},
 				},
@@ -768,6 +875,174 @@ func TestGatewayUpdateConfig_ValidLimitsOverrideAccepted(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestGatewayUpdateConfig_UnknownFreeProviderRejected(t *testing.T) {
+	setupGatewayConfigReadOnly(t, baseValidConfigJSON)
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"not-real": {"enabled": true}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "unknown free provider") {
+		t.Fatalf("expected unknown provider message, got %s", w.Body.String())
+	}
+}
+
+func TestGatewayUpdateConfig_RequiresKeyEnabledWithoutKeysRejected(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigJSON)
+	defer cleanup()
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": true}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "requires at least one key") {
+		t.Fatalf("expected requires-key message, got %s", w.Body.String())
+	}
+}
+
+func TestGatewayUpdateConfig_KeylessProviderCanEnableWithoutKeys(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigJSON)
+	defer cleanup()
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"pollinations": {"enabled": true}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	fp := fallback.GetConfig().FreeProviders["pollinations"]
+	if !fp.Enabled || len(fp.Keys) != 0 {
+		t.Fatalf("expected enabled keyless provider with no keys, got %+v", fp)
+	}
+}
+
+func TestGatewayUpdateConfig_ClearKeysDeletesStoredKeys(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigWithFreeProviderJSON)
+	defer cleanup()
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": false, "clear_keys": true}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if got := fallback.GetConfig().FreeProviders["groq"].Keys; len(got) != 0 {
+		t.Fatalf("expected stored keys cleared, got %v", got)
+	}
+}
+
+func TestGatewayUpdateConfig_ClearKeysWithReplacementKeysRejected(t *testing.T) {
+	setupGatewayConfigReadOnly(t, baseValidConfigWithFreeProviderJSON)
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": false, "clear_keys": true, "keys": ["gsk_new"]}}
+	}`
+
+	w := callGatewayPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "clear_keys cannot be combined with keys") {
+		t.Fatalf("expected clear conflict message, got %s", w.Body.String())
+	}
+}
+
+func TestManualConfigUpdate_UnknownFreeProviderRejected(t *testing.T) {
+	setupGatewayConfigReadOnly(t, baseValidConfigJSON)
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"not-real": {"enabled": true}}
+	}`
+
+	w := callManualConfigPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "unknown free provider") {
+		t.Fatalf("expected unknown provider message, got %s", w.Body.String())
+	}
+}
+
+func TestManualConfigUpdate_RequiresKeyEnabledWithoutKeysRejected(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigJSON)
+	defer cleanup()
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": true}}
+	}`
+
+	w := callManualConfigPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "requires at least one key") {
+		t.Fatalf("expected requires-key message, got %s", w.Body.String())
+	}
+}
+
+func TestManualConfigUpdate_ClearKeysDeletesStoredKeys(t *testing.T) {
+	cleanup := setupGatewayConfigForSave(t, baseValidConfigWithFreeProviderJSON)
+	defer cleanup()
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": false, "clear_keys": true}}
+	}`
+
+	w := callManualConfigPUT(t, payload)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if got := fallback.GetConfig().FreeProviders["groq"].Keys; len(got) != 0 {
+		t.Fatalf("expected stored keys cleared, got %v", got)
+	}
+}
+
+func TestManualConfigUpdate_ClearKeysWithReplacementKeysRejected(t *testing.T) {
+	setupGatewayConfigReadOnly(t, baseValidConfigWithFreeProviderJSON)
+	payload := `{
+		"enabled": true,
+		"virtual_models": {"test/auto": {"enabled": true, "strategy": "quality_first", "pools": ["high"]}},
+		"deployments": {"dep-1": {"enabled": true, "channel_id": 1, "real_model": "gpt-4", "pool": "high"}},
+		"free_providers": {"groq": {"enabled": false, "clear_keys": true, "keys": ["gsk_new"]}}
+	}`
+
+	w := callManualConfigPUT(t, payload)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+	if !searchString(w.Body.String(), "clear_keys cannot be combined with keys") {
+		t.Fatalf("expected clear conflict message, got %s", w.Body.String())
 	}
 }
 
@@ -856,8 +1131,10 @@ func TestBuildGatewayV2Config_ProjectsCorrectly(t *testing.T) {
 		},
 		FreeProviders: map[string]fallback.FreeProviderConfig{
 			"groq": {
-				Enabled: true,
-				Keys:    []string{"key-1", "key-2"},
+				Enabled:    true,
+				Keys:       []string{"key-1", "key-2"},
+				DefaultRPM: 12,
+				DefaultTPM: 3456,
 				LimitsOverride: &fallback.FreeProviderLimits{
 					RPMLimit: &rpmOverride,
 				},
@@ -906,11 +1183,64 @@ func TestBuildGatewayV2Config_ProjectsCorrectly(t *testing.T) {
 	if fp.KeyCount != 2 {
 		t.Fatalf("expected key_count=2, got %d", fp.KeyCount)
 	}
+	if fp.DefaultBaseURL != "https://api.groq.com/openai" {
+		t.Fatalf("expected groq default_base_url, got %q", fp.DefaultBaseURL)
+	}
+	if fp.DefaultRPM != 12 || fp.DefaultTPM != 3456 {
+		t.Fatalf("expected configured default limits in free provider projection, got rpm=%d tpm=%d", fp.DefaultRPM, fp.DefaultTPM)
+	}
+	if !fp.RequiresKey {
+		t.Fatal("expected groq requires_key=true")
+	}
+	if fp.Keyless {
+		t.Fatal("expected groq keyless=false")
+	}
+	if fp.ModelFetchMode != fallback.ModelFetchStatic {
+		t.Fatalf("expected groq model_fetch_mode=%s, got %s", fallback.ModelFetchStatic, fp.ModelFetchMode)
+	}
 	if fp.LimitsOverride == nil || fp.LimitsOverride.RPMLimit == nil {
 		t.Fatal("expected limits_override.rpm_limit")
 	}
 	if *fp.LimitsOverride.RPMLimit != 25 {
 		t.Fatalf("expected rpm_limit=25, got %d", *fp.LimitsOverride.RPMLimit)
+	}
+
+	if len(v2.FreeProviderCatalog) != len(fallback.BuiltinFreeProviders) {
+		t.Fatalf("expected free_provider_catalog to include all builtin providers, got %d want %d",
+			len(v2.FreeProviderCatalog), len(fallback.BuiltinFreeProviders))
+	}
+	var groqCatalog *fallback.FreeProviderCatalogEntry
+	var googleCatalog *fallback.FreeProviderCatalogEntry
+	for i := range v2.FreeProviderCatalog {
+		switch v2.FreeProviderCatalog[i].Name {
+		case "groq":
+			groqCatalog = &v2.FreeProviderCatalog[i]
+		case "google":
+			googleCatalog = &v2.FreeProviderCatalog[i]
+		}
+	}
+	if groqCatalog == nil || googleCatalog == nil {
+		t.Fatalf("expected groq and google in free_provider_catalog")
+	}
+	if !groqCatalog.Enabled || groqCatalog.KeyCount != 2 {
+		t.Fatalf("expected groq catalog enabled with two keys, got %+v", groqCatalog)
+	}
+	if groqCatalog.RPMLimit != 25 || groqCatalog.TPMLimit != 3456 {
+		t.Fatalf("expected groq catalog to reflect configured defaults plus override, got rpm=%d tpm=%d",
+			groqCatalog.RPMLimit, groqCatalog.TPMLimit)
+	}
+	if googleCatalog.Enabled {
+		t.Fatalf("expected unconfigured google catalog entry to be disabled")
+	}
+	var nvidiaCatalog *fallback.FreeProviderCatalogEntry
+	for i := range v2.FreeProviderCatalog {
+		if v2.FreeProviderCatalog[i].Name == "nvidia" {
+			nvidiaCatalog = &v2.FreeProviderCatalog[i]
+			break
+		}
+	}
+	if nvidiaCatalog == nil || nvidiaCatalog.Quirks == nil || nvidiaCatalog.Quirks.ForceParallelToolCalls == nil || *nvidiaCatalog.Quirks.ForceParallelToolCalls {
+		t.Fatalf("expected nvidia quirk in gateway catalog, got %+v", nvidiaCatalog)
 	}
 }
 

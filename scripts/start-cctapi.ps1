@@ -37,11 +37,17 @@ Start-Process `
   -RedirectStandardOutput $stdoutLog `
   -RedirectStandardError $stderrLog
 
-Start-Sleep -Seconds 2
+$started = $null
+for ($i = 0; $i -lt 30; $i++) {
+  Start-Sleep -Seconds 1
+  $started = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
+  if ($started) {
+    break
+  }
+}
 
-$started = Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue
 if (-not $started) {
-  throw "CCT API did not start on port $Port. Check logs: $stdoutLog and $stderrLog"
+  throw "CCT API did not start on port $Port within 30 seconds. Check logs: $stdoutLog and $stderrLog"
 }
 
 $startedPids = $started | Select-Object -ExpandProperty OwningProcess -Unique

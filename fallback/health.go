@@ -25,15 +25,15 @@ const (
 )
 
 type HealthCheckConfig struct {
-	Enabled         bool `json:"enabled"`
-	IntervalSec     int  `json:"interval_seconds"`
-	TimeoutSec      int  `json:"timeout_seconds"`
+	Enabled     bool `json:"enabled"`
+	IntervalSec int  `json:"interval_seconds"`
+	TimeoutSec  int  `json:"timeout_seconds"`
 }
 
 type healthState struct {
-	mu     sync.RWMutex
-	status map[string]HealthStatus
-	stopCh chan struct{}
+	mu      sync.RWMutex
+	status  map[string]HealthStatus
+	stopCh  chan struct{}
 	running bool
 }
 
@@ -124,7 +124,13 @@ func checkAllDeployments(timeout time.Duration) {
 // response to a health status. It also applies cooldown for transient issues.
 func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.Duration) {
 	channel, err := dbmodel.GetChannelById(dep.ChannelID, true)
-	if err != nil || channel == nil || channel.Status != dbmodel.ChannelStatusEnabled {
+	if err != nil || channel == nil {
+		RecordFailure(deploymentID, fmt.Sprintf("health check channel %d not found", dep.ChannelID), false)
+		setHealthStatus(deploymentID, HealthError)
+		return
+	}
+	if channel.Status != dbmodel.ChannelStatusEnabled {
+		RecordFailure(deploymentID, fmt.Sprintf("health check channel %d disabled", dep.ChannelID), false)
 		setHealthStatus(deploymentID, HealthError)
 		return
 	}
@@ -133,9 +139,10 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 	// pingDeployment keeps per-ping cost ~1 token). Previously skipped to
 	// avoid quota consumption, but that left free deployments without any
 	// active probing — failures were only discovered by real requests.
-	statusCode, err := pingDeployment(channel, dep, timeout)
+	statusCode, err := pingDeployment(deploymentID, channel, dep, timeout)
 	if err != nil {
 		logger.SysError(fmt.Sprintf("[health] ping %s failed: %v", deploymentID, err))
+		RecordFailure(deploymentID, fmt.Sprintf("health check failed: %v", err), false)
 		setHealthStatus(deploymentID, HealthError)
 		_ = MarkDeploymentCooldownForDuration(deploymentID, "health check timeout", 30*time.Second)
 		return
@@ -143,14 +150,18 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 
 	switch {
 	case statusCode == http.StatusOK:
+		clearRuntimeError(deploymentID)
 		setHealthStatus(deploymentID, HealthHealthy)
 	case statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden:
+		RecordFailure(deploymentID, fmt.Sprintf("health check unauthorized: HTTP %d", statusCode), false)
 		setHealthStatus(deploymentID, HealthInvalid)
 		_ = MarkInvalid(deploymentID, "health check unauthorized")
 	case statusCode == http.StatusTooManyRequests:
+		RecordFailure(deploymentID, "health check rate limited: HTTP 429", true)
 		setHealthStatus(deploymentID, HealthRateLimited)
 		_ = MarkDeploymentCooldownForDuration(deploymentID, "health check rate limited", 60*time.Second)
 	case statusCode >= 500:
+		RecordFailure(deploymentID, fmt.Sprintf("health check upstream error: HTTP %d", statusCode), false)
 		setHealthStatus(deploymentID, HealthError)
 		_ = MarkDeploymentCooldownForDuration(deploymentID, "health check 5xx", 30*time.Second)
 	default:
@@ -160,21 +171,11 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 
 // pingDeployment builds a minimal chat completion against the deployment's
 // channel and returns the HTTP status code. It does NOT parse the body.
-func pingDeployment(channel *dbmodel.Channel, dep DeploymentConfig, timeout time.Duration) (int, error) {
-	baseURL := buildChannelBaseURL(channel)
-	if baseURL == "" {
-		return 0, fmt.Errorf("channel %d has empty base url", channel.Id)
-	}
-
-	// ponytail: minimal ping body, max_tokens=1 to keep cost near zero
-	body := fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"ping"}],"max_tokens":1,"stream":false}`, dep.RealModel)
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/chat/completions", strings.NewReader(body))
+func pingDeployment(deploymentID string, channel *dbmodel.Channel, dep DeploymentConfig, timeout time.Duration) (int, error) {
+	req, err := buildHealthProbeRequest(deploymentID, channel, dep)
 	if err != nil {
 		return 0, err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+channel.Key)
-
 	client := &http.Client{Timeout: timeout}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -182,6 +183,39 @@ func pingDeployment(channel *dbmodel.Channel, dep DeploymentConfig, timeout time
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode, nil
+}
+
+func buildHealthProbeRequest(deploymentID string, channel *dbmodel.Channel, dep DeploymentConfig) (*http.Request, error) {
+	baseURL := buildChannelBaseURL(channel)
+	if baseURL == "" {
+		return nil, fmt.Errorf("channel %d has empty base url", channel.Id)
+	}
+	providerName, _ := FreeProviderNameFromDeploymentID(deploymentID)
+	quirks := freeProviderQuirks(providerName)
+	body := buildHealthProbeBody(dep, quirks, 1)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseURL+"/chat/completions", strings.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if strings.TrimSpace(channel.Key) != "" {
+		req.Header.Set("Authorization", "Bearer "+channel.Key)
+	}
+	if quirks != nil && quirks.DefaultUserAgent != "" {
+		req.Header.Set("User-Agent", quirks.DefaultUserAgent)
+	}
+	return req, nil
+}
+
+func buildHealthProbeBody(dep DeploymentConfig, quirks *FreeProviderQuirks, requestedMaxTokens int) string {
+	maxTokens := requestedMaxTokens
+	if maxTokens <= 0 {
+		maxTokens = 1
+	}
+	if quirks != nil && quirks.MaxOutputTokens > 0 && quirks.MaxOutputTokens < maxTokens {
+		maxTokens = quirks.MaxOutputTokens
+	}
+	return fmt.Sprintf(`{"model":%q,"messages":[{"role":"user","content":"ping"}],"max_tokens":%d,"stream":false}`, dep.RealModel, maxTokens)
 }
 
 func buildChannelBaseURL(channel *dbmodel.Channel) string {

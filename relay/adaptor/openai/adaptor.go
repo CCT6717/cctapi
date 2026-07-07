@@ -9,6 +9,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/freeproviderquirks"
 	"github.com/songquanpeng/one-api/relay/adaptor"
 	"github.com/songquanpeng/one-api/relay/adaptor/alibailian"
 	"github.com/songquanpeng/one-api/relay/adaptor/baiduv2"
@@ -78,6 +80,9 @@ func (a *Adaptor) SetupRequestHeader(c *gin.Context, req *http.Request, meta *me
 		req.Header.Set("HTTP-Referer", "https://github.com/songquanpeng/one-api")
 		req.Header.Set("X-Title", "One API")
 	}
+	if quirks := freeProviderQuirksFromContext(c); quirks != nil && quirks.DefaultUserAgent != "" {
+		req.Header.Set("User-Agent", quirks.DefaultUserAgent)
+	}
 	return nil
 }
 
@@ -87,6 +92,7 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 	}
 	if a.ChannelType == channeltype.OpenAICompatible {
 		sanitizeOpenAICompatibleRequest(request)
+		ApplyFreeProviderRequestQuirks(c, request)
 	}
 	if request.Stream {
 		// always return usage in stream mode
@@ -96,6 +102,53 @@ func (a *Adaptor) ConvertRequest(c *gin.Context, relayMode int, request *model.G
 		request.StreamOptions.IncludeUsage = true
 	}
 	return request, nil
+}
+
+func freeProviderQuirksFromContext(c *gin.Context) *freeproviderquirks.Quirks {
+	if c == nil {
+		return nil
+	}
+	if provider := strings.TrimSpace(c.GetString(ctxkey.FallbackFreeProviderName)); provider != "" {
+		if quirks, ok := freeproviderquirks.ForProvider(provider); ok {
+			return quirks
+		}
+	}
+	channelName := c.GetString(ctxkey.ChannelName)
+	_, quirks, ok := freeproviderquirks.FromAutoChannelName(channelName)
+	if !ok {
+		return nil
+	}
+	return quirks
+}
+
+func ApplyFreeProviderRequestQuirks(c *gin.Context, request *model.GeneralOpenAIRequest) {
+	if request == nil {
+		return
+	}
+	quirks := freeProviderQuirksFromContext(c)
+	if quirks == nil {
+		return
+	}
+	if quirks.ForceParallelToolCalls != nil {
+		value := *quirks.ForceParallelToolCalls
+		request.ParallelTooCalls = &value
+	}
+	if quirks.DisableStream {
+		request.Stream = false
+		request.StreamOptions = nil
+	}
+	if quirks.MaxOutputTokens > 0 {
+		if request.MaxTokens > quirks.MaxOutputTokens {
+			request.MaxTokens = quirks.MaxOutputTokens
+		}
+		if request.MaxCompletionTokens != nil && *request.MaxCompletionTokens > quirks.MaxOutputTokens {
+			value := quirks.MaxOutputTokens
+			request.MaxCompletionTokens = &value
+		}
+	}
+	if quirks.DropStop {
+		request.Stop = nil
+	}
 }
 
 func sanitizeOpenAICompatibleRequest(request *model.GeneralOpenAIRequest) {

@@ -5,6 +5,7 @@ import { API, showError, showNotice, timestamp2string } from '../../helpers';
 import { StatusContext } from '../../context/Status';
 import { marked } from 'marked';
 import { UserContext } from '../../context/User';
+import { sanitizeHtml } from '../../helpers/sanitize';
 
 const Home = () => {
   const { t } = useTranslation();
@@ -19,7 +20,7 @@ const Home = () => {
     if (success) {
       let oldNotice = localStorage.getItem('notice');
       if (data !== oldNotice && data !== '') {
-        const htmlNotice = marked(data);
+        const htmlNotice = sanitizeHtml(marked.parse(data));
         showNotice(htmlNotice, true);
         localStorage.setItem('notice', data);
       }
@@ -35,7 +36,7 @@ const Home = () => {
     if (success) {
       let content = data;
       if (!data.startsWith('https://')) {
-        content = marked.parse(data);
+        content = sanitizeHtml(marked.parse(data));
       }
       setHomePageContent(content);
       localStorage.setItem('home_page_content', content);
@@ -286,7 +287,7 @@ const Home = () => {
           ) : (
             <div
               style={{ fontSize: 'larger' }}
-              dangerouslySetInnerHTML={{ __html: homePageContent }}
+              dangerouslySetInnerHTML={{ __html: sanitizeHtml(homePageContent) }}
             ></div>
           )}
         </>

@@ -1,147 +1,257 @@
-import React from 'react';
-import { Checkbox, Form, Icon, Input, Label, Message, Table } from 'semantic-ui-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button, Icon, Input, Label, Message, Table } from 'semantic-ui-react';
+import FreeProviderRow from './FreeProviderRow';
+import {
+  buildBulkEnabledProviderConfig,
+  buildClearKeysProviderConfig,
+  buildFreeProviderRows,
+  buildReplaceKeysProviderConfig,
+  filterFreeProviderRows,
+} from './freePoolUtils';
 
-const PROVIDER_DISPLAY = {
-  openrouter: { title: 'OpenRouter', color: 'purple', icon: 'cloud' },
-  groq: { title: 'Groq', color: 'orange', icon: 'lightning' },
-  kilo: { title: 'Kilo', color: 'teal', icon: 'bolt' },
-  pollinations: { title: 'Pollinations', color: 'green', icon: 'leaf' },
-  ovh: { title: 'OVH Cloud', color: 'blue', icon: 'server' },
-  siliconflow: { title: 'SiliconFlow', color: 'violet', icon: 'microchip' },
-  zhipu: { title: 'Zhipu AI', color: 'red', icon: 'brain' },
-  mistral: { title: 'Mistral', color: 'yellow', icon: 'wind' },
-  togetherai: { title: 'Together AI', color: 'pink', icon: 'users' },
-  novita: { title: 'Novita', color: 'olive', icon: 'rocket' },
-  cloudflare: { title: 'Cloudflare', color: 'orange', icon: 'shield' },
-  cerebras: { title: 'Cerebras', color: 'blue', icon: 'microchip' },
-  sambanova: { title: 'SambaNova', color: 'purple', icon: 'server' },
-  github: { title: 'GitHub Models', color: 'grey', icon: 'github' },
-  chutes: { title: 'Chutes', color: 'green', icon: 'bolt' },
-  fireworks: { title: 'Fireworks', color: 'red', icon: 'fire' },
-  nebius: { title: 'Nebius', color: 'teal', icon: 'cloud' },
-  lambdalabs: { title: 'Lambda Labs', color: 'violet', icon: 'lambda' },
-};
+const FreeProvidersEditor = ({
+  freeProviders,
+  freeProviderCatalog,
+  usageByProviderKey = {},
+  onChange,
+}) => {
+  const providerConfig = useMemo(
+    () => (freeProviders && typeof freeProviders === 'object' ? freeProviders : {}),
+    [freeProviders],
+  );
+  const [searchText, setSearchText] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [capabilityFilter, setCapabilityFilter] = useState('all');
+  const [selectedProviders, setSelectedProviders] = useState([]);
+  const [bulkMessage, setBulkMessage] = useState('');
 
-const FreeProvidersEditor = ({ freeProviders, onChange }) => {
+  const providerRows = useMemo(
+    () => buildFreeProviderRows(providerConfig, freeProviderCatalog),
+    [providerConfig, freeProviderCatalog],
+  );
+  const visibleProviderRows = useMemo(
+    () => filterFreeProviderRows(providerRows, {
+      searchText,
+      statusFilter,
+      capabilityFilter,
+    }),
+    [providerRows, searchText, statusFilter, capabilityFilter],
+  );
+  const visibleProviderNames = useMemo(
+    () => visibleProviderRows.map((provider) => provider.name),
+    [visibleProviderRows],
+  );
+  const visibleProviderNameKey = visibleProviderNames.join('|');
 
-  if (!freeProviders || typeof freeProviders !== 'object') {
-    return <Message warning>免费供应商数据为空或格式错误</Message>;
+  useEffect(() => {
+    const visibleNames = new Set(visibleProviderNames);
+    setSelectedProviders((previous) => {
+      const next = previous.filter((name) => visibleNames.has(name));
+      return next.length === previous.length ? previous : next;
+    });
+  }, [visibleProviderNameKey, visibleProviderNames]);
+
+  if (providerRows.length === 0) {
+    return <Message info>当前目录没有可用的免费供应商。</Message>;
   }
 
-  const providerKeys = Object.keys(freeProviders);
-
   const updateProvider = (key, field, value) => {
-    const updated = {
-      ...freeProviders,
+    onChange({
+      ...providerConfig,
       [key]: {
-        ...freeProviders[key],
+        ...(providerConfig[key] || {}),
         [field]: value,
       },
-    };
-    onChange(updated);
+    });
   };
 
   const updateLimit = (providerKey, limitField, value) => {
-    const provider = freeProviders[providerKey] || {};
+    const provider = providerConfig[providerKey] || {};
     const limits = { ...(provider.limits_override || {}), [limitField]: value };
     updateProvider(providerKey, 'limits_override', limits);
   };
 
-  const validateLimits = (limits) => {
-    if (!limits) return true;
-    const fields = ['rpm_limit', 'rpd_limit', 'tpm_limit', 'tpd_limit'];
-    return fields.every((f) => {
-      const v = limits[f];
-      return v === undefined || v === '' || v === null || (Number.isFinite(Number(v)) && Number(v) >= 0);
+  const updateKeys = (providerKey, value) => {
+    onChange(buildReplaceKeysProviderConfig(providerConfig, providerKey, value));
+  };
+
+  const clearKeys = (providerKey) => {
+    onChange(buildClearKeysProviderConfig(providerConfig, providerKey));
+  };
+
+  const toggleProviderSelection = (providerKey, checked) => {
+    setSelectedProviders((previous) => {
+      if (checked) {
+        return previous.includes(providerKey) ? previous : [...previous, providerKey];
+      }
+      return previous.filter((name) => name !== providerKey);
     });
   };
 
-  if (providerKeys.length === 0) {
-    return <Message info>暂无免费供应商配置。</Message>;
-  }
+  const selectVisibleProviders = () => {
+    setSelectedProviders(visibleProviderNames);
+  };
+
+  const clearSelectedProviders = () => {
+    setSelectedProviders([]);
+  };
+
+  const applyBulkEnabled = (enabled) => {
+    const selectedNames = new Set(selectedProviders);
+    const selectedRows = providerRows.filter((provider) => selectedNames.has(provider.name));
+    if (selectedRows.length === 0) return;
+
+    onChange(buildBulkEnabledProviderConfig(providerConfig, selectedRows, enabled));
+    setBulkMessage(
+      `已暂存 ${selectedRows.length} 个供应商为${enabled ? '已启用' : '已停用'}，点击“保存配置”后生效。`,
+    );
+  };
+
+  const usageRowsForProvider = (providerKey) => Object.keys(usageByProviderKey)
+    .filter((usageKey) => usageKey.startsWith(`${providerKey}:`))
+    .flatMap((usageKey) => usageByProviderKey[usageKey] || []);
 
   return (
     <div>
+      <div className='free-provider-ops'>
+        <div className='free-provider-filter-row'>
+          <Input
+            aria-label='搜索免费供应商'
+            icon='search'
+            placeholder='搜索供应商、能力或模型模式'
+            value={searchText}
+            onChange={(_, { value }) => setSearchText(value)}
+          />
+          <label>
+            <span>状态</span>
+            <select
+              aria-label='按状态筛选免费供应商'
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+            >
+              <option value='all'>全部状态</option>
+              <option value='enabled'>已启用</option>
+              <option value='disabled'>已停用</option>
+              <option value='ready'>已就绪</option>
+              <option value='needs_key'>需要 key</option>
+              <option value='configured'>已配置</option>
+              <option value='catalog'>仅目录</option>
+            </select>
+          </label>
+          <label>
+            <span>能力</span>
+            <select
+              aria-label='按能力筛选免费供应商'
+              value={capabilityFilter}
+              onChange={(event) => setCapabilityFilter(event.target.value)}
+            >
+              <option value='all'>全部能力</option>
+              <option value='keyless'>免 key</option>
+              <option value='stream'>流式</option>
+              <option value='tools'>工具</option>
+              <option value='json'>JSON</option>
+              <option value='vision'>视觉</option>
+            </select>
+          </label>
+          <span className='free-provider-count'>
+            <strong>{visibleProviderRows.length}</strong> / {providerRows.length} 个供应商
+          </span>
+        </div>
+
+        <div className='free-provider-bulk-row'>
+          <Button
+            type='button'
+            basic
+            size='mini'
+            disabled={visibleProviderRows.length === 0}
+            onClick={selectVisibleProviders}
+          >
+            选择可见项
+          </Button>
+          <Button
+            type='button'
+            basic
+            size='mini'
+            disabled={selectedProviders.length === 0}
+            onClick={clearSelectedProviders}
+          >
+            清空选择
+          </Button>
+          <Button
+            type='button'
+            basic
+            size='mini'
+            color='green'
+            disabled={selectedProviders.length === 0}
+            onClick={() => applyBulkEnabled(true)}
+          >
+            批量启用
+          </Button>
+          <Button
+            type='button'
+            basic
+            size='mini'
+            color='orange'
+            disabled={selectedProviders.length === 0}
+            onClick={() => applyBulkEnabled(false)}
+          >
+            批量停用
+          </Button>
+          {selectedProviders.length > 0 && (
+            <Label basic size='mini' className='free-provider-selected-count'>
+              已选择 {selectedProviders.length} 项
+            </Label>
+          )}
+        </div>
+
+        {bulkMessage && (
+          <Message info size='small' className='free-provider-bulk-message'>
+            {bulkMessage}
+          </Message>
+        )}
+      </div>
+
       <Table compact celled striped>
         <Table.Header>
           <Table.Row>
+            <Table.HeaderCell>选择</Table.HeaderCell>
             <Table.HeaderCell>启用</Table.HeaderCell>
             <Table.HeaderCell>供应商</Table.HeaderCell>
-            <Table.HeaderCell>密钥数量</Table.HeaderCell>
-            <Table.HeaderCell>限额覆盖</Table.HeaderCell>
+            <Table.HeaderCell>密钥数</Table.HeaderCell>
+            <Table.HeaderCell>能力</Table.HeaderCell>
+            <Table.HeaderCell>当前限额</Table.HeaderCell>
+            <Table.HeaderCell>覆盖限额</Table.HeaderCell>
+            <Table.HeaderCell>替换密钥</Table.HeaderCell>
             <Table.HeaderCell>状态</Table.HeaderCell>
           </Table.Row>
         </Table.Header>
         <Table.Body>
-          {providerKeys.map((key) => {
-            const provider = freeProviders[key];
-            const display = PROVIDER_DISPLAY[key] || { title: key, color: 'grey', icon: 'key' };
-            const limits = provider.limits_override || {};
-            const keyCount = provider.key_count || 0;
-            const invalidLimits = !validateLimits(limits);
-
-            return (
-              <Table.Row key={key}>
-                <Table.Cell collapsing>
-                  <Checkbox
-                    toggle
-                    checked={!!provider.enabled}
-                    onChange={(_, { checked }) => updateProvider(key, 'enabled', checked)}
-                  />
-                </Table.Cell>
-                <Table.Cell>
-                  <strong>{display.title}</strong>
-                  <div style={{ marginTop: 4 }}>
-                    <Label basic color={display.color} size='small'>
-                      <Icon name={display.icon} /> {key}
-                    </Label>
-                  </div>
-                </Table.Cell>
-                <Table.Cell>
-                  {keyCount} 个密钥
-                </Table.Cell>
-                <Table.Cell>
-                  <Form size='small'>
-                    <Form.Group widths='equal'>
-                      {['rpm_limit', 'rpd_limit', 'tpm_limit', 'tpd_limit'].map((field) => (
-                        <Form.Field key={field}>
-                          <label>{field.replace('_limit', '').toUpperCase()}</label>
-                          <Input
-                            type='number'
-                            size='mini'
-                            placeholder='默认'
-                            value={limits[field] === undefined ? '' : limits[field]}
-                            onChange={(_, { value }) => {
-                              const parsed = value === '' ? undefined : parseInt(value, 10);
-                              updateLimit(key, field, Number.isFinite(parsed) ? parsed : undefined);
-                            }}
-                          />
-                        </Form.Field>
-                      ))}
-                    </Form.Group>
-                    {invalidLimits && (
-                      <Message error size='mini'>
-                        <Icon name='warning sign' />
-                        限额值不能为负数
-                      </Message>
-                    )}
-                  </Form>
-                </Table.Cell>
-                <Table.Cell>
-                  {provider.enabled ? (
-                    <Label color='green' basic>已启用（{keyCount} 个密钥）</Label>
-                  ) : (
-                    <Label color='grey' basic>已停用</Label>
-                  )}
-                </Table.Cell>
-              </Table.Row>
-            );
-          })}
+          {visibleProviderRows.length === 0 ? (
+            <Table.Row>
+              <Table.Cell colSpan='9' textAlign='center'>
+                当前筛选条件下没有匹配的供应商。
+              </Table.Cell>
+            </Table.Row>
+          ) : visibleProviderRows.map((provider) => (
+            <FreeProviderRow
+              key={provider.name}
+              provider={provider}
+              providerConfig={providerConfig}
+              onUpdateProvider={updateProvider}
+              onUpdateLimit={updateLimit}
+              onUpdateKeys={updateKeys}
+              onClearKeys={clearKeys}
+              usageRows={usageRowsForProvider(provider.name)}
+              selected={selectedProviders.includes(provider.name)}
+              onSelectProvider={toggleProviderSelection}
+            />
+          ))}
         </Table.Body>
       </Table>
+
       <Message info size='small'>
         <Icon name='info circle' />
-        空值表示使用系统默认限额，0 表示不限制，大于 0 表示覆盖默认限额。密钥只显示数量，不在页面中展示或编辑。
+        已保存的密钥不会显示。密钥输入为空会保留已保存密钥；粘贴新密钥会在保存时替换原密钥。
       </Message>
     </div>
   );
