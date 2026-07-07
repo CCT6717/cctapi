@@ -284,7 +284,11 @@ func MarkDeploymentExhausted(deploymentID string, reason string, until time.Time
 	state.LastErrorMessage = fmt.Sprintf("%s: %s", reason, until.Format(time.RFC3339))
 	state.UpdatedAt = time.Now().UTC()
 
-	return model.DB.Save(state).Error
+	if err := model.DB.Save(state).Error; err != nil {
+		return err
+	}
+	ClearStickyDeploymentForDeployment(deploymentID)
+	return nil
 }
 
 // MarkDeploymentCooldown marks deployment as cooling down until specific time
@@ -317,7 +321,11 @@ func saveDeploymentCooldown(deploymentID string, reason string, until time.Time)
 	state.CooldownUntil = &until
 	state.UpdatedAt = time.Now().UTC()
 
-	return model.DB.Save(state).Error
+	if err := model.DB.Save(state).Error; err != nil {
+		return err
+	}
+	ClearStickyDeploymentForDeployment(deploymentID)
+	return nil
 }
 
 func GetDeploymentCooldown(deploymentID string) (*time.Time, string, error) {
@@ -533,6 +541,21 @@ func ClearStickyDeployment(virtualModel string) {
 	stickyDepMu.Lock()
 	defer stickyDepMu.Unlock()
 	delete(stickyDep, virtualModel)
+}
+
+// ClearStickyDeploymentForDeployment removes any virtual-model sticky route
+// pointing at a deployment that should no longer receive first attempts.
+func ClearStickyDeploymentForDeployment(deploymentID string) {
+	stickyDepMu.Lock()
+	defer stickyDepMu.Unlock()
+	if stickyDep == nil {
+		return
+	}
+	for virtualModel, stickyDeploymentID := range stickyDep {
+		if stickyDeploymentID == deploymentID {
+			delete(stickyDep, virtualModel)
+		}
+	}
 }
 
 // WarmUpStickyState pre-populates sticky deployment preferences after a restart.

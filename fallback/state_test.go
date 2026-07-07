@@ -107,3 +107,60 @@ func TestResetDeploymentStateClearsPersistentCooldown(t *testing.T) {
 		t.Fatalf("expected reset to clear persistent cooldown, until=%v reason=%q", cooldownUntil, reason)
 	}
 }
+
+func TestMarkDeploymentCooldownClearsStickyDeployment(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	resetStickyStateForTest(t)
+
+	if err := InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	deploymentID := "free:groq-001122ff"
+	SetStickyDeployment("cct/free", deploymentID)
+	SetStickyDeployment("cct/paid", "paid:stable")
+
+	if err := MarkDeploymentCooldown(deploymentID, "rate limited", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("MarkDeploymentCooldown failed: %v", err)
+	}
+
+	if got := GetStickyDeployment("cct/free"); got != "" {
+		t.Fatalf("expected cooled-down deployment to lose sticky routing, got %q", got)
+	}
+	if got := GetStickyDeployment("cct/paid"); got != "paid:stable" {
+		t.Fatalf("expected unrelated sticky deployment to remain, got %q", got)
+	}
+}
+
+func TestMarkDeploymentExhaustedClearsStickyDeployment(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	resetStickyStateForTest(t)
+
+	if err := InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	deploymentID := "free:routeway-aabbccdd"
+	SetStickyDeployment("cct/free", deploymentID)
+
+	if err := MarkDeploymentExhausted(deploymentID, "quota exhausted", time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("MarkDeploymentExhausted failed: %v", err)
+	}
+
+	if got := GetStickyDeployment("cct/free"); got != "" {
+		t.Fatalf("expected exhausted deployment to lose sticky routing, got %q", got)
+	}
+}
+
+func resetStickyStateForTest(t *testing.T) {
+	t.Helper()
+	reset := func() {
+		stickyDepMu.Lock()
+		defer stickyDepMu.Unlock()
+		stickyDep = nil
+	}
+	reset()
+	t.Cleanup(reset)
+}
