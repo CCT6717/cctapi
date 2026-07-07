@@ -708,6 +708,14 @@ func SyncFreePoolRuntime() error {
 	return nil
 }
 
+func SyncAndRefreshFreePoolRuntime() error {
+	if err := SyncFreePoolRuntime(); err != nil {
+		return err
+	}
+	RefreshFreePoolRuntimeState()
+	return nil
+}
+
 func ReloadConfig(path string) error {
 	// Step 1: Read the file (no lock needed)
 	data, err := os.ReadFile(path)

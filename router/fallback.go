@@ -210,7 +210,7 @@ func SetFallbackRouter(router *gin.Engine) {
 				c.JSON(http.StatusOK, gin.H{"success": false, "message": "fallback not enabled"})
 				return
 			}
-			if err := fallback.SyncFreePoolRuntime(); err != nil {
+			if err := fallback.SyncAndRefreshFreePoolRuntime(); err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 				return
 			}

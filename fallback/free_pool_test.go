@@ -1,6 +1,8 @@
 package fallback
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -322,6 +324,114 @@ func TestSyncFreePoolPreservesDeploymentRealModelOverride(t *testing.T) {
 	dep := cfg.Deployments[depID]
 	if dep.RealModel != "manual-real-model" {
 		t.Fatalf("expected SyncFreePool to preserve deployment real_model override, got %q", dep.RealModel)
+	}
+}
+
+func TestSyncAndRefreshFreePoolRuntimeRefreshesDynamicModelsImmediately(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" {
+			t.Fatalf("unexpected models path %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"nvidia/free-b"},{"id":"nvidia/free-a"}]}`))
+	}))
+	defer server.Close()
+
+	originalMeta := BuiltinFreeProviders["nvidia"]
+	meta := originalMeta
+	meta.DefaultBaseURL = server.URL + "/v1"
+	meta.DefaultModels = []string{}
+	meta.ModelFetchMode = ModelFetchOpenAIModels
+	BuiltinFreeProviders["nvidia"] = meta
+	t.Cleanup(func() { BuiltinFreeProviders["nvidia"] = originalMeta })
+
+	key := "nvapi-test-dynamic-model-sync"
+	keyHash := SafeKeyHash(key)
+	depID := deploymentID("nvidia", keyHash)
+	resetConfigForTest(&Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/free": {Enabled: true, Pools: []string{"free"}, Strategy: StrategyFreeFirst},
+		},
+		FreeProviders: map[string]FreeProviderConfig{
+			"nvidia": {Enabled: true, Keys: []string{key}},
+		},
+		Deployments: map[string]DeploymentConfig{},
+	})
+
+	if err := SyncAndRefreshFreePoolRuntime(); err != nil {
+		t.Fatalf("SyncAndRefreshFreePoolRuntime failed: %v", err)
+	}
+
+	dep, ok := CloneDeployment(depID)
+	if !ok {
+		t.Fatalf("expected deployment %s", depID)
+	}
+	if dep.RealModel != "nvidia/free-a" {
+		t.Fatalf("expected dynamic real_model nvidia/free-a, got %q", dep.RealModel)
+	}
+
+	var channel dbmodel.Channel
+	if err := dbmodel.DB.Where("name = ?", channelName("nvidia", keyHash)).First(&channel).Error; err != nil {
+		t.Fatalf("expected synced channel: %v", err)
+	}
+	if channel.Models != "nvidia/free-a,nvidia/free-b" {
+		t.Fatalf("expected channel models to sync, got %q", channel.Models)
+	}
+}
+
+func TestSyncAndRefreshFreePoolRuntimeRecordsDynamicModelRefreshFailure(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	resetRuntimeForTest()
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+		resetRuntimeForTest()
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "model catalog unavailable", http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	originalMeta := BuiltinFreeProviders["nvidia"]
+	meta := originalMeta
+	meta.DefaultBaseURL = server.URL + "/v1"
+	meta.DefaultModels = []string{}
+	meta.ModelFetchMode = ModelFetchOpenAIModels
+	BuiltinFreeProviders["nvidia"] = meta
+	t.Cleanup(func() { BuiltinFreeProviders["nvidia"] = originalMeta })
+
+	key := "nvapi-test-dynamic-model-sync-failure"
+	depID := deploymentID("nvidia", SafeKeyHash(key))
+	resetConfigForTest(&Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/free": {Enabled: true, Pools: []string{"free"}, Strategy: StrategyFreeFirst},
+		},
+		FreeProviders: map[string]FreeProviderConfig{
+			"nvidia": {Enabled: true, Keys: []string{key}},
+		},
+		Deployments: map[string]DeploymentConfig{},
+	})
+
+	if err := SyncAndRefreshFreePoolRuntime(); err != nil {
+		t.Fatalf("SyncAndRefreshFreePoolRuntime should keep config sync successful on model refresh failure: %v", err)
+	}
+
+	snap := SnapshotRuntimeState(depID)
+	if !strings.Contains(snap.LastError, "model sync failed") || !strings.Contains(snap.LastError, "status 500") {
+		t.Fatalf("expected runtime model sync error with status 500, got %q", snap.LastError)
+	}
+	if snap.FailureCount != 1 {
+		t.Fatalf("expected one recorded runtime failure, got %d", snap.FailureCount)
+	}
+	if got := GetHealthStatus(depID); got != HealthError {
+		t.Fatalf("expected health error after model sync failure, got %s", got)
 	}
 }
 
