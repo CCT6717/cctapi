@@ -40,48 +40,6 @@ func getRelayErrorMessage(bizErr *model.ErrorWithStatusCode) string {
 	return fmt.Sprintf("relay error with status code %d", bizErr.StatusCode)
 }
 
-// calculateCooldownDuration determines the cooldown duration based on error type and attempt count.
-//
-// Rules:
-//   - 429 with Retry-After header: use parsed value, capped at maxCooldown (300s)
-//   - 503/502/504 without Retry-After: exponential backoff min(60*2^(attempt-1), 300)
-//   - 429 without Retry-After: fall back to 60s default
-//   - Other temporary errors: exponential backoff
-func calculateCooldownDuration(bizErr *model.ErrorWithStatusCode, attempt int) time.Duration {
-	const (
-		maxCooldown    = 300 * time.Second
-		defaultTimeout = 60 * time.Second
-	)
-
-	if bizErr == nil {
-		return defaultTimeout
-	}
-
-	// If Retry-After header was provided by upstream, use it (capped at max)
-	if bizErr.RetryAfterSeconds != nil && *bizErr.RetryAfterSeconds > 0 {
-		duration := time.Duration(*bizErr.RetryAfterSeconds) * time.Second
-		if duration > maxCooldown {
-			duration = maxCooldown
-		}
-		return duration
-	}
-
-	// For 503/502/504 (temporary/server errors) without Retry-After, use exponential backoff
-	if bizErr.StatusCode == http.StatusServiceUnavailable ||
-		bizErr.StatusCode == http.StatusBadGateway ||
-		bizErr.StatusCode == http.StatusGatewayTimeout {
-		// min(60 * 2^(attempt-1), 300)
-		expDuration := defaultTimeout * time.Duration(1<<uint(attempt-1))
-		if expDuration > maxCooldown || expDuration <= 0 {
-			expDuration = maxCooldown
-		}
-		return expDuration
-	}
-
-	// For all other errors (including 429 without Retry-After), use default
-	return defaultTimeout
-}
-
 func relayHelper(c *gin.Context, relayMode int) *model.ErrorWithStatusCode {
 	var err *model.ErrorWithStatusCode
 	switch relayMode {
@@ -433,14 +391,18 @@ func relayWithFallback(c *gin.Context) {
 		}
 
 		// Mark deployment state based on error category
-		if errClass.Category == fallback.ErrorCategoryQuota {
-			fallback.MarkDeploymentExhausted(dep.ID, getRelayErrorMessage(bizErr), fallback.EndOfToday())
+		cooldownDuration, cooldownErr := fallback.ApplyRelayCooldown(dep.ID, getRelayErrorMessage(bizErr), fallback.RelayCooldownInput{
+			Category:          errClass.Category,
+			StatusCode:        bizErr.StatusCode,
+			RetryAfterSeconds: bizErr.RetryAfterSeconds,
+			Attempt:           attempts,
+		})
+		if cooldownErr != nil {
+			logger.SysError(fmt.Sprintf("[fallback] failed to apply cooldown state for %s: %v", dep.ID, cooldownErr))
+		} else if errClass.Category == fallback.ErrorCategoryQuota {
 			logger.Infof(ctx, "[fallback] deployment %s marked exhausted until end of day: %s",
 				dep.ID, getRelayErrorMessage(bizErr))
-		} else if errClass.Category == fallback.ErrorCategoryRateLimit || errClass.Category == fallback.ErrorCategoryTemporary {
-			cooldownDuration := calculateCooldownDuration(bizErr, attempts)
-			cooldownUntil := time.Now().Add(cooldownDuration)
-			fallback.MarkDeploymentCooldown(dep.ID, getRelayErrorMessage(bizErr), cooldownUntil)
+		} else if cooldownDuration > 0 {
 			logger.Infof(ctx, "[fallback] deployment %s marked cooling down for %.0fs: %s",
 				dep.ID, cooldownDuration.Seconds(), getRelayErrorMessage(bizErr))
 		}
