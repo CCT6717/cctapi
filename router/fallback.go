@@ -477,21 +477,7 @@ func SetFallbackRouter(router *gin.Engine) {
 			})
 		})
 
-		adminGroup.POST("/deployments/:id/health-check", func(c *gin.Context) {
-			deploymentID := c.Param("id")
-			status, err := fallback.TriggerHealthCheckForDeployment(deploymentID)
-			if err != nil {
-				c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
-				return
-			}
-			c.JSON(http.StatusOK, gin.H{
-				"success": true,
-				"data": map[string]interface{}{
-					"deployment_id": deploymentID,
-					"health":        string(status),
-				},
-			})
-		})
+		adminGroup.POST("/deployments/:id/health-check", triggerDeploymentHealthCheck)
 	}
 
 	router.GET("/metrics", func(c *gin.Context) {
@@ -500,5 +486,22 @@ func SetFallbackRouter(router *gin.Engine) {
 
 	router.GET("/fallback/dashboard", func(c *gin.Context) {
 		c.Redirect(http.StatusTemporaryRedirect, "/fallback/status")
+	})
+}
+
+func triggerDeploymentHealthCheck(c *gin.Context) {
+	deploymentID := c.Param("id")
+	status, err := fallback.TriggerHealthCheckForDeployment(deploymentID)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": map[string]interface{}{
+			"deployment_id": deploymentID,
+			"health":        string(status),
+			"runtime":       fallback.SnapshotRuntimeState(deploymentID),
+		},
 	})
 }

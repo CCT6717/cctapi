@@ -2,8 +2,11 @@ package fallback
 
 import (
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	dbmodel "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/channeltype"
@@ -80,5 +83,67 @@ func TestBuildHealthProbeBodyAppliesMaxOutputTokenQuirk(t *testing.T) {
 	}
 	if !strings.Contains(body, `"model":"synthetic-model"`) {
 		t.Fatalf("expected model in body, got %s", body)
+	}
+}
+
+func TestCheckOneDeploymentRecordsRuntimeErrorWhenChannelMissing(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	deploymentID := "free:pollinations-" + SafeKeyHash("") + "-missing-channel"
+
+	checkOneDeployment(deploymentID, DeploymentConfig{
+		ID:        deploymentID,
+		ChannelID: 404,
+		RealModel: "openai-fast",
+	}, time.Millisecond)
+
+	snap := SnapshotRuntimeState(deploymentID)
+	if snap.LastError == "" {
+		t.Fatal("expected health check channel failure to be visible in runtime last_error")
+	}
+	if !strings.Contains(snap.LastError, "health check channel") {
+		t.Fatalf("expected health check channel error, got %q", snap.LastError)
+	}
+	if snap.FailureCount != 1 {
+		t.Fatalf("expected one recorded runtime failure, got %d", snap.FailureCount)
+	}
+}
+
+func TestCheckOneDeploymentClearsRuntimeErrorWhenHealthy(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	baseURL := server.URL
+	channel := dbmodel.Channel{
+		Name:    "health-check-test",
+		Type:    channeltype.OpenAICompatible,
+		BaseURL: &baseURL,
+		Status:  dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create test channel: %v", err)
+	}
+
+	deploymentID := "free:pollinations-" + SafeKeyHash("") + "-healthy"
+	RecordFailure(deploymentID, "old health check failure", true)
+
+	checkOneDeployment(deploymentID, DeploymentConfig{
+		ID:        deploymentID,
+		ChannelID: channel.Id,
+		RealModel: "openai-fast",
+	}, time.Second)
+
+	if got := GetHealthStatus(deploymentID); got != HealthHealthy {
+		t.Fatalf("expected healthy status, got %s", got)
+	}
+	snap := SnapshotRuntimeState(deploymentID)
+	if snap.LastError != "" {
+		t.Fatalf("expected healthy health check to clear runtime last_error, got %q", snap.LastError)
 	}
 }

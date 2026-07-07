@@ -196,7 +196,7 @@ keyless 供应商使用 `SafeKeyHash("")`（空字符串的 hash）生成命名�
 | `[fallback] sticky routing:` | 使用 sticky pin |
 | `[fallback] strategy-based start deployment` | 首次启动的 deployment |
 | `[free_pool]` | SyncFreePool 操作 |
-| `[health][debug] skip ping for free deployment` | 健康检查跳过 free pool |
+| `[health] ping <deployment> failed` | 健康检查失败，错误会写入 runtime `last_error` |
 
 ---
 
@@ -223,21 +223,20 @@ keyless 供应商使用 `SafeKeyHash("")`（空字符串的 hash）生成命名�
 
 ## Free Deployment 健康检查策略
 
-`checkOneDeployment` 中有一段特殊逻辑：
+`checkOneDeployment` 现在会对 free deployment 执行轻量真实探测，使用 `max_tokens=1` 的最小
+chat-completions 请求。
 
-```go
-if dep.QuotaMode == "free" {
-    logger.SysLogf("[health][debug] skip ping for free deployment %s", deploymentID)
-    setHealthStatus(deploymentID, HealthUnknown)
-    return
-}
-```
+健康检查状态映射：
 
-Free pool 的 deployment 的 `QuotaMode` 固定为 `"free"`。健康检查会跳过真实 ping，直接标记为 `unknown`。因为：
+- `200` → `healthy`，并清除 runtime `last_error`
+- `401/403` → `invalid`，并进入长 cooldown
+- `429` → `rate_limited`，并进入短 cooldown
+- `5xx` 或网络错误 → `error`，并进入短 cooldown
+- 未检查过的 deployment 仍可能显示 `unknown`，`unknown` 允许继续参与路由
 
-- Free 上游通常有极低的 RPM/RPD，每次 ping 消耗真实配额
-- `IsDeploymentHealthy` 允许 `unknown` 状态通过（只拦截 `invalid` / `error`）
-- 部署的实际可用性由 fallback 循环中的错误处理保障（失败 → cooldown → 移除）
+健康检查失败会写入 `/api/fallback/deployments/runtime-status` 的 `last_error` / `last_error_at`。
+手动调用 `POST /api/fallback/deployments/:id/health-check` 时，响应也会带上 `runtime` 快照，
+便于在管理端直接看到失败原因。
 
 ---
 
@@ -323,7 +322,9 @@ A: 不需要。编辑 `fallback.json` → `POST /api/fallback/config/reload` 即
 A: 可以。每个 key 生成独立的 channel 和 deployment，轮流使用。这在 OpenRouter 等限流较严的上游特别有用。
 
 **Q: 为什么 health check 显示 free deployment 为 unknown？**
-A: 这是设计如此。Free deployment 有独立的不健康检测机制（错误 → cooldown → 不参与排序），不需要消耗额外配额去 ping。
+A: `unknown` 表示当前进程还没有该 deployment 的健康检查结果，仍允许参与路由。手动触发
+`POST /api/fallback/deployments/:id/health-check` 后会执行轻量真实探测，并更新为 `healthy`、
+`rate_limited`、`invalid` 或 `error`；失败原因会显示在 runtime `last_error` 中。
 
 **Q: keyless 供应商（Kilo、Pollinations、OVH、SiliconFlow、Zhipu）需要配 key 吗？**
 A: 不需要。`keys` 字段留空数组 `[]` 即可，`SyncFreePool` 会使用空字符串的 hash 生成命名。SiliconFlow 和 Zhipu 的 API 端点允许匿名访问（速率较低），配置 key 可获得更高限额。

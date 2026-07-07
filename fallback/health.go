@@ -124,7 +124,13 @@ func checkAllDeployments(timeout time.Duration) {
 // response to a health status. It also applies cooldown for transient issues.
 func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.Duration) {
 	channel, err := dbmodel.GetChannelById(dep.ChannelID, true)
-	if err != nil || channel == nil || channel.Status != dbmodel.ChannelStatusEnabled {
+	if err != nil || channel == nil {
+		RecordFailure(deploymentID, fmt.Sprintf("health check channel %d not found", dep.ChannelID), false)
+		setHealthStatus(deploymentID, HealthError)
+		return
+	}
+	if channel.Status != dbmodel.ChannelStatusEnabled {
+		RecordFailure(deploymentID, fmt.Sprintf("health check channel %d disabled", dep.ChannelID), false)
 		setHealthStatus(deploymentID, HealthError)
 		return
 	}
@@ -136,6 +142,7 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 	statusCode, err := pingDeployment(deploymentID, channel, dep, timeout)
 	if err != nil {
 		logger.SysError(fmt.Sprintf("[health] ping %s failed: %v", deploymentID, err))
+		RecordFailure(deploymentID, fmt.Sprintf("health check failed: %v", err), false)
 		setHealthStatus(deploymentID, HealthError)
 		_ = MarkDeploymentCooldownForDuration(deploymentID, "health check timeout", 30*time.Second)
 		return
@@ -143,14 +150,18 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 
 	switch {
 	case statusCode == http.StatusOK:
+		clearRuntimeError(deploymentID)
 		setHealthStatus(deploymentID, HealthHealthy)
 	case statusCode == http.StatusUnauthorized || statusCode == http.StatusForbidden:
+		RecordFailure(deploymentID, fmt.Sprintf("health check unauthorized: HTTP %d", statusCode), false)
 		setHealthStatus(deploymentID, HealthInvalid)
 		_ = MarkInvalid(deploymentID, "health check unauthorized")
 	case statusCode == http.StatusTooManyRequests:
+		RecordFailure(deploymentID, "health check rate limited: HTTP 429", true)
 		setHealthStatus(deploymentID, HealthRateLimited)
 		_ = MarkDeploymentCooldownForDuration(deploymentID, "health check rate limited", 60*time.Second)
 	case statusCode >= 500:
+		RecordFailure(deploymentID, fmt.Sprintf("health check upstream error: HTTP %d", statusCode), false)
 		setHealthStatus(deploymentID, HealthError)
 		_ = MarkDeploymentCooldownForDuration(deploymentID, "health check 5xx", 30*time.Second)
 	default:

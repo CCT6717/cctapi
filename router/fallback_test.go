@@ -1,13 +1,18 @@
 package router
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/fallback"
 	dbmodel "github.com/songquanpeng/one-api/model"
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
 )
 
 func TestBackupFallbackEditorConfig(t *testing.T) {
@@ -99,6 +104,66 @@ func TestBackupFallbackEditorConfigSanitizesFreeProviderKeys(t *testing.T) {
 	}
 	if !strings.Contains(string(backupContent), fallback.SafeKeyHash(rawKey)) {
 		t.Fatalf("expected sanitized backup to retain non-secret key hash, got %s", backupContent)
+	}
+}
+
+func TestTriggerDeploymentHealthCheckReturnsRuntimeErrorDetails(t *testing.T) {
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open in-memory DB: %v", err)
+	}
+	if err := db.AutoMigrate(&dbmodel.Channel{}); err != nil {
+		t.Fatalf("failed to migrate channel table: %v", err)
+	}
+	dbmodel.DB = db
+	defer func() {
+		_ = fallback.LoadConfig(filepath.Join(t.TempDir(), "missing.json"))
+		dbmodel.DB = originalDB
+	}()
+
+	deploymentID := "free:pollinations-" + fallback.SafeKeyHash("") + "-handler-missing-channel"
+	configPath := filepath.Join(t.TempDir(), "fallback.json")
+	config := `{
+  "enabled": true,
+  "virtual_models": {
+    "cct/free": {
+      "enabled": true,
+      "strategy": "free_first",
+      "pools": ["free"]
+    }
+  },
+  "deployments": {
+    "` + deploymentID + `": {
+      "enabled": true,
+      "channel_id": 404,
+      "real_model": "openai-fast",
+      "pool": "free"
+    }
+  }
+}`
+	if err := os.WriteFile(configPath, []byte(config), 0644); err != nil {
+		t.Fatalf("failed to write fallback config: %v", err)
+	}
+	if err := fallback.LoadConfig(configPath); err != nil {
+		t.Fatalf("failed to load fallback config: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Params = gin.Params{{Key: "id", Value: deploymentID}}
+	c.Request = httptest.NewRequest(http.MethodPost, "/api/fallback/deployments/"+deploymentID+"/health-check", nil)
+
+	triggerDeploymentHealthCheck(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"runtime"`) {
+		t.Fatalf("expected runtime snapshot in health-check response, got %s", w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"last_error"`) || !strings.Contains(w.Body.String(), "health check channel") {
+		t.Fatalf("expected last_error details in health-check response, got %s", w.Body.String())
 	}
 }
 

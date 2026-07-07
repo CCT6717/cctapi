@@ -136,6 +136,15 @@ func RecordSuccess(deploymentID string) {
 	}
 }
 
+func clearRuntimeError(deploymentID string) {
+	runtimeStatesMu.Lock()
+	defer runtimeStatesMu.Unlock()
+	if s, ok := runtimeStates[deploymentID]; ok {
+		s.LastError = ""
+		s.LastErrorAt = time.Time{}
+	}
+}
+
 // RecordFailure bumps failure counter, stamps last error, and bumps the
 // rate-limit penalty score (capped at 10). Creates the state if missing.
 func RecordFailure(deploymentID, errMsg string, isRateLimit bool) {
