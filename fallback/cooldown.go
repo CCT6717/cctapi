@@ -64,6 +64,14 @@ func ApplyRelayCooldown(deploymentID, reason string, input RelayCooldownInput) (
 			return 0, err
 		}
 		return time.Until(until), nil
+	case ErrorCategoryModelAccess:
+		if input.StatusCode == http.StatusUnauthorized || input.StatusCode == http.StatusForbidden {
+			if err := MarkInvalid(deploymentID, reason); err != nil {
+				return 0, err
+			}
+			return 24 * time.Hour, nil
+		}
+		return 0, nil
 	case ErrorCategoryRateLimit, ErrorCategoryTemporary:
 		duration := CalculateRelayCooldownDuration(input)
 		if err := MarkDeploymentCooldown(deploymentID, reason, time.Now().Add(duration)); err != nil {
