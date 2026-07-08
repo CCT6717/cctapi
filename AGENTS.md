@@ -53,8 +53,7 @@ The frontend build has existing ESLint warnings in unrelated files. A successful
 Last verified handoff: 2026-07-07.
 
 - Branch `feat/freellmapi-native-core` is pushed to `origin/feat/freellmapi-native-core`.
-- Latest UI/runtime diagnostics commit: `6b8cc67 feat: show fallback runtime diagnostics in UI`.
-- Latest backend commit before this handoff update: `4f76cd6 feat: surface provider health check errors`.
+- Latest backend/runtime alignment commit: `222af87 test: add invalid-auth sticky-cooldown coverage`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are in progress on this branch.
 
@@ -203,7 +202,8 @@ Recommended next backend tasks after UI acceptance:
 
 - Real free-provider health checks and surfaced error reasons. Manual health checks now write runtime errors for channel, auth, rate-limit, timeout, and 5xx cases; provider JSON/text error bodies are parsed into runtime diagnostics and cooldown reasons.
 - Model sync/status refresh that updates admin-visible state. Admin `/free-pool/sync` now runs resource sync plus dynamic model and credit refresh; dynamic model refresh failures are surfaced through runtime diagnostics.
-- Retry, cooldown, and circuit-breaker behavior aligned with existing fallback routing.
+- Retry, cooldown, and circuit-breaker behavior partially aligned:
+  - 401/403 `ModelAccess` failures now go through long cooldown + sticky invalidation in relay routing.
 - Sticky routing and automatic route selection for free providers.
 - Tool-call rescue compatibility. Structured tool-call argument repair is implemented in the relay/model boundary for OpenAI-compatible chat completions.
 - Admin UI/API display of real runtime failures rather than local-only sync errors. Runtime status now exposes persistent state, cooldown, exhausted, sticky route, and free-pool sync/health-check errors for the admin UI.
