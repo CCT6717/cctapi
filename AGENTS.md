@@ -53,7 +53,7 @@ The frontend build has existing ESLint warnings in unrelated files. A successful
 Last verified handoff: 2026-07-07.
 
 - Branch `feat/freellmapi-native-core` is pushed to `origin/feat/freellmapi-native-core`.
-- Latest backend/runtime alignment commit: `222af87 test: add invalid-auth sticky-cooldown coverage`.
+- Latest backend/runtime alignment commit: `8e3101c test: cover auth 401 and 403 invalidation path`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are in progress on this branch.
 
