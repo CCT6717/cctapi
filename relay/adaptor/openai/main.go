@@ -13,6 +13,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/conv"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/relay/model"
 	"github.com/songquanpeng/one-api/relay/relaymode"
@@ -115,6 +116,16 @@ func Handler(c *gin.Context, resp *http.Response, promptTokens int, modelName st
 			Error:      textResponse.Error,
 			StatusCode: resp.StatusCode,
 		}, nil
+	}
+	if toolsValue, ok := c.Get(ctxkey.RequestTools); ok {
+		requestTools, ok := toolsValue.([]model.Tool)
+		if ok && len(requestTools) > 0 {
+			if repairedBody, changed, repairErr := model.RepairChatCompletionToolArgumentsJSON(responseBody, requestTools); repairErr != nil {
+				logger.SysError("error repairing tool call arguments: " + repairErr.Error())
+			} else if changed {
+				responseBody = repairedBody
+			}
+		}
 	}
 	// Reset response body
 	resp.Body = io.NopCloser(bytes.NewBuffer(responseBody))

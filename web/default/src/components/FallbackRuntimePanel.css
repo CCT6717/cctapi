@@ -114,6 +114,17 @@
 .gw-health-dot.red { background: var(--fb-danger); }
 .gw-health-dot.gray { background: #94a3b8; }
 
+.gw-runtime-diagnostics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.gw-runtime-diagnostics .ui.label {
+  margin: 0 !important;
+}
+
 .gw-last-error {
   max-width: 220px;
 }

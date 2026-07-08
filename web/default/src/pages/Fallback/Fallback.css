@@ -1093,6 +1093,38 @@
   color: var(--fb-primary-strong) !important;
 }
 
+.free-deployment-runtime-diagnostics {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.free-deployment-runtime-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.free-deployment-runtime-labels .ui.label {
+  margin: 0 !important;
+}
+
+.free-deployment-runtime-issues {
+  display: grid;
+  gap: 2px;
+}
+
+.free-deployment-runtime-issue {
+  max-width: 240px;
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ============================================================
    Summary Bar
    ============================================================ */

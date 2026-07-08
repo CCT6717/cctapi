@@ -1,8 +1,10 @@
 package openai
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -177,5 +179,41 @@ func TestApplyFreeProviderRequestQuirksUsesExplicitProviderContext(t *testing.T)
 	}
 	if req.Stop != nil {
 		t.Fatalf("Stop = %#v, want nil", req.Stop)
+	}
+}
+
+func TestHandlerRepairsToolArgumentsFromRequestToolsContext(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Set(ctxkey.RequestTools, []model.Tool{{
+		Type: "function",
+		Function: model.Function{
+			Name: "update_plan",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"steps": map[string]any{"type": "array"},
+				},
+			},
+		},
+	}})
+
+	resp := &http.Response{
+		StatusCode: http.StatusOK,
+		Header:     make(http.Header),
+		Body: io.NopCloser(strings.NewReader(
+			`{"id":"chatcmpl-1","object":"chat.completion","choices":[{"message":{"role":"assistant","tool_calls":[{"id":"call_1","type":"function","function":{"name":"update_plan","arguments":"{\"steps\":\"[{\\\"step\\\":\\\"ship\\\"}]\"}"}}]}}],"usage":{"prompt_tokens":1,"completion_tokens":1,"total_tokens":2}}`,
+		)),
+	}
+
+	err, usage := Handler(c, resp, 1, "test-model")
+	if err != nil {
+		t.Fatalf("Handler returned error: %+v", err)
+	}
+	if usage == nil || usage.TotalTokens != 2 {
+		t.Fatalf("unexpected usage: %#v", usage)
+	}
+	if !strings.Contains(w.Body.String(), `"arguments":"{\"steps\":[{\"step\":\"ship\"}]}"`) {
+		t.Fatalf("response body was not repaired: %s", w.Body.String())
 	}
 }

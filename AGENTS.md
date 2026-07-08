@@ -21,7 +21,7 @@ D:\ct\project
 Current integration branch:
 
 ```text
-cleanup/structure-boundaries
+feat/freellmapi-native-core
 ```
 
 ## Build And Run
@@ -50,12 +50,12 @@ The frontend build has existing ESLint warnings in unrelated files. A successful
 
 ## Current Handoff
 
-Last verified handoff: 2026-07-06.
+Last verified handoff: 2026-07-07.
 
-- Branch `cleanup/structure-boundaries` is pushed to `origin/cleanup/structure-boundaries`.
-- Latest handoff commit: `efc3573 fix: complete free pool ui review fixes`.
+- Branch `feat/freellmapi-native-core` is pushed to `origin/feat/freellmapi-native-core`.
+- Latest backend/runtime alignment commit: `8e3101c test: cover auth 401 and 403 invalidation path`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
-- Verify the free-pool UI visually before merging this branch into the main branch.
+- Free-pool UI acceptance and backend FreeLLMAPI core integration are in progress on this branch.
 
 Final verification from the free-pool UI batch:
 
@@ -70,12 +70,29 @@ go build -o one-api.exe .
 curl.exe -I http://127.0.0.1:3008/
 ```
 
-Expected result from the final pass:
+Expected result from the free-pool UI pass:
 
-- Frontend tests: 7 suites passed, 33 tests passed.
+- Frontend tests: 8 suites passed, 35 tests passed.
 - Frontend production build: passed with existing unrelated ESLint warnings.
 - Storybook build: passed with asset-size warnings only.
 - Local server on port 3008: HTTP 200.
+
+Latest verification on `feat/freellmapi-native-core`:
+
+```powershell
+$env:CGO_ENABLED='1'
+$env:PATH='D:\ct\tools\w64devkit-1.23.0\bin;' + $env:PATH
+& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./fallback ./router -count=1
+& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./... -count=1
+& 'D:\ct\tools\go1.22.12\bin\go.exe' build ./...
+```
+
+Expected result from the latest pass:
+
+- `./fallback` and `./router` tests: passed.
+- Full Go tests: passed.
+- Go build: passed.
+- `git diff --check`: no actual formatting errors, only Git line-ending warnings.
 
 ## Runtime Files
 
@@ -183,12 +200,13 @@ FreeLLMAPI is not just a thin proxy. Treat the target feature set as:
 
 Recommended next backend tasks after UI acceptance:
 
-- Real free-provider health checks and surfaced error reasons.
-- Model sync/status refresh that updates admin-visible state.
-- Retry, cooldown, and circuit-breaker behavior aligned with existing fallback routing.
+- Real free-provider health checks and surfaced error reasons. Manual health checks now write runtime errors for channel, auth, rate-limit, timeout, and 5xx cases; provider JSON/text error bodies are parsed into runtime diagnostics and cooldown reasons.
+- Model sync/status refresh that updates admin-visible state. Admin `/free-pool/sync` now runs resource sync plus dynamic model and credit refresh; dynamic model refresh failures are surfaced through runtime diagnostics.
+- Retry, cooldown, and circuit-breaker behavior partially aligned:
+  - 401/403 `ModelAccess` failures now go through long cooldown + sticky invalidation in relay routing.
 - Sticky routing and automatic route selection for free providers.
-- Tool-call rescue compatibility.
-- Admin UI/API display of real runtime failures rather than local-only sync errors.
+- Tool-call rescue compatibility. Structured tool-call argument repair is implemented in the relay/model boundary for OpenAI-compatible chat completions.
+- Admin UI/API display of real runtime failures rather than local-only sync errors. Runtime status now exposes persistent state, cooldown, exhausted, sticky route, and free-pool sync/health-check errors for the admin UI.
 
 ## Important Files
 

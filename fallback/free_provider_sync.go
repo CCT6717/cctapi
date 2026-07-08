@@ -230,6 +230,12 @@ func SyncFreePool(cfg *Config) error {
 	return nil
 }
 
+func RefreshFreePoolRuntimeState() {
+	cfg := GetConfig()
+	syncAllProviderModels(cfg)
+	syncOpenRouterCredits(cfg)
+}
+
 func deploymentUsesAutoChannel(dep DeploymentConfig, autoChannelIDs map[int]bool) bool {
 	if dep.ChannelID <= 0 {
 		return false
@@ -389,18 +395,21 @@ func syncAllProviderModels(cfg *Config) {
 		}
 		// keyless 渚涘簲鍟?鐢ㄧ┖ key 璋冧竴娆?fetchModels
 		if len(fp.Keys) == 0 {
+			keyHash := SafeKeyHash("")
+			depID := deploymentID(providerName, keyHash)
 			models, err := fetchModels(providerName, "")
 			if err != nil {
+				recordModelSyncFailure(depID, providerName, err)
 				logger.SysWarn(fmt.Sprintf("[free-pool] %s model fetch failed: %v (keeping static default)", providerName, err))
 				continue
 			}
 			if len(models) == 0 {
+				recordModelSyncFailure(depID, providerName, fmt.Errorf("returned no models"))
 				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models (keeping static default)", providerName))
 				continue
 			}
+			recordModelSyncSuccess(depID)
 			// keyless 渚涘簲鍟嗗彧鏈変竴涓?channel,鐢ㄧ┖ key 鐨?hash
-			keyHash := SafeKeyHash("")
-			depID := deploymentID(providerName, keyHash)
 			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
 				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
 			}
@@ -433,13 +442,16 @@ func syncAllProviderModels(cfg *Config) {
 			depID := deploymentID(providerName, keyHash)
 			models, err := fetchModels(providerName, key)
 			if err != nil {
+				recordModelSyncFailure(depID, providerName, err)
 				logger.SysWarn(fmt.Sprintf("[free-pool] %s model fetch failed for %s: %v (keeping static default)", providerName, depID, err))
 				continue
 			}
 			if len(models) == 0 {
+				recordModelSyncFailure(depID, providerName, fmt.Errorf("returned no models"))
 				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models for %s (keeping static default)", providerName, depID))
 				continue
 			}
+			recordModelSyncSuccess(depID)
 			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
 				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
 			}
@@ -462,6 +474,27 @@ func syncAllProviderModels(cfg *Config) {
 			ch.Models = newModels
 			_ = ch.UpdateAbilities()
 			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
+		}
+	}
+}
+
+func recordModelSyncFailure(deploymentID string, providerName string, err error) {
+	if deploymentID == "" || err == nil {
+		return
+	}
+	RecordFailure(deploymentID, fmt.Sprintf("model sync failed for %s: %v", providerName, err), false)
+	setHealthStatus(deploymentID, HealthError)
+}
+
+func recordModelSyncSuccess(deploymentID string) {
+	if deploymentID == "" {
+		return
+	}
+	snap := SnapshotRuntimeState(deploymentID)
+	if strings.Contains(snap.LastError, "model sync failed") {
+		clearRuntimeError(deploymentID)
+		if GetHealthStatus(deploymentID) == HealthError {
+			setHealthStatus(deploymentID, HealthHealthy)
 		}
 	}
 }

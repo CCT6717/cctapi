@@ -3,6 +3,7 @@ package fallback
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -40,6 +41,23 @@ type DeploymentCooldownState struct {
 	CooldownUntil *time.Time `gorm:"column:cooldown_until"`
 	CreatedAt     time.Time  `gorm:"column:created_at"`
 	UpdatedAt     time.Time  `gorm:"column:updated_at"`
+}
+
+type DeploymentPersistentStateSnapshot struct {
+	DeploymentID      string
+	ExhaustedUntil    *time.Time
+	ExhaustedActive   bool
+	LastErrorCode     string
+	LastErrorMessage  string
+	LastStateUpdateAt time.Time
+}
+
+type DeploymentCooldownSnapshot struct {
+	DeploymentID   string
+	CooldownUntil  *time.Time
+	CooldownActive bool
+	Reason         string
+	UpdatedAt      time.Time
 }
 
 type UsageInfo struct {
@@ -284,7 +302,11 @@ func MarkDeploymentExhausted(deploymentID string, reason string, until time.Time
 	state.LastErrorMessage = fmt.Sprintf("%s: %s", reason, until.Format(time.RFC3339))
 	state.UpdatedAt = time.Now().UTC()
 
-	return model.DB.Save(state).Error
+	if err := model.DB.Save(state).Error; err != nil {
+		return err
+	}
+	ClearStickyDeploymentForDeployment(deploymentID)
+	return nil
 }
 
 // MarkDeploymentCooldown marks deployment as cooling down until specific time
@@ -317,7 +339,11 @@ func saveDeploymentCooldown(deploymentID string, reason string, until time.Time)
 	state.CooldownUntil = &until
 	state.UpdatedAt = time.Now().UTC()
 
-	return model.DB.Save(state).Error
+	if err := model.DB.Save(state).Error; err != nil {
+		return err
+	}
+	ClearStickyDeploymentForDeployment(deploymentID)
+	return nil
 }
 
 func GetDeploymentCooldown(deploymentID string) (*time.Time, string, error) {
@@ -326,6 +352,47 @@ func GetDeploymentCooldown(deploymentID string) (*time.Time, string, error) {
 		return nil, "", err
 	}
 	return state.CooldownUntil, state.Reason, nil
+}
+
+func SnapshotDeploymentPersistentState(deploymentID string) DeploymentPersistentStateSnapshot {
+	snapshot := DeploymentPersistentStateSnapshot{DeploymentID: deploymentID}
+	if model.DB == nil {
+		return snapshot
+	}
+
+	var state DeploymentState
+	err := model.DB.Where("deployment_id = ? AND date = ?", deploymentID, todayString()).First(&state).Error
+	if err != nil {
+		return snapshot
+	}
+
+	now := time.Now().UTC()
+	snapshot.ExhaustedUntil = state.ExhaustedUntil
+	snapshot.ExhaustedActive = state.ExhaustedUntil != nil && state.ExhaustedUntil.After(now)
+	snapshot.LastErrorCode = state.LastErrorCode
+	snapshot.LastErrorMessage = state.LastErrorMessage
+	snapshot.LastStateUpdateAt = state.UpdatedAt
+	return snapshot
+}
+
+func SnapshotDeploymentCooldown(deploymentID string) DeploymentCooldownSnapshot {
+	snapshot := DeploymentCooldownSnapshot{DeploymentID: deploymentID}
+	if model.DB == nil {
+		return snapshot
+	}
+
+	var state DeploymentCooldownState
+	err := model.DB.Where("deployment_id = ?", deploymentID).First(&state).Error
+	if err != nil {
+		return snapshot
+	}
+
+	now := time.Now().UTC()
+	snapshot.CooldownUntil = state.CooldownUntil
+	snapshot.CooldownActive = state.CooldownUntil != nil && state.CooldownUntil.After(now)
+	snapshot.Reason = state.Reason
+	snapshot.UpdatedAt = state.UpdatedAt
+	return snapshot
 }
 
 func EnsureDeploymentCooldownState(deploymentID string) (*DeploymentCooldownState, error) {
@@ -429,7 +496,10 @@ func ResetDeploymentState(deploymentID string) error {
 	state.LastErrorMessage = ""
 	state.UpdatedAt = time.Now().UTC()
 
-	return model.DB.Save(state).Error
+	if err := model.DB.Save(state).Error; err != nil {
+		return err
+	}
+	return clearDeploymentCooldownState(deploymentID)
 }
 
 // ClearDeploymentExhausted clears only the exhausted_until field
@@ -445,13 +515,30 @@ func ClearDeploymentExhausted(deploymentID string) error {
 	return model.DB.Save(state).Error
 }
 
-// ClearDeploymentCooldown clears only the cooldown_until field
+// ClearDeploymentCooldown clears both legacy daily-state cooldowns and the
+// persistent cooldown row used by routing checks.
 func ClearDeploymentCooldown(deploymentID string) error {
 	state, err := EnsureDeploymentState(deploymentID, todayString())
 	if err != nil {
 		return err
 	}
 
+	state.CooldownUntil = nil
+	state.UpdatedAt = time.Now().UTC()
+
+	if err := model.DB.Save(state).Error; err != nil {
+		return err
+	}
+	return clearDeploymentCooldownState(deploymentID)
+}
+
+func clearDeploymentCooldownState(deploymentID string) error {
+	state, err := EnsureDeploymentCooldownState(deploymentID)
+	if err != nil {
+		return err
+	}
+
+	state.Reason = ""
 	state.CooldownUntil = nil
 	state.UpdatedAt = time.Now().UTC()
 
@@ -513,6 +600,38 @@ func ClearStickyDeployment(virtualModel string) {
 	stickyDepMu.Lock()
 	defer stickyDepMu.Unlock()
 	delete(stickyDep, virtualModel)
+}
+
+// ClearStickyDeploymentForDeployment removes any virtual-model sticky route
+// pointing at a deployment that should no longer receive first attempts.
+func ClearStickyDeploymentForDeployment(deploymentID string) {
+	stickyDepMu.Lock()
+	defer stickyDepMu.Unlock()
+	if stickyDep == nil {
+		return
+	}
+	for virtualModel, stickyDeploymentID := range stickyDep {
+		if stickyDeploymentID == deploymentID {
+			delete(stickyDep, virtualModel)
+		}
+	}
+}
+
+func GetStickyVirtualModelsForDeployment(deploymentID string) []string {
+	stickyDepMu.RLock()
+	defer stickyDepMu.RUnlock()
+	if stickyDep == nil {
+		return []string{}
+	}
+
+	virtualModels := make([]string, 0)
+	for virtualModel, stickyDeploymentID := range stickyDep {
+		if stickyDeploymentID == deploymentID {
+			virtualModels = append(virtualModels, virtualModel)
+		}
+	}
+	sort.Strings(virtualModels)
+	return virtualModels
 }
 
 // WarmUpStickyState pre-populates sticky deployment preferences after a restart.
