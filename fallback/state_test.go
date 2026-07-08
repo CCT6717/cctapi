@@ -154,6 +154,38 @@ func TestMarkDeploymentExhaustedClearsStickyDeployment(t *testing.T) {
 	}
 }
 
+func TestMarkInvalidClearsStickyAndSetsCooldown(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	resetStickyStateForTest(t)
+
+	if err := InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	deploymentID := "free:invalid-auth"
+	SetStickyDeployment("cct/free", deploymentID)
+
+	if err := MarkInvalid(deploymentID, "invalid api key"); err != nil {
+		t.Fatalf("MarkInvalid failed: %v", err)
+	}
+
+	if got := GetStickyDeployment("cct/free"); got != "" {
+		t.Fatalf("expected invalid deployment to lose sticky routing, got %q", got)
+	}
+
+	cooldownUntil, reason, err := GetDeploymentCooldown(deploymentID)
+	if err != nil {
+		t.Fatalf("GetDeploymentCooldown failed: %v", err)
+	}
+	if reason != "invalid api key" {
+		t.Fatalf("expected cooldown reason to be saved, got %q", reason)
+	}
+	if cooldownUntil == nil || cooldownUntil.Before(time.Now().Add(23*time.Hour)) {
+		t.Fatalf("expected near-24h cooldown, got until=%v", cooldownUntil)
+	}
+}
+
 func resetStickyStateForTest(t *testing.T) {
 	t.Helper()
 	reset := func() {
