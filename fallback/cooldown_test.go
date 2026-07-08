@@ -113,7 +113,7 @@ func TestApplyRelayCooldownMarksQuotaExhausted(t *testing.T) {
 	}
 }
 
-func TestApplyRelayCooldownMarksUnauthorizedAsInvalid(t *testing.T) {
+func TestApplyRelayCooldownMarksAuthFailuresAsInvalid(t *testing.T) {
 	cleanupDB := setupFreeProviderLedgerTestDB(t)
 	defer cleanupDB()
 	defer resetStickyStateForTest(t)
@@ -122,34 +122,45 @@ func TestApplyRelayCooldownMarksUnauthorizedAsInvalid(t *testing.T) {
 		t.Fatalf("InitStateStore failed: %v", err)
 	}
 
-	SetStickyDeployment("cct/free", "free:auth-test")
+	for _, tc := range []struct {
+		name       string
+		statusCode int
+		reason     string
+	}{
+		{name: "unauthorized", statusCode: http.StatusUnauthorized, reason: "invalid key"},
+		{name: "forbidden", statusCode: http.StatusForbidden, reason: "permission denied"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			deploymentID := "free:" + tc.name + "-test"
+			SetStickyDeployment("cct/free", deploymentID)
+			before := time.Now()
+			duration, err := ApplyRelayCooldown(deploymentID, tc.reason, RelayCooldownInput{
+				Category:   ErrorCategoryModelAccess,
+				StatusCode: tc.statusCode,
+				Attempt:    1,
+			})
+			if err != nil {
+				t.Fatalf("ApplyRelayCooldown failed: %v", err)
+			}
+			if duration <= 0 || duration > 24*time.Hour+time.Second {
+				t.Fatalf("expected 24h cooldown, got %s", duration)
+			}
 
-	before := time.Now()
-	duration, err := ApplyRelayCooldown("free:auth-test", "invalid key", RelayCooldownInput{
-		Category:   ErrorCategoryModelAccess,
-		StatusCode: http.StatusUnauthorized,
-		Attempt:    1,
-	})
-	if err != nil {
-		t.Fatalf("ApplyRelayCooldown failed: %v", err)
-	}
-	if duration <= 0 || duration > 24*time.Hour+time.Second {
-		t.Fatalf("expected 24h cooldown, got %s", duration)
-	}
+			cooldownUntil, reason, err := GetDeploymentCooldown(deploymentID)
+			if err != nil {
+				t.Fatalf("GetDeploymentCooldown failed: %v", err)
+			}
+			if reason != tc.reason {
+				t.Fatalf("expected reason to be saved, got %q", reason)
+			}
+			if cooldownUntil == nil || cooldownUntil.Before(before.Add(23*time.Hour+58*time.Minute)) || cooldownUntil.After(before.Add(24*time.Hour+2*time.Minute)) {
+				t.Fatalf("unexpected cooldown_until: %v", cooldownUntil)
+			}
 
-	cooldownUntil, reason, err := GetDeploymentCooldown("free:auth-test")
-	if err != nil {
-		t.Fatalf("GetDeploymentCooldown failed: %v", err)
-	}
-	if reason != "invalid key" {
-		t.Fatalf("expected reason to be saved, got %q", reason)
-	}
-	if cooldownUntil == nil || cooldownUntil.Before(before.Add(23*time.Hour+58*time.Minute)) || cooldownUntil.After(before.Add(24*time.Hour+2*time.Minute)) {
-		t.Fatalf("unexpected cooldown_until: %v", cooldownUntil)
-	}
-
-	if got := GetStickyDeployment("cct/free"); got != "" {
-		t.Fatalf("expected auth failure to clear sticky, got %q", got)
+			if got := GetStickyDeployment("cct/free"); got != "" {
+				t.Fatalf("expected auth failure to clear sticky, got %q", got)
+			}
+		})
 	}
 }
 
