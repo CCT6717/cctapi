@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/conv"
+	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/render"
 	"github.com/songquanpeng/one-api/relay/model"
@@ -111,16 +112,36 @@ func BufferedStreamHandler(c *gin.Context, resp *http.Response, relayMode int) (
 				}
 				continue
 			}
+			if toolsValue, ok := c.Get(ctxkey.RequestTools); ok {
+				requestTools, ok := toolsValue.([]model.Tool)
+				if ok && len(requestTools) > 0 {
+					for i := range streamResponse.Choices {
+						_ = model.RepairChatCompletionToolCallArguments(streamResponse.Choices[i].Delta.ToolCalls, requestTools)
+					}
+				}
+			}
 			if len(streamResponse.Choices) == 0 && streamResponse.Usage == nil {
 				continue
 			}
+			repairedData, err := json.Marshal(streamResponse)
+			if err != nil {
+				logger.SysError("error marshalling repaired stream response: " + err.Error())
+				if committed {
+					render.StringData(c, line)
+				} else {
+					eventBuf.WriteString(line)
+					eventBuf.WriteString("\n\n")
+					eventsBuffered++
+				}
+				continue
+			}
+			line = dataPrefix + string(repairedData) + "\n\n"
 
 			// Write the event (buffer or passthrough)
 			if committed {
 				render.StringData(c, line)
 			} else {
 				eventBuf.WriteString(line)
-				eventBuf.WriteString("\n\n")
 				eventsBuffered++
 			}
 

@@ -179,3 +179,42 @@ func RepairChatCompletionToolArgumentsJSON(body []byte, tools []Tool) ([]byte, b
 	}
 	return repairedBody, true, nil
 }
+
+// RepairChatCompletionToolCallArguments updates only string-valued function arguments in
+// provided tool calls when schema hints for known tools indicate nested JSON content.
+func RepairChatCompletionToolCallArguments(toolCalls []Tool, tools []Tool) bool {
+	toolSchemas := make(map[string]any)
+	for _, tool := range tools {
+		if tool.Type != "function" || tool.Function.Name == "" || tool.Function.Parameters == nil {
+			continue
+		}
+		toolSchemas[tool.Function.Name] = tool.Function.Parameters
+	}
+	if len(toolSchemas) == 0 {
+		return false
+	}
+
+	changed := false
+	for i := range toolCalls {
+		function := &toolCalls[i].Function
+		name := function.Name
+		if name == "" {
+			continue
+		}
+		schema, ok := toolSchemas[name]
+		if !ok {
+			continue
+		}
+		arguments, ok := function.Arguments.(string)
+		if !ok {
+			continue
+		}
+		repaired, didRepair := RepairToolArguments(arguments, schema)
+		if !didRepair {
+			continue
+		}
+		function.Arguments = repaired
+		changed = true
+	}
+	return changed
+}

@@ -88,6 +88,7 @@ func rewriteResponsesContextForChatRelay(c *gin.Context, body []byte, modelName 
 	oldBody := c.Request.Body
 	oldCachedBody, hadCachedBody := c.Get(ctxkey.KeyRequestBody)
 	oldRequestModel, hadRequestModel := c.Get(ctxkey.RequestModel)
+	oldRequestTools, hadRequestTools := c.Get(ctxkey.RequestTools)
 
 	c.Request.URL.Path = "/v1/chat/completions"
 	c.Request.URL.RawPath = ""
@@ -95,6 +96,14 @@ func rewriteResponsesContextForChatRelay(c *gin.Context, body []byte, modelName 
 	c.Request.Body = io.NopCloser(bytes.NewReader(body))
 	c.Set(ctxkey.KeyRequestBody, body)
 	c.Set(ctxkey.RequestModel, modelName)
+	var chatReq relaymodel.GeneralOpenAIRequest
+	if err := json.Unmarshal(body, &chatReq); err == nil && len(chatReq.Tools) > 0 {
+		c.Set(ctxkey.RequestTools, append([]relaymodel.Tool(nil), chatReq.Tools...))
+	} else if hadRequestTools {
+		c.Set(ctxkey.RequestTools, oldRequestTools)
+	} else if c.Keys != nil {
+		delete(c.Keys, ctxkey.RequestTools)
+	}
 
 	return func() {
 		c.Request.URL.Path = oldPath
@@ -110,6 +119,11 @@ func rewriteResponsesContextForChatRelay(c *gin.Context, body []byte, modelName 
 			c.Set(ctxkey.RequestModel, oldRequestModel)
 		} else if c.Keys != nil {
 			delete(c.Keys, ctxkey.RequestModel)
+		}
+		if hadRequestTools {
+			c.Set(ctxkey.RequestTools, oldRequestTools)
+		} else if c.Keys != nil {
+			delete(c.Keys, ctxkey.RequestTools)
 		}
 	}
 }

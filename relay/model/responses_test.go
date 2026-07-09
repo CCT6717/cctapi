@@ -567,6 +567,48 @@ func TestChatCompletionStreamToResponsesEventsMapsToolCallDelta(t *testing.T) {
 	}
 }
 
+func TestChatCompletionStreamToResponsesEventsMapsRepairedToolCallDelta(t *testing.T) {
+	raw := []byte("data: {\"id\":\"chatcmpl-tool\",\"model\":\"llama-free\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"steps\\\":[{\\\"step\\\":\\\"ship\\\"}]}\"}}]}}]}\n\n")
+
+	events, err := ChatCompletionStreamToResponsesEvents(raw, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionStreamToResponsesEvents returned error: %v", err)
+	}
+	found := false
+	for _, event := range events {
+		if event.Event == "response.function_call_arguments.delta" {
+			found = true
+			if event.Data["item_id"] != "call_1" || event.Data["delta"] != `{"steps":[{"step":"ship"}]}` {
+				t.Fatalf("unexpected repaired tool delta: %#v", event.Data)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected function call argument delta in %#v", events)
+	}
+}
+
+func TestChatCompletionStreamToResponsesEventsMapsInvalidToolCallDelta(t *testing.T) {
+	raw := []byte("data: {\"id\":\"chatcmpl-tool\",\"model\":\"llama-free\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"id\":\"call_1\",\"type\":\"function\",\"function\":{\"name\":\"lookup\",\"arguments\":\"{\\\"steps\\\":\\\"[{bad json]\\\"}\"}}]}}]}\n\n")
+
+	events, err := ChatCompletionStreamToResponsesEvents(raw, "cct/free")
+	if err != nil {
+		t.Fatalf("ChatCompletionStreamToResponsesEvents returned error: %v", err)
+	}
+	found := false
+	for _, event := range events {
+		if event.Event == "response.function_call_arguments.delta" {
+			found = true
+			if event.Data["item_id"] != "call_1" || event.Data["delta"] != `{"steps":"[{bad json]"}` {
+				t.Fatalf("unexpected tool delta: %#v", event.Data)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected function call argument delta in %#v", events)
+	}
+}
+
 func TestChatCompletionStreamToResponsesEventsFailsEmptyStream(t *testing.T) {
 	events, err := ChatCompletionStreamToResponsesEvents(nil, "cct/free")
 	if err != nil {

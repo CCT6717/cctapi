@@ -56,11 +56,25 @@ func StreamHandler(c *gin.Context, resp *http.Response, relayMode int) (*model.E
 				render.StringData(c, data) // if error happened, pass the data to client
 				continue                   // just ignore the error
 			}
+			if toolsValue, ok := c.Get(ctxkey.RequestTools); ok {
+				requestTools, ok := toolsValue.([]model.Tool)
+				if ok && len(requestTools) > 0 {
+					for i := range streamResponse.Choices {
+						_ = model.RepairChatCompletionToolCallArguments(streamResponse.Choices[i].Delta.ToolCalls, requestTools)
+					}
+				}
+			}
 			if len(streamResponse.Choices) == 0 && streamResponse.Usage == nil {
 				// but for empty choice and no usage, we should not pass it to client, this is for azure
 				continue // just ignore empty choice
 			}
-			render.StringData(c, data)
+			repairedData, err := json.Marshal(streamResponse)
+			if err != nil {
+				logger.SysError("error marshalling repaired stream response: " + err.Error())
+				render.StringData(c, data)
+			} else {
+				render.StringData(c, dataPrefix+string(repairedData)+"\n\n")
+			}
 			for _, choice := range streamResponse.Choices {
 				responseText += conv.AsString(choice.Delta.Content)
 			}

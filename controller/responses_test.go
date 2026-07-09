@@ -3,6 +3,7 @@ package controller
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,7 +13,9 @@ import (
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/middleware"
+	"github.com/songquanpeng/one-api/relay/adaptor/openai"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"github.com/songquanpeng/one-api/relay/relaymode"
 )
 
 func TestResponsesCaptureWriterCapturesStatusHeadersAndBody(t *testing.T) {
@@ -46,8 +49,37 @@ func TestRewriteResponsesContextForChatRelay(t *testing.T) {
 	w := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	requestBody := relaymodel.GeneralOpenAIRequest{
+		Model: "cct/free",
+		Messages: []relaymodel.Message{
+			{
+				Role:    "user",
+				Content: "ping",
+			},
+		},
+		Tools: []relaymodel.Tool{
+			{
+				Type: "function",
+				Function: relaymodel.Function{
+					Name: "lookup",
+					Parameters: map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"q": map[string]any{
+								"type": "string",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	requestBodyBytes, err := json.Marshal(requestBody)
+	if err != nil {
+		t.Fatalf("marshal request body: %v", err)
+	}
 
-	restore := rewriteResponsesContextForChatRelay(c, []byte(`{"model":"cct/free","messages":[{"role":"user","content":"ping"}]}`), "cct/free")
+	restore := rewriteResponsesContextForChatRelay(c, requestBodyBytes, "cct/free")
 
 	if c.Request.URL.Path != "/v1/chat/completions" {
 		t.Fatalf("expected chat completions path, got %s", c.Request.URL.Path)
@@ -55,11 +87,25 @@ func TestRewriteResponsesContextForChatRelay(t *testing.T) {
 	if got := c.GetString(ctxkey.RequestModel); got != "cct/free" {
 		t.Fatalf("expected request model cct/free, got %q", got)
 	}
+	requestTools, ok := c.Get(ctxkey.RequestTools)
+	if !ok {
+		t.Fatal("expected request tools to be set during context rewrite")
+	}
+	tools, ok := requestTools.([]relaymodel.Tool)
+	if !ok {
+		t.Fatalf("expected request tools type []relaymodel.Tool, got %T", requestTools)
+	}
+	if len(tools) != 1 || tools[0].Function.Name != "lookup" {
+		t.Fatalf("expected lookup tool, got %#v", tools)
+	}
 
 	restore()
 
 	if c.Request.URL.Path != "/v1/responses" {
 		t.Fatalf("expected path restored, got %s", c.Request.URL.Path)
+	}
+	if _, ok := c.Get(ctxkey.RequestTools); ok {
+		t.Fatalf("expected request tools key removed after restore")
 	}
 }
 
@@ -432,4 +478,211 @@ func TestRelayResponsesStreamEmitsFailedEventForDoneOnlyOKCapture(t *testing.T) 
 	if strings.Contains(body, "event: response.completed\n") {
 		t.Fatalf("did not expect response.completed event, got %q", body)
 	}
+}
+
+func TestRelayResponsesStreamRepairsToolCallArguments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rawArgument := `{"steps":"[{\"step\":\"ship\"}]"}`
+	streamChunk := map[string]any{
+		"id":      "chatcmpl-tool",
+		"created": 1710000000,
+		"model":   "llama-free",
+		"choices": []any{
+			map[string]any{
+				"delta": map[string]any{
+					"tool_calls": []any{
+						map[string]any{
+							"id":   "call_1",
+							"type": "function",
+							"function": map[string]any{
+								"name":      "update_plan",
+								"arguments": rawArgument,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	streamPayload, err := json.Marshal(streamChunk)
+	if err != nil {
+		t.Fatalf("marshal stream chunk: %v", err)
+	}
+
+	originalRelay := relayResponsesRelay
+	relayResponsesRelay = func(c *gin.Context) {
+		c.Writer.WriteHeader(http.StatusOK)
+		streamTools, ok := c.Get(ctxkey.RequestTools)
+		if !ok {
+			t.Fatalf("captured stream handler expected request tools in context")
+		}
+		if _, ok := streamTools.([]relaymodel.Tool); !ok {
+			t.Fatalf("captured stream handler request tools wrong type: %T", streamTools)
+		}
+		response := &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(
+				"data: " + string(streamPayload) + "\n\n" +
+					"data: [DONE]\n\n")),
+		}
+		if _, _, err := openai.StreamHandler(c, response, relaymode.ChatCompletions); err != nil {
+			t.Fatalf("captured stream handler returned error: %v", err)
+		}
+	}
+	defer func() {
+		relayResponsesRelay = originalRelay
+	}()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{
+		"model":"cct/free",
+		"input":"ping",
+		"stream":true,
+		"tools":[{
+			"type":"function",
+			"function":{"name":"update_plan","parameters":{"type":"object","properties":{"steps":{"type":"array"}}}}
+		}]
+	}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	RelayResponses(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d with body %q", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: response.function_call_arguments.delta\n") {
+		t.Fatalf("expected function_call_arguments delta event, got %q", body)
+	}
+
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "event: response.function_call_arguments.delta" {
+			continue
+		}
+		dataIndex := i + 1
+		if dataIndex >= len(lines) {
+			t.Fatalf("missing delta event payload after line: %q", line)
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(lines[dataIndex], "data: "))
+		var event map[string]any
+		if err := json.Unmarshal([]byte(payload), &event); err != nil {
+			t.Fatalf("unmarshal delta payload: %v", err)
+		}
+		delta, ok := event["delta"].(string)
+		if !ok {
+			t.Fatalf("delta expected string, got %#v", event)
+		}
+		if delta != `{"steps":[{"step":"ship"}]}` {
+			t.Fatalf("unexpected function call delta arguments: %q", delta)
+		}
+		return
+	}
+	t.Fatalf("delta event not found: %q", body)
+}
+
+func TestRelayResponsesStreamToolCallArgumentsSkipsInvalidJSONPayload(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	streamChunk := map[string]any{
+		"id":      "chatcmpl-tool",
+		"created": 1710000000,
+		"model":   "llama-free",
+		"choices": []any{
+			map[string]any{
+				"delta": map[string]any{
+					"tool_calls": []any{
+						map[string]any{
+							"id":   "call_1",
+							"type": "function",
+							"function": map[string]any{
+								"name":      "update_plan",
+								"arguments": `{"steps":"[{bad json]"}`,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	streamPayload, err := json.Marshal(streamChunk)
+	if err != nil {
+		t.Fatalf("marshal stream chunk: %v", err)
+	}
+
+	originalRelay := relayResponsesRelay
+	relayResponsesRelay = func(c *gin.Context) {
+		c.Writer.WriteHeader(http.StatusOK)
+		streamTools, ok := c.Get(ctxkey.RequestTools)
+		if !ok {
+			t.Fatalf("captured stream handler expected request tools in context")
+		}
+		if _, ok := streamTools.([]relaymodel.Tool); !ok {
+			t.Fatalf("captured stream handler request tools wrong type: %T", streamTools)
+		}
+		response := &http.Response{
+			StatusCode: http.StatusOK,
+			Header:     make(http.Header),
+			Body: io.NopCloser(strings.NewReader(
+				"data: " + string(streamPayload) + "\n\n" +
+					"data: [DONE]\n\n")),
+		}
+		if _, _, err := openai.StreamHandler(c, response, relaymode.ChatCompletions); err != nil {
+			t.Fatalf("captured stream handler returned error: %v", err)
+		}
+	}
+	defer func() {
+		relayResponsesRelay = originalRelay
+	}()
+
+	rec := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(rec)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(`{
+		"model":"cct/free",
+		"input":"ping",
+		"stream":true,
+		"tools":[{
+			"type":"function",
+			"function":{"name":"update_plan","parameters":{"type":"object","properties":{"steps":{"type":"array"}}}}
+		}]
+	}`))
+	c.Request.Header.Set("Content-Type", "application/json")
+
+	RelayResponses(c)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d with body %q", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "event: response.function_call_arguments.delta\n") {
+		t.Fatalf("expected function_call_arguments delta event, got %q", body)
+	}
+
+	lines := strings.Split(body, "\n")
+	for i, line := range lines {
+		if strings.TrimSpace(line) != "event: response.function_call_arguments.delta" {
+			continue
+		}
+		dataIndex := i + 1
+		if dataIndex >= len(lines) {
+			t.Fatalf("missing delta event payload after line: %q", line)
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(lines[dataIndex], "data: "))
+		var event map[string]any
+		if err := json.Unmarshal([]byte(payload), &event); err != nil {
+			t.Fatalf("unmarshal delta payload: %v", err)
+		}
+		delta, ok := event["delta"].(string)
+		if !ok {
+			t.Fatalf("delta expected string, got %#v", event)
+		}
+		if delta != `{"steps":"[{bad json]"}` {
+			t.Fatalf("unexpected function call delta arguments: %q", delta)
+		}
+		return
+	}
+	t.Fatalf("delta event not found: %q", body)
 }

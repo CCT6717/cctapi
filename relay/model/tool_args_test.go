@@ -114,3 +114,88 @@ func TestRepairChatCompletionToolArgumentsJSONPreservesBodyWithoutTools(t *testi
 		t.Fatalf("expected original body, got %s", repaired)
 	}
 }
+
+func TestRepairChatCompletionToolCallArgumentsRepairsKnownToolOnly(t *testing.T) {
+	toolCalls := []Tool{{
+		Type: "function",
+		Function: Function{
+			Name:      "update_plan",
+			Arguments: `{"steps":"[{\"step\":\"ship\"}]"}`,
+		},
+	}}
+	tools := []Tool{{
+		Type: "function",
+		Function: Function{
+			Name: "update_plan",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"steps": map[string]any{"type": "array"},
+				},
+			},
+		},
+	}}
+
+	changed := RepairChatCompletionToolCallArguments(toolCalls, tools)
+	if !changed {
+		t.Fatal("expected stream tool call arguments to be repaired")
+	}
+	if !strings.Contains(toolCalls[0].Function.Arguments.(string), `"steps":[{"step":"ship"}]`) {
+		t.Fatalf("expected repaired arguments, got %v", toolCalls[0].Function.Arguments)
+	}
+}
+
+func TestRepairChatCompletionToolCallArgumentsSkipsUnknownTool(t *testing.T) {
+	toolCalls := []Tool{{
+		Type: "function",
+		Function: Function{
+			Name:      "unknown_tool",
+			Arguments: `{"steps":"[{\"step\":\"ship\"}]"}`,
+		},
+	}}
+	tools := []Tool{{
+		Type: "function",
+		Function: Function{
+			Name: "update_plan",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"steps": map[string]any{"type": "array"},
+				},
+			},
+		},
+	}}
+
+	if changed := RepairChatCompletionToolCallArguments(toolCalls, tools); changed {
+		t.Fatal("expected unknown tool arguments to remain unchanged")
+	}
+	if !strings.Contains(toolCalls[0].Function.Arguments.(string), `"steps":"[{\"step\":\"ship\"}]`) {
+		t.Fatalf("expected arguments unchanged, got %v", toolCalls[0].Function.Arguments)
+	}
+}
+
+func TestRepairChatCompletionToolCallArgumentsPreservesInvalidJSON(t *testing.T) {
+	toolCalls := []Tool{{
+		Type: "function",
+		Function: Function{
+			Name:      "update_plan",
+			Arguments: `{"steps":"[{bad json]"}`,
+		},
+	}}
+	tools := []Tool{{
+		Type: "function",
+		Function: Function{
+			Name: "update_plan",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"steps": map[string]any{"type": "array"},
+				},
+			},
+		},
+	}}
+
+	if changed := RepairChatCompletionToolCallArguments(toolCalls, tools); changed {
+		t.Fatalf("expected invalid tool arguments to remain unchanged, got %v", toolCalls[0].Function.Arguments)
+	}
+}
