@@ -59,6 +59,7 @@ Last verified handoff: 2026-07-09.
 - Added openrouter/auto production smoke playbook:
   - `docs/openrouter-auto-acceptance-checklist.md`
   - `docs/openrouter-auto-stability-submission.md`
+  - `docs/openrouter-auto-deployment-acceptance.md`
   - `docs/openrouter-auto-final-submission-template.md`
   - `scripts/fallback-openrouter-auto-smoke.ps1`
 - Next immediate functional checkpoint (blocking): run `scripts/fallback-openrouter-auto-smoke.ps1 -OutputJson` with real `CCT_API_TOKEN` + `CCT_ADMIN_TOKEN` against a running local service.
