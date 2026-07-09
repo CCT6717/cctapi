@@ -53,9 +53,15 @@ The frontend build has existing ESLint warnings in unrelated files. A successful
 Last verified handoff: 2026-07-09.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `d1c58f1 fix: repair streaming tool-call args for responses path`.
+- Latest backend/runtime alignment commit: `13694cb docs: add openrouter/auto free-pool acceptance playbook`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
-- Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state; next pass should focus on broader end-to-end product smoke and observability checks.
+- Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
+- Added openrouter/auto production smoke playbook:
+  - `docs/openrouter-auto-acceptance-checklist.md`
+  - `docs/openrouter-auto-stability-submission.md`
+  - `docs/openrouter-auto-final-submission-template.md`
+  - `scripts/fallback-openrouter-auto-smoke.ps1`
+- Next immediate functional checkpoint (blocking): run `scripts/fallback-openrouter-auto-smoke.ps1 -OutputJson` with real `CCT_API_TOKEN` + `CCT_ADMIN_TOKEN` against a running local service.
 
 Final verification from the free-pool UI batch:
 
