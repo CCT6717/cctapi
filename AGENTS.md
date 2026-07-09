@@ -53,7 +53,7 @@ The frontend build has existing ESLint warnings in unrelated files. A successful
 Last verified handoff: 2026-07-09.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `ce9e7ae chore: simplify metrics base name extraction`.
+- Latest backend/runtime alignment commit: `391cf26 docs: rewrite openrouter final submission template in clean ascii`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
 - Added openrouter/auto production smoke playbook:
