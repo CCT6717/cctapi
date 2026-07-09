@@ -52,7 +52,8 @@ function Parse-Metrics {
     $parts = $line -split "\s+"
     if ($parts.Count -ge 2 -and [double]::TryParse($parts[1], [ref](0.0))) {
       $metricName = $parts[0]
-      $baseName = if ($metricName -match "^([^{\\s]+)") { $matches[1] } else { $metricName }
+      $braceIndex = $metricName.IndexOf("{")
+      $baseName = if ($braceIndex -ge 0) { $metricName.Substring(0, $braceIndex) } else { $metricName }
       if (-not $result.ContainsKey($baseName)) {
         $result[$baseName] = 0
       }
