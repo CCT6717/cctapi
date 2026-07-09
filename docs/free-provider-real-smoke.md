@@ -54,6 +54,24 @@ Pass criteria:
 | pollinations | keyless | static | yes | Good first keyless smoke candidate. |
 | ovh | keyless | static | yes | Low default limits; keep request volume small. |
 
+### OpenRouter/auto Smoke Check
+
+Run this command to validate `openrouter/auto` end-to-end:
+```powershell
+$env:CCT_API_BASE_URL = "http://localhost:3008"
+$env:CCT_API_TOKEN = "replace-with-user-token"
+$env:CCT_ADMIN_TOKEN = "replace-with-admin-token"
+powershell -ExecutionPolicy Bypass -File scripts/fallback-openrouter-auto-smoke.ps1 -OutputJson
+```
+
+- `openrouter` catalog check
+- `config/reload` + `free-pool/sync`
+- `free:openrouter-*` runtime rows
+- `openrouter/auto` non-stream + stream chat
+- `/metrics` delta and `/free-pool/usage` records
+
+Final acceptance evidence and checklist: see [`docs/openrouter-auto-acceptance-checklist.md`](/D:/ct/project/docs/openrouter-auto-acceptance-checklist.md) and [`docs/openrouter-auto-stability-submission.md`](/D:/ct/project/docs/openrouter-auto-stability-submission.md).
+
 ## Safe Operating Rules
 
 - Use `free_provider_catalog` to confirm whether a provider is keyless or key-required before enabling it.
