@@ -21,7 +21,7 @@ D:\ct\project
 Current integration branch:
 
 ```text
-feat/freellmapi-native-core
+main
 ```
 
 ## Build And Run
@@ -50,12 +50,12 @@ The frontend build has existing ESLint warnings in unrelated files. A successful
 
 ## Current Handoff
 
-Last verified handoff: 2026-07-07.
+Last verified handoff: 2026-07-09.
 
-- Branch `feat/freellmapi-native-core` is pushed to `origin/feat/freellmapi-native-core`.
-- Latest backend/runtime alignment commit: `8e3101c test: cover auth 401 and 403 invalidation path`.
+- Branch `main` is pushed to `origin/main`.
+- Latest backend/runtime alignment commit: `d1c58f1 fix: repair streaming tool-call args for responses path`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
-- Free-pool UI acceptance and backend FreeLLMAPI core integration are in progress on this branch.
+- Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state; next pass should focus on broader end-to-end product smoke and observability checks.
 
 Final verification from the free-pool UI batch:
 
