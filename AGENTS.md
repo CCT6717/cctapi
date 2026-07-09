@@ -53,7 +53,7 @@ The frontend build has existing ESLint warnings in unrelated files. A successful
 Last verified handoff: 2026-07-09.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `9fe4167 docs: finalize handoff pointer to latest alignment commit`.
+- Latest backend/runtime alignment commit: `fbfe3ca docs: set handoff alignment commit to latest pushed SHA`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
 - Added openrouter/auto production smoke playbook:
