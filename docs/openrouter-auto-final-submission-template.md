@@ -57,3 +57,29 @@ Reference:
 - Restart service and re-run once, capturing delta comparison.
 - Confirm provider credential availability and status in upstream service.
 
+## 4. Final submission copy-paste block
+
+```text
+Execution time: <YYYY-MM-DD HH:mm:ss>
+Host: <machine-name>
+Operator: <operator>
+Branch/commit: main / <commit>
+
+Result: PASS / FAIL
+Non-stream: pass / fail
+Stream: pass / fail
+deploymentId: <value>
+runtimeRows: <number>
+usageRowsBefore: <number>
+usageRowsAfter: <number>
+usageRequestCount: <number>
+usageSuccessCount: <number>
+fallbackRequestsDelta: <number>
+pageContainsOpenRouterAuto: true / false
+Remarks: <short notes>
+```
+
+Recommended attachment:
+- raw `-OutputJson` output
+- `curl.exe -I http://127.0.0.1:3008/`
+- `curl.exe -I http://127.0.0.1:3008/fallback/free-pool`
