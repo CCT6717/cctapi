@@ -8,6 +8,7 @@ import (
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
+	"gorm.io/gorm"
 )
 
 type desiredFreeProviderResource struct {
@@ -149,15 +150,24 @@ func SyncFreePool(cfg *Config) error {
 				updates["type"] = d.ch.Type
 			}
 			if len(updates) > 0 {
-				if err := model.DB.Model(existingCh).Updates(updates).Error; err != nil {
+				if err := model.DB.Transaction(func(tx *gorm.DB) error {
+					if err := tx.Model(existingCh).Updates(updates).Error; err != nil {
+						return err
+					}
+					if !modelsChanged {
+						return nil
+					}
+					updatedCh := *existingCh
+					updatedCh.Models = d.ch.Models
+					return updatedCh.UpdateAbilitiesWithDB(tx)
+				}); err != nil {
 					logger.SysError(fmt.Sprintf("[free_pool] failed to update channel %s: %v", d.name, err))
-					continue
+					return fmt.Errorf("failed to reconcile channel %s: %w", d.name, err)
 				}
 				existingCh.Key = d.ch.Key
 				existingCh.Models = d.ch.Models
 				existingCh.Type = d.ch.Type
 				if modelsChanged {
-					_ = existingCh.UpdateAbilities()
 					logger.SysLog(fmt.Sprintf("[free_pool] auto channel %s (id=%d) model inventory refreshed", d.name, existingCh.Id))
 				}
 				if keyChanged {

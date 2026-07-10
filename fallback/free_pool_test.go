@@ -404,6 +404,62 @@ func TestSyncFreePoolUpdatesChannelModelsWhenKeyIsUnchanged(t *testing.T) {
 	}
 }
 
+func TestSyncFreePoolRollsBackChannelModelsWhenAbilityRefreshFails(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	key := "gsk-test-ability-refresh-rollback"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name:   channelName("groq", keyHash),
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: "old-model",
+		Group:  "default",
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	if err := dbmodel.DB.Create(&dbmodel.Ability{
+		Group: "default", Model: "old-model", ChannelId: channel.Id, Enabled: true,
+	}).Error; err != nil {
+		t.Fatalf("create ability: %v", err)
+	}
+	if err := dbmodel.DB.Exec(`CREATE TRIGGER fail_auto_channel_ability_recreate
+		BEFORE INSERT ON abilities
+		BEGIN
+			SELECT RAISE(ABORT, 'forced ability refresh failure');
+		END`).Error; err != nil {
+		t.Fatalf("create ability failure trigger: %v", err)
+	}
+
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}, Models: []string{"new-model"}},
+		},
+	}
+	if err := SyncFreePool(cfg); err == nil {
+		t.Fatal("expected SyncFreePool to return ability refresh failure")
+	}
+
+	var refreshed dbmodel.Channel
+	if err := dbmodel.DB.First(&refreshed, channel.Id).Error; err != nil {
+		t.Fatalf("reload channel: %v", err)
+	}
+	if refreshed.Models != "old-model" {
+		t.Fatalf("models = %q, want old-model after rollback", refreshed.Models)
+	}
+	var abilities []dbmodel.Ability
+	if err := dbmodel.DB.Where("channel_id = ?", channel.Id).Find(&abilities).Error; err != nil {
+		t.Fatalf("reload abilities: %v", err)
+	}
+	if len(abilities) != 1 || abilities[0].Model != "old-model" {
+		t.Fatalf("abilities = %+v, want original old-model ability", abilities)
+	}
+}
+
 func TestSyncFreePoolPreservesDeploymentRealModelOverride(t *testing.T) {
 	cleanupDB := setupFreePoolTestDB(t)
 	defer cleanupDB()
