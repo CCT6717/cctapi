@@ -136,21 +136,33 @@ func SyncFreePool(cfg *Config) error {
 	for _, d := range desiredChannels {
 		existingCh, found := existingByName[d.name]
 		if found {
-			// Update if key changed
-			if existingCh.Key != d.ch.Key {
-				existingCh.Key = d.ch.Key
-				existingCh.Models = d.ch.Models
-				existingCh.Type = d.ch.Type
-				if err := model.DB.Model(existingCh).Updates(map[string]interface{}{
-					"key":    existingCh.Key,
-					"models": existingCh.Models,
-					"type":   existingCh.Type,
-				}).Error; err != nil {
+			updates := map[string]interface{}{}
+			keyChanged := existingCh.Key != d.ch.Key
+			modelsChanged := existingCh.Models != d.ch.Models
+			if keyChanged {
+				updates["key"] = d.ch.Key
+			}
+			if modelsChanged {
+				updates["models"] = d.ch.Models
+			}
+			if existingCh.Type != d.ch.Type {
+				updates["type"] = d.ch.Type
+			}
+			if len(updates) > 0 {
+				if err := model.DB.Model(existingCh).Updates(updates).Error; err != nil {
 					logger.SysError(fmt.Sprintf("[free_pool] failed to update channel %s: %v", d.name, err))
 					continue
 				}
-				_ = existingCh.UpdateAbilities()
-				logger.SysWarn(fmt.Sprintf("[free_pool] auto channel %s (id=%d) key updated - config sync overwrote previous key", d.name, existingCh.Id))
+				existingCh.Key = d.ch.Key
+				existingCh.Models = d.ch.Models
+				existingCh.Type = d.ch.Type
+				if modelsChanged {
+					_ = existingCh.UpdateAbilities()
+					logger.SysLog(fmt.Sprintf("[free_pool] auto channel %s (id=%d) model inventory refreshed", d.name, existingCh.Id))
+				}
+				if keyChanged {
+					logger.SysWarn(fmt.Sprintf("[free_pool] auto channel %s (id=%d) key updated - config sync overwrote previous key", d.name, existingCh.Id))
+				}
 			}
 			// Ensure enabled
 			if existingCh.Status != model.ChannelStatusEnabled {

@@ -368,6 +368,42 @@ func TestSyncFreePoolConfiguredModelsOverridePersistedAutoRealModel(t *testing.T
 	}
 }
 
+func TestSyncFreePoolUpdatesChannelModelsWhenKeyIsUnchanged(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	key := "gsk-test-same-key-model-refresh"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name:   channelName("groq", keyHash),
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: "old-model",
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}, Models: []string{"new-model"}},
+		},
+	}
+	if err := SyncFreePool(cfg); err != nil {
+		t.Fatalf("SyncFreePool: %v", err)
+	}
+
+	var refreshed dbmodel.Channel
+	if err := dbmodel.DB.First(&refreshed, channel.Id).Error; err != nil {
+		t.Fatalf("reload channel: %v", err)
+	}
+	if refreshed.Models != "new-model" {
+		t.Fatalf("models = %q, want new-model", refreshed.Models)
+	}
+}
+
 func TestSyncFreePoolPreservesDeploymentRealModelOverride(t *testing.T) {
 	cleanupDB := setupFreePoolTestDB(t)
 	defer cleanupDB()
