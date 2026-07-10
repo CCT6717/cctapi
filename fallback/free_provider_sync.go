@@ -205,7 +205,10 @@ func SyncFreePool(cfg *Config) error {
 			continue
 		}
 		if existing, ok := cfg.Deployments[id]; ok {
-			dep = preserveDeploymentRealModelOverride(existing, dep, id, providerNameForAutoDeploymentID(id))
+			providerName := providerNameForAutoDeploymentID(id)
+			if !providerConfigOwnsAutoRealModel(cfg, providerName) {
+				dep = preserveDeploymentRealModelOverride(existing, dep, id, providerName)
+			}
 		}
 		cfg.Deployments[id] = dep
 	}
@@ -249,6 +252,32 @@ func preserveDeploymentRealModelOverride(existing DeploymentConfig, generated De
 		logger.SysLog(fmt.Sprintf("[free_pool] preserved real_model override for %s: %s", deploymentID, generated.RealModel))
 	}
 	return generated
+}
+
+func routingModelForFetchedModels(providerName string, fetchedModels []string) string {
+	meta, ok := BuiltinFreeProviders[providerName]
+	if ok && meta.ModelFetchMode == ModelFetchOpenRouterFree && len(meta.DefaultModels) > 0 {
+		return meta.DefaultModels[0]
+	}
+	if len(fetchedModels) == 0 {
+		return ""
+	}
+	return fetchedModels[0]
+}
+
+func providerConfigOwnsAutoRealModel(cfg *Config, providerName string) bool {
+	if cfg == nil {
+		return false
+	}
+	fp, ok := cfg.FreeProviders[providerName]
+	if !ok {
+		return false
+	}
+	if len(fp.Models) > 0 {
+		return true
+	}
+	meta, ok := BuiltinFreeProviders[providerName]
+	return ok && meta.ModelFetchMode == ModelFetchOpenRouterFree
 }
 
 func isDeploymentRealModelOverride(currentRealModel string, generatedRealModel string, providerName string) bool {
@@ -410,8 +439,9 @@ func syncAllProviderModels(cfg *Config) {
 			}
 			recordModelSyncSuccess(depID)
 			// keyless 渚涘簲鍟嗗彧鏈変竴涓?channel,鐢ㄧ┖ key 鐨?hash
-			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
-				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
+			routingModel := routingModelForFetchedModels(providerName, models)
+			if shouldSyncDeploymentRealModel(depID, routingModel, providerName) && UpdateDeploymentRealModel(depID, routingModel) {
+				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, routingModel))
 			}
 			name := channelName(providerName, keyHash)
 			var ch model.Channel
@@ -452,8 +482,9 @@ func syncAllProviderModels(cfg *Config) {
 				continue
 			}
 			recordModelSyncSuccess(depID)
-			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
-				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
+			routingModel := routingModelForFetchedModels(providerName, models)
+			if shouldSyncDeploymentRealModel(depID, routingModel, providerName) && UpdateDeploymentRealModel(depID, routingModel) {
+				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, routingModel))
 			}
 			// Update channel.Models so the admin UI and channel abilities see the
 			// same dynamic model list that routing now sees via RealModel.

@@ -1,6 +1,7 @@
 package fallback
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -26,6 +27,12 @@ func setupFreePoolTestDB(t *testing.T) func() {
 	return func() {
 		dbmodel.DB = originalDB
 	}
+}
+
+type testRoundTripper func(*http.Request) (*http.Response, error)
+
+func (fn testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
 }
 
 func TestBuiltinFreeProviderRegistry_OpenRouter(t *testing.T) {
@@ -287,6 +294,77 @@ func TestSyncAllProviderModelsKeepsConfiguredModelOverride(t *testing.T) {
 	}
 	if refreshed.Models != "custom-model" {
 		t.Fatalf("expected channel models to keep configured override, got %q", refreshed.Models)
+	}
+}
+
+func TestSyncAllProviderModelsKeepsOpenRouterFreeAlias(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	key := "sk-or-v1-stable-alias-test"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name: channelName("openrouter", keyHash), Type: BuiltinFreeProviders["openrouter"].ChannelType,
+		Key: key, Models: "openrouter/free", Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	depID := deploymentID("openrouter", keyHash)
+	resetConfigForTest(&Config{
+		Enabled:       true,
+		FreeProviders: map[string]FreeProviderConfig{"openrouter": {Enabled: true, Keys: []string{key}}},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "openrouter/free", Pool: "free"},
+		},
+	})
+
+	originalTransport := http.DefaultClient.Transport
+	http.DefaultClient.Transport = testRoundTripper(func(req *http.Request) (*http.Response, error) {
+		body := `{"data":[{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free"},{"id":"openai/gpt-oss-20b:free"}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	t.Cleanup(func() { http.DefaultClient.Transport = originalTransport })
+
+	syncAllProviderModels(GetConfig())
+	dep, ok := CloneDeployment(depID)
+	if !ok {
+		t.Fatalf("missing deployment %s", depID)
+	}
+	if dep.RealModel != "openrouter/free" {
+		t.Fatalf("real model = %q, want openrouter/free", dep.RealModel)
+	}
+}
+
+func TestSyncFreePoolConfiguredModelsOverridePersistedAutoRealModel(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	key := "gsk-configured-model-owner"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name: channelName("groq", keyHash), Type: BuiltinFreeProviders["groq"].ChannelType,
+		Key: key, Models: "stale-model", Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	depID := deploymentID("groq", keyHash)
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"groq": {Enabled: true, Keys: []string{key}, Models: []string{"configured-model"}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "stale-model", Pool: "free"},
+		},
+	}
+	if err := SyncFreePool(cfg); err != nil {
+		t.Fatalf("SyncFreePool: %v", err)
+	}
+	if got := cfg.Deployments[depID].RealModel; got != "configured-model" {
+		t.Fatalf("real model = %q, want configured-model", got)
 	}
 }
 

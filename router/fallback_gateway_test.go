@@ -655,6 +655,54 @@ func TestGatewayUpdateConfig_FreeProviderModelsPreservedWhenOmitted(t *testing.T
 	}
 }
 
+func TestGatewayUpdateConfig_OpenRouterRoundTripKeepsStableAlias(t *testing.T) {
+	key := "sk-or-v1-gateway-round-trip-test"
+	depID := "free:openrouter-" + fallback.SafeKeyHash(key)
+	ensureTestDB(t)
+	channel := model.Channel{
+		Name:   "[CCT Auto] openrouter-" + fallback.SafeKeyHash(key),
+		Type:   fallback.BuiltinFreeProviders["openrouter"].ChannelType,
+		Key:    key,
+		Models: "openrouter/free",
+		Status: model.ChannelStatusEnabled,
+	}
+	if err := model.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create openrouter channel: %v", err)
+	}
+	initialConfig := fallback.Config{
+		Enabled: true,
+		VirtualModels: map[string]fallback.VirtualModelConfig{
+			"openrouter/auto": {Enabled: true, Strategy: "quality_first", Pools: []string{"free"}},
+		},
+		Deployments: map[string]fallback.DeploymentConfig{
+			depID: {Enabled: true, ChannelID: channel.Id, RealModel: "openai/gpt-oss-20b:free", Pool: "free", QualityTier: "medium", CostTier: "free"},
+		},
+		FreeProviders: map[string]fallback.FreeProviderConfig{
+			"openrouter": {Enabled: true, Keys: []string{key}},
+		},
+	}
+	initialJSON, err := json.Marshal(initialConfig)
+	if err != nil {
+		t.Fatalf("marshal initial config: %v", err)
+	}
+	cleanup := setupGatewayConfigForSave(t, string(initialJSON))
+	defer cleanup()
+
+	payload, err := json.Marshal(buildGatewayV2Config(fallback.GetConfig()))
+	if err != nil {
+		t.Fatalf("marshal gateway config: %v", err)
+	}
+	w := callGatewayPUT(t, string(payload))
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d\nbody: %s", w.Code, w.Body.String())
+	}
+
+	cfg := fallback.GetConfig()
+	if got := cfg.Deployments[depID].RealModel; got != "openrouter/free" {
+		t.Fatalf("round-trip real model = %q, want openrouter/free", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Test 8: new key can update
 // ---------------------------------------------------------------------------
