@@ -179,6 +179,9 @@ $metricsBefore = Parse-Metrics -Text $metricsBeforeRaw
 $usageBeforeRaw = Request-Fallback -Method GET -Path "/api/fallback/free-pool/usage?provider=$ExpectedProvider" -Token $AdminToken
 $usageBefore = Parse-UsageResponse -Text $usageBeforeRaw.Content -Path "/api/fallback/free-pool/usage?provider=$ExpectedProvider"
 $usageBeforeCount = @($usageBefore | Measure-Object).Count
+$providerRowsBefore = @($usageBefore | Where-Object { $_.provider -eq $ExpectedProvider })
+$usageRequestCountBefore = [int](($providerRowsBefore | Measure-Object request_count -Sum).Sum)
+$usageSuccessCountBefore = [int](($providerRowsBefore | Measure-Object success_count -Sum).Sum)
 
 Write-Host "==> 5) Run non-stream openrouter/auto chat"
 $chatBody = @{
@@ -231,26 +234,39 @@ $providerRowsAfter = @($usageAfter | Where-Object { $_.provider -eq $ExpectedPro
 if ($providerRowsAfter.Count -lt 1) {
   throw "Usage query has data but no provider=$ExpectedProvider row."
 }
-Assert-Int "usage request_count" 1 ([int](($providerRowsAfter | Measure-Object request_count -Sum).Sum))
+$usageRequestCountAfter = [int](($providerRowsAfter | Measure-Object request_count -Sum).Sum)
+$usageSuccessCountAfter = [int](($providerRowsAfter | Measure-Object success_count -Sum).Sum)
+$usageRequestDelta = $usageRequestCountAfter - $usageRequestCountBefore
+$usageSuccessDelta = $usageSuccessCountAfter - $usageSuccessCountBefore
+Assert-Int "usage request_count" 1 $usageRequestCountAfter
+if ($usageRequestDelta -le 0) {
+  throw "usage request_count did not increase (before=$usageRequestCountBefore, after=$usageRequestCountAfter)."
+}
+if ($usageSuccessDelta -le 0) {
+  throw "usage success_count did not increase (before=$usageSuccessCountBefore, after=$usageSuccessCountAfter)."
+}
 Write-Host "Usage recorded for provider '$ExpectedProvider' (rows=$($providerRowsAfter.Count))."
+Write-Host "Usage deltas: request_count +$usageRequestDelta, success_count +$usageSuccessDelta"
 
 $totalReqBefore = if ($metricsBefore.ContainsKey("fallback_requests_total")) { [double]$metricsBefore["fallback_requests_total"] } else { 0 }
 $totalReqAfter = if ($metricsAfter.ContainsKey("fallback_requests_total")) { [double]$metricsAfter["fallback_requests_total"] } else { 0 }
-if ($totalReqAfter -lt $totalReqBefore) {
+$delta = $totalReqAfter - $totalReqBefore
+if ($delta -le 0) {
   throw "fallback_requests_total did not increase (before=$totalReqBefore, after=$totalReqAfter)."
 }
-$delta = $totalReqAfter - $totalReqBefore
 Write-Host "Metrics delta: fallback_requests_total +$delta"
 
 if ($usageBeforeCount -eq $usageAfterCount) {
   Write-Warning "Usage row count unchanged. Model counters still indicate usage; row replacement may be expected."
 }
 
-Write-Host "==> 8) Verify free-pool page exposes openrouter/auto"
+Write-Host "==> 8) Verify free-pool page reachability"
+$pageReachable = $false
 $pageResp = Request-Fallback -Method GET -Path "/fallback/free-pool" -Token $AdminToken
 if ($pageResp.StatusCode -lt 200 -or $pageResp.StatusCode -ge 300) {
   throw "Free-pool page check failed: HTTP $($pageResp.StatusCode)"
 }
+$pageReachable = $true
 $pageHasOpenRouterAuto = $true
 if ($pageResp.Content -notmatch "openrouter" -or $pageResp.Content -notmatch "auto") {
   $pageHasOpenRouterAuto = $false
@@ -267,9 +283,12 @@ if ($OutputJson) {
     usageRowsBefore = $usageBeforeCount
     usageRowsAfter = $usageAfterCount
     runtimeRows = $runtimeRows.Count
-    usageRequestCount = [int](($providerRowsAfter | Measure-Object request_count -Sum).Sum)
-    usageSuccessCount = [int](($providerRowsAfter | Measure-Object success_count -Sum).Sum)
+    usageRequestCount = $usageRequestCountAfter
+    usageSuccessCount = $usageSuccessCountAfter
+    usageRequestDelta = $usageRequestDelta
+    usageSuccessDelta = $usageSuccessDelta
     fallbackRequestsDelta = $delta
+    pageReachable = $pageReachable
     pageContainsOpenRouterAuto = $pageHasOpenRouterAuto
   }
   $summary | ConvertTo-Json -Depth 3 | Write-Output

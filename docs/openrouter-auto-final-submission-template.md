@@ -28,9 +28,14 @@ Reference:
 - usageRowsAfter: `<number>`
 - usageRequestCount: `<number>`
 - usageSuccessCount: `<number>`
+- usageRequestDelta: `<positive number>`
+- usageSuccessDelta: `<positive number>`
 - fallbackRequestsDelta: `<number>`
+- pageReachable: `true` / `false`
 - pageContainsOpenRouterAuto: `true` / `false`
 - Remarks: `<text>`
+
+`pageReachable` is the mandatory UI-route condition. Provider catalog and runtime rows prove OpenRouter configuration; `pageContainsOpenRouterAuto` is informational, and an authenticated browser check is optional when visible UI validation is required.
 
 ## 2. Required evidence from -OutputJson
 
@@ -40,13 +45,16 @@ Reference:
   "baseUrl": "http://localhost:3008",
   "model": "openrouter/auto",
   "deploymentId": "...",
-  "usageRowsBefore": 0,
-  "usageRowsAfter": 0,
-  "runtimeRows": 0,
-  "usageRequestCount": 0,
-  "usageSuccessCount": 0,
-  "fallbackRequestsDelta": 0,
-  "pageContainsOpenRouterAuto": true
+  "usageRowsBefore": 1,
+  "usageRowsAfter": 1,
+  "runtimeRows": 1,
+  "usageRequestCount": 7,
+  "usageSuccessCount": 6,
+  "usageRequestDelta": 2,
+  "usageSuccessDelta": 2,
+  "fallbackRequestsDelta": 2,
+  "pageReachable": true,
+  "pageContainsOpenRouterAuto": false
 }
 ```
 
@@ -74,7 +82,10 @@ usageRowsBefore: <number>
 usageRowsAfter: <number>
 usageRequestCount: <number>
 usageSuccessCount: <number>
+usageRequestDelta: <positive number>
+usageSuccessDelta: <positive number>
 fallbackRequestsDelta: <number>
+pageReachable: true / false
 pageContainsOpenRouterAuto: true / false
 Remarks: <short notes>
 ```

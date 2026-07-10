@@ -29,9 +29,11 @@ powershell -ExecutionPolicy Bypass -File scripts/fallback-openrouter-auto-smoke.
 - `GET /api/fallback/deployments/runtime-status` 存在 `free:openrouter-` 前缀运行时记录（至少 1 条）
 - `POST /v1/chat/completions`（`model=openrouter/auto`）非流式返回 200 且有 `choices`
 - `POST /v1/chat/completions`（`model=openrouter/auto`）流式返回 `data:` SSE
-- `/api/fallback/free-pool/usage?provider=openrouter` 查询成功且 provider 行存在
+- `/api/fallback/free-pool/usage?provider=openrouter` 查询成功、provider 行存在，且请求数和成功数增量均大于 0
 - `/metrics` 中 `fallback_requests_total` 有正向增长
-- `/fallback/free-pool` 页面可读并出现 OpenRouter / auto 标记
+- `/fallback/free-pool` 返回 HTTP 2xx（`pageReachable=true`）
+
+provider catalog 与 `free:openrouter-` 运行时记录用于证明 OpenRouter 配置生效。`pageContainsOpenRouterAuto` 仅为信息字段，因为未认证的 React SPA 壳页不一定包含路由数据；只有在需要确认可见界面时，才进行可选的认证浏览器检查。
 
 上述均通过时，脚本返回码应为 `0`，`-OutputJson` 输出包含 `pass=true`。
 
@@ -46,7 +48,10 @@ powershell -ExecutionPolicy Bypass -File scripts/fallback-openrouter-auto-smoke.
 - `runtimeRows`
 - `usageRequestCount`
 - `usageSuccessCount`
+- `usageRequestDelta`
+- `usageSuccessDelta`
 - `fallbackRequestsDelta`
+- `pageReachable`
 - `pageContainsOpenRouterAuto`
 
 ## 失败排查
@@ -72,7 +77,10 @@ usageRowsBefore: <number>
 usageRowsAfter: <number>
 usageRequestCount: <number>
 usageSuccessCount: <number>
+usageRequestDelta: <positive number>
+usageSuccessDelta: <positive number>
 fallbackRequestsDelta: <number>
+pageReachable: true / false
 pageContainsOpenRouterAuto: true / false
 Remarks: <short notes>
 ```
