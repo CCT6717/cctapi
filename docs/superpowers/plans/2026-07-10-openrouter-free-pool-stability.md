@@ -33,16 +33,55 @@
 
 - [ ] **Step 1: Add failing fallback tests for stable routing ownership**
 
-Add these cases to `fallback/free_pool_test.go` using `setupFreePoolTestDB`:
+Add these cases to `fallback/free_pool_test.go` using `setupFreePoolTestDB`. The
+dynamic-sync test must replace `http.DefaultClient.Transport` with a local
+test round tripper and restore it with `t.Cleanup`, so no real OpenRouter
+request is made:
 
 ```go
-func TestRoutingModelForFetchedModelsKeepsOpenRouterFreeAlias(t *testing.T) {
-	got := routingModelForFetchedModels("openrouter", []string{
-		"cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-		"openai/gpt-oss-20b:free",
+type testRoundTripper func(*http.Request) (*http.Response, error)
+
+func (fn testRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
+}
+
+func TestSyncAllProviderModelsKeepsOpenRouterFreeAlias(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	key := "sk-or-v1-stable-alias-test"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name: channelName("openrouter", keyHash), Type: BuiltinFreeProviders["openrouter"].ChannelType,
+		Key: key, Models: "openrouter/free", Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	depID := deploymentID("openrouter", keyHash)
+	resetConfigForTest(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{"openrouter": {Enabled: true, Keys: []string{key}}},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "openrouter/free", Pool: "free"},
+		},
 	})
-	if got != "openrouter/free" {
-		t.Fatalf("routing model = %q, want openrouter/free", got)
+
+	originalTransport := http.DefaultClient.Transport
+	http.DefaultClient.Transport = testRoundTripper(func(req *http.Request) (*http.Response, error) {
+		body := `{"data":[{"id":"cognitivecomputations/dolphin-mistral-24b-venice-edition:free"},{"id":"openai/gpt-oss-20b:free"}]}`
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	t.Cleanup(func() { http.DefaultClient.Transport = originalTransport })
+
+	syncAllProviderModels(GetConfig())
+	dep, ok := CloneDeployment(depID)
+	if !ok {
+		t.Fatalf("missing deployment %s", depID)
+	}
+	if dep.RealModel != "openrouter/free" {
+		t.Fatalf("real model = %q, want openrouter/free", dep.RealModel)
 	}
 }
 
@@ -99,10 +138,11 @@ Run:
 ```powershell
 $env:CGO_ENABLED='1'
 $env:PATH='D:\ct\tools\w64devkit-1.23.0\bin;' + $env:PATH
-& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./fallback ./router -run 'TestRoutingModelForFetchedModelsKeepsOpenRouterFreeAlias|TestSyncFreePoolConfiguredModelsOverridePersistedAutoRealModel|TestGatewayUpdateConfig_OpenRouterRoundTripKeepsStableAlias' -count=1
+& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./fallback ./router -run 'TestSyncAllProviderModelsKeepsOpenRouterFreeAlias|TestSyncFreePoolConfiguredModelsOverridePersistedAutoRealModel|TestGatewayUpdateConfig_OpenRouterRoundTripKeepsStableAlias' -count=1
 ```
 
-Expected: FAIL because the routing helper does not exist and current sync preserves stale generated models.
+Expected: FAIL with assertions showing that dynamic sync chooses the first
+fetched model and config reload preserves stale generated models.
 
 - [ ] **Step 4: Implement the minimum ownership policy**
 
@@ -143,7 +183,7 @@ When merging generated deployments, preserve an existing `RealModel` only when `
 Run:
 
 ```powershell
-& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./fallback ./router -run 'TestRoutingModelForFetchedModelsKeepsOpenRouterFreeAlias|TestSyncFreePoolConfiguredModelsOverridePersistedAutoRealModel|TestGatewayUpdateConfig_OpenRouterRoundTripKeepsStableAlias|TestSyncFreePoolPreservesDeploymentRealModelOverride' -count=1
+& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./fallback ./router -run 'TestSyncAllProviderModelsKeepsOpenRouterFreeAlias|TestSyncFreePoolConfiguredModelsOverridePersistedAutoRealModel|TestGatewayUpdateConfig_OpenRouterRoundTripKeepsStableAlias|TestSyncFreePoolPreservesDeploymentRealModelOverride' -count=1
 ```
 
 Expected: PASS; the existing Groq manual override test must remain green.
@@ -300,9 +340,10 @@ Use `superpowers:requesting-code-review` against the complete branch diff. Resol
 - [ ] **Step 3: Build frontend before the release binary**
 
 ```powershell
-Set-Location D:\ct\project\web\default
+$worktree = (git rev-parse --show-toplevel)
+Set-Location (Join-Path $worktree 'web\default')
 npm run build
-Set-Location D:\ct\project
+Set-Location $worktree
 & $go build -o one-api.exe .
 ```
 
@@ -310,7 +351,7 @@ Expected: frontend build succeeds with only known inherited warnings, then binar
 
 - [ ] **Step 4: Restart port 3008 safely**
 
-Stop only the process currently listening on port 3008 after verifying its executable is `one-api.exe`. Start the newly built binary hidden with `--port 3008`, then require HTTP 200 from `/` and `/fallback/free-pool`.
+Stop only the process currently listening on port 3008 after verifying its executable is `one-api.exe`. Start the newly built worktree binary hidden with `--port 3008` and `D:\ct\project` as its working directory so it reads the existing ignored runtime database/config without copying secrets. Then require HTTP 200 from `/` and `/fallback/free-pool`.
 
 - [ ] **Step 5: Run real-token smoke without exposing credentials**
 
@@ -369,7 +410,20 @@ git merge --no-ff fix/openrouter-free-pool-stability
 git push origin main
 ```
 
-- [ ] **Step 4: Verify merged main**
+- [ ] **Step 4: Rebuild and restart merged main**
+
+```powershell
+Set-Location D:\ct\project\web\default
+npm run build
+Set-Location D:\ct\project
+& 'D:\ct\tools\go1.22.12\bin\go.exe' build -o one-api.exe .
+```
+
+Stop only the verified `one-api.exe` listener on 3008, start
+`D:\ct\project\one-api.exe --port 3008` with `D:\ct\project` as its working
+directory, and wait for HTTP readiness.
+
+- [ ] **Step 5: Verify merged main**
 
 ```powershell
 git status --short --branch
