@@ -77,18 +77,35 @@ func (channel *Channel) DeleteAbilities() error {
 // UpdateAbilities updates abilities of this channel.
 // Make sure the channel is completed before calling this function.
 func (channel *Channel) UpdateAbilities() error {
+	return channel.UpdateAbilitiesWithDB(DB)
+}
+
+// UpdateAbilitiesWithDB updates abilities using the provided database handle.
+// The handle can be a transaction when channel fields and abilities must stay consistent.
+func (channel *Channel) UpdateAbilitiesWithDB(db *gorm.DB) error {
 	// A quick and dirty way to update abilities
 	// First delete all abilities of this channel
-	err := channel.DeleteAbilities()
+	err := db.Where("channel_id = ?", channel.Id).Delete(&Ability{}).Error
 	if err != nil {
 		return err
 	}
-	// Then add new abilities
-	err = channel.AddAbilities()
-	if err != nil {
-		return err
+
+	models_ := strings.Split(channel.Models, ",")
+	models_ = utils.DeDuplication(models_)
+	groups_ := strings.Split(channel.Group, ",")
+	abilities := make([]Ability, 0, len(models_))
+	for _, model := range models_ {
+		for _, group := range groups_ {
+			abilities = append(abilities, Ability{
+				Group:     group,
+				Model:     model,
+				ChannelId: channel.Id,
+				Enabled:   channel.Status == ChannelStatusEnabled,
+				Priority:  channel.Priority,
+			})
+		}
 	}
-	return nil
+	return db.Create(&abilities).Error
 }
 
 func UpdateAbilityStatus(channelId int, status bool) error {

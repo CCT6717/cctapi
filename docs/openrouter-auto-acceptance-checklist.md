@@ -30,14 +30,17 @@ Requirements:
 - [ ] `GET /api/fallback/deployments/runtime-status` has at least one `free:openrouter-` deployment row.
 - [ ] `POST /v1/chat/completions` with `model=openrouter/auto` returns HTTP 200 and has `choices`.
 - [ ] Streaming request for `model=openrouter/auto` returns SSE content (`data:`).
-- [ ] `/api/fallback/free-pool/usage?provider=openrouter` returns success and updates usage counters.
+- [ ] `/api/fallback/free-pool/usage?provider=openrouter` returns success and both request/success counters have positive deltas.
 - [ ] `/metrics` shows increased `fallback_requests_total`.
-- [ ] `/fallback/free-pool` page shows OpenRouter auto routing enabled.
+- [ ] `/fallback/free-pool` returns HTTP 2xx (`pageReachable=true`).
+
+The provider catalog and runtime deployment checks prove that OpenRouter is configured. `pageContainsOpenRouterAuto` is informational because the unauthenticated SPA shell may not contain route data; use an authenticated browser check only when visible UI validation is required.
 
 ## Optional Follow-up Checks
 
 - Runtime row for `free:openrouter-*` stays `enabled=true` after key rotations.
 - Usage payload includes key hash metadata (`key_hash`) for deeper diagnosis.
+- Open `/fallback/free-pool` in an authenticated browser when visible OpenRouter UI confirmation is required.
 - Restart service and rerun the script once to confirm idempotence.
 
 ## Result Template
@@ -50,7 +53,10 @@ Model non-stream: pass/fail
 Model stream: pass/fail
 runtime rows: N
 usage rows: yes (request_count: X)
+usage request_count delta: +R
+usage success_count delta: +S
 fallback_requests_total delta: +Y
+free-pool page reachable: true/false
 Evidence: passed / failed
 ```
 
@@ -66,6 +72,9 @@ usageRowsAfter
 runtimeRows
 usageRequestCount
 usageSuccessCount
+usageRequestDelta
+usageSuccessDelta
 fallbackRequestsDelta
+pageReachable
 pageContainsOpenRouterAuto
 ```

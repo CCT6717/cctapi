@@ -26,9 +26,11 @@ Pass criteria (required):
 3. At least one runtime row exists for `free:openrouter-*`.
 4. Non-stream `POST /v1/chat/completions` with `model=openrouter/auto` returns `choices`.
 5. Streaming request returns SSE chunks with `data:`.
-6. `/api/fallback/free-pool/usage?provider=openrouter` returns success and updated counters.
+6. `/api/fallback/free-pool/usage?provider=openrouter` returns success and both request/success counters have positive deltas.
 7. `/metrics` shows increased `fallback_requests_total`.
-8. `/fallback/free-pool` page shows OpenRouter auto path available.
+8. `/fallback/free-pool` returns HTTP 2xx (`pageReachable=true`).
+
+The provider catalog and runtime deployment checks prove OpenRouter configuration. `pageContainsOpenRouterAuto` remains informational because raw SPA shell HTML may omit authenticated route data; use an authenticated browser check only when visible UI validation is required.
 
 Submission note template:
 
@@ -41,7 +43,11 @@ Submission note template:
   - usage rows: `<count>`
   - request_count: `<number>`
   - success_count: `<number>`
-  - fallback_requests_total delta: `<delta>`
+  - usageRequestDelta: `<positive number>`
+  - usageSuccessDelta: `<positive number>`
+  - fallback_requests_total delta: `<positive number>`
+  - pageReachable: `true/false`
+  - pageContainsOpenRouterAuto (informational): `true/false`
   - deploymentId: `<value>`
   - runtimeRows: `<count>`
 - Conclusion: `PASS` / `FAIL`

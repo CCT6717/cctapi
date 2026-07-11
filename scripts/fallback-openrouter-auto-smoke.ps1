@@ -18,7 +18,8 @@ function Request-Fallback {
     [string]$Method,
     [string]$Path,
     [string]$Token,
-    [object]$Body = $null
+    [object]$Body = $null,
+    [switch]$NoRedirect
   )
 
   $headers = $null
@@ -39,6 +40,9 @@ function Request-Fallback {
   if ($null -ne $Body) {
     $params.Body = ($Body | ConvertTo-Json -Depth 8)
   }
+  if ($NoRedirect) {
+    $params.MaximumRedirection = 0
+  }
 
   return Invoke-WebRequest @params
 }
@@ -50,15 +54,27 @@ function Parse-Metrics {
     $line = $line.Trim()
     if ($line -eq "" -or $line.StartsWith("#")) { continue }
     $parts = $line -split "\s+"
-    if ($parts.Count -ge 2 -and [double]::TryParse($parts[1], [ref](0.0))) {
-      $metricName = $parts[0]
-      $braceIndex = $metricName.IndexOf("{")
-      $baseName = if ($braceIndex -ge 0) { $metricName.Substring(0, $braceIndex) } else { $metricName }
-      if (-not $result.ContainsKey($baseName)) {
-        $result[$baseName] = 0
-      }
-      $result[$baseName] += [double]$parts[1]
+    if ($parts.Count -lt 2) {
+      throw "Invalid metric sample: $line"
     }
+    [double]$sample = 0
+    if (-not [double]::TryParse($parts[1], [System.Globalization.NumberStyles]::Float, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$sample)) {
+      throw "Invalid metric sample value '$($parts[1])' in: $line"
+    }
+    if ([double]::IsNaN($sample) -or [double]::IsInfinity($sample)) {
+      throw "Non-finite metric sample value '$($parts[1])' in: $line"
+    }
+    $metricName = $parts[0]
+    $braceIndex = $metricName.IndexOf("{")
+    $baseName = if ($braceIndex -ge 0) { $metricName.Substring(0, $braceIndex) } else { $metricName }
+    if (-not $result.ContainsKey($baseName)) {
+      $result[$baseName] = [double]0
+    }
+    [double]$aggregate = [double]$result[$baseName] + $sample
+    if ([double]::IsNaN($aggregate) -or [double]::IsInfinity($aggregate)) {
+      throw "Non-finite aggregate for metric '$baseName'."
+    }
+    $result[$baseName] = $aggregate
   }
   return $result
 }
@@ -98,12 +114,35 @@ function Parse-UsageResponse {
 function Assert-Int {
   param(
     [string]$Label,
-    [int]$ExpectedMin,
-    [int]$Actual
+    [decimal]$ExpectedMin,
+    [decimal]$Actual
   )
   if ($Actual -lt $ExpectedMin) {
     throw "$Label failed: expected >= $ExpectedMin, got $Actual"
   }
+}
+
+function Get-UsageTotal {
+  param(
+    [object[]]$Rows,
+    [string]$Property
+  )
+
+  [decimal]$total = 0
+  foreach ($row in @($Rows)) {
+    $propertyValue = $row.PSObject.Properties[$Property]
+    if ($null -eq $propertyValue -or $null -eq $propertyValue.Value) {
+      continue
+    }
+
+    [long]$value = 0
+    $text = [string]$propertyValue.Value
+    if (-not [long]::TryParse($text, [System.Globalization.NumberStyles]::Integer, [System.Globalization.CultureInfo]::InvariantCulture, [ref]$value)) {
+      throw "Usage property '$Property' is not a valid Int64 value: '$text'."
+    }
+    $total += [decimal]$value
+  }
+  return $total
 }
 
 $BaseUrl = $BaseUrl.TrimEnd("/")
@@ -179,6 +218,9 @@ $metricsBefore = Parse-Metrics -Text $metricsBeforeRaw
 $usageBeforeRaw = Request-Fallback -Method GET -Path "/api/fallback/free-pool/usage?provider=$ExpectedProvider" -Token $AdminToken
 $usageBefore = Parse-UsageResponse -Text $usageBeforeRaw.Content -Path "/api/fallback/free-pool/usage?provider=$ExpectedProvider"
 $usageBeforeCount = @($usageBefore | Measure-Object).Count
+$providerRowsBefore = @($usageBefore | Where-Object { $_.provider -eq $ExpectedProvider })
+$usageRequestCountBefore = Get-UsageTotal -Rows $providerRowsBefore -Property "request_count"
+$usageSuccessCountBefore = Get-UsageTotal -Rows $providerRowsBefore -Property "success_count"
 
 Write-Host "==> 5) Run non-stream openrouter/auto chat"
 $chatBody = @{
@@ -231,26 +273,42 @@ $providerRowsAfter = @($usageAfter | Where-Object { $_.provider -eq $ExpectedPro
 if ($providerRowsAfter.Count -lt 1) {
   throw "Usage query has data but no provider=$ExpectedProvider row."
 }
-Assert-Int "usage request_count" 1 ([int](($providerRowsAfter | Measure-Object request_count -Sum).Sum))
+$usageRequestCountAfter = Get-UsageTotal -Rows $providerRowsAfter -Property "request_count"
+$usageSuccessCountAfter = Get-UsageTotal -Rows $providerRowsAfter -Property "success_count"
+$usageRequestDelta = $usageRequestCountAfter - $usageRequestCountBefore
+$usageSuccessDelta = $usageSuccessCountAfter - $usageSuccessCountBefore
+Assert-Int "usage request_count" 1 $usageRequestCountAfter
+if ($usageRequestDelta -le 0) {
+  throw "usage request_count did not increase (before=$usageRequestCountBefore, after=$usageRequestCountAfter)."
+}
+if ($usageSuccessDelta -le 0) {
+  throw "usage success_count did not increase (before=$usageSuccessCountBefore, after=$usageSuccessCountAfter)."
+}
 Write-Host "Usage recorded for provider '$ExpectedProvider' (rows=$($providerRowsAfter.Count))."
+Write-Host "Usage deltas: request_count +$usageRequestDelta, success_count +$usageSuccessDelta"
 
 $totalReqBefore = if ($metricsBefore.ContainsKey("fallback_requests_total")) { [double]$metricsBefore["fallback_requests_total"] } else { 0 }
 $totalReqAfter = if ($metricsAfter.ContainsKey("fallback_requests_total")) { [double]$metricsAfter["fallback_requests_total"] } else { 0 }
-if ($totalReqAfter -lt $totalReqBefore) {
+$delta = $totalReqAfter - $totalReqBefore
+if ([double]::IsNaN($delta) -or [double]::IsInfinity($delta)) {
+  throw "fallback_requests_total delta is not finite (before=$totalReqBefore, after=$totalReqAfter)."
+}
+if ($delta -le 0) {
   throw "fallback_requests_total did not increase (before=$totalReqBefore, after=$totalReqAfter)."
 }
-$delta = $totalReqAfter - $totalReqBefore
 Write-Host "Metrics delta: fallback_requests_total +$delta"
 
 if ($usageBeforeCount -eq $usageAfterCount) {
   Write-Warning "Usage row count unchanged. Model counters still indicate usage; row replacement may be expected."
 }
 
-Write-Host "==> 8) Verify free-pool page exposes openrouter/auto"
-$pageResp = Request-Fallback -Method GET -Path "/fallback/free-pool" -Token $AdminToken
+Write-Host "==> 8) Verify free-pool page reachability"
+$pageReachable = $false
+$pageResp = Request-Fallback -Method GET -Path "/fallback/free-pool" -Token $AdminToken -NoRedirect
 if ($pageResp.StatusCode -lt 200 -or $pageResp.StatusCode -ge 300) {
   throw "Free-pool page check failed: HTTP $($pageResp.StatusCode)"
 }
+$pageReachable = $true
 $pageHasOpenRouterAuto = $true
 if ($pageResp.Content -notmatch "openrouter" -or $pageResp.Content -notmatch "auto") {
   $pageHasOpenRouterAuto = $false
@@ -267,9 +325,12 @@ if ($OutputJson) {
     usageRowsBefore = $usageBeforeCount
     usageRowsAfter = $usageAfterCount
     runtimeRows = $runtimeRows.Count
-    usageRequestCount = [int](($providerRowsAfter | Measure-Object request_count -Sum).Sum)
-    usageSuccessCount = [int](($providerRowsAfter | Measure-Object success_count -Sum).Sum)
+    usageRequestCount = $usageRequestCountAfter
+    usageSuccessCount = $usageSuccessCountAfter
+    usageRequestDelta = $usageRequestDelta
+    usageSuccessDelta = $usageSuccessDelta
     fallbackRequestsDelta = $delta
+    pageReachable = $pageReachable
     pageContainsOpenRouterAuto = $pageHasOpenRouterAuto
   }
   $summary | ConvertTo-Json -Depth 3 | Write-Output

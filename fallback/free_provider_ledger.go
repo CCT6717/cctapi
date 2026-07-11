@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/songquanpeng/one-api/model"
@@ -33,11 +34,32 @@ type FreeProviderUsageFilter struct {
 	Period    string
 }
 
-func InitFreeProviderLedgerStore() error {
-	if model.DB == nil {
-		return fmt.Errorf("database is not initialized")
+var freeProviderLedgerStore = struct {
+	sync.Mutex
+	activeDB *gorm.DB
+}{}
+
+func initFreeProviderLedgerStore() (*gorm.DB, error) {
+	db := model.DB
+	if db == nil {
+		return nil, fmt.Errorf("database is not initialized")
 	}
-	return model.DB.AutoMigrate(&FreeProviderUsageLedger{})
+
+	freeProviderLedgerStore.Lock()
+	defer freeProviderLedgerStore.Unlock()
+	if freeProviderLedgerStore.activeDB == db {
+		return db, nil
+	}
+	if err := db.AutoMigrate(&FreeProviderUsageLedger{}); err != nil {
+		return nil, err
+	}
+	freeProviderLedgerStore.activeDB = db
+	return db, nil
+}
+
+func InitFreeProviderLedgerStore() error {
+	_, err := initFreeProviderLedgerStore()
+	return err
 }
 
 func parseAutoFreeDeploymentID(deploymentID string) (provider string, keyHash string, ok bool) {
@@ -60,10 +82,8 @@ func RecordFreeProviderUsage(deploymentID string, modelName string, usage UsageI
 	if !ok {
 		return nil
 	}
-	if model.DB == nil {
-		return fmt.Errorf("database is not initialized")
-	}
-	if err := InitFreeProviderLedgerStore(); err != nil {
+	db, err := initFreeProviderLedgerStore()
+	if err != nil {
 		return err
 	}
 
@@ -91,7 +111,7 @@ func RecordFreeProviderUsage(deploymentID string, modelName string, usage UsageI
 		UpdatedAt:        now,
 	}
 
-	return model.DB.Clauses(clause.OnConflict{
+	return db.Clauses(clause.OnConflict{
 		Columns: []clause.Column{
 			{Name: "provider"},
 			{Name: "key_hash"},
@@ -110,17 +130,15 @@ func RecordFreeProviderUsage(deploymentID string, modelName string, usage UsageI
 }
 
 func ListFreeProviderUsage(filter FreeProviderUsageFilter) ([]FreeProviderUsageLedger, error) {
-	if model.DB == nil {
-		return nil, fmt.Errorf("database is not initialized")
-	}
-	if err := InitFreeProviderLedgerStore(); err != nil {
+	db, err := initFreeProviderLedgerStore()
+	if err != nil {
 		return nil, err
 	}
 	period := strings.TrimSpace(filter.Period)
 	if period == "" {
 		period = todayString()
 	}
-	query := model.DB.Model(&FreeProviderUsageLedger{}).Where("period = ?", period)
+	query := db.Model(&FreeProviderUsageLedger{}).Where("period = ?", period)
 	if provider := strings.TrimSpace(filter.Provider); provider != "" {
 		query = query.Where("provider = ?", provider)
 	}

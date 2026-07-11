@@ -8,6 +8,7 @@ import (
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
+	"gorm.io/gorm"
 )
 
 type desiredFreeProviderResource struct {
@@ -136,21 +137,42 @@ func SyncFreePool(cfg *Config) error {
 	for _, d := range desiredChannels {
 		existingCh, found := existingByName[d.name]
 		if found {
-			// Update if key changed
-			if existingCh.Key != d.ch.Key {
+			updates := map[string]interface{}{}
+			keyChanged := existingCh.Key != d.ch.Key
+			modelsChanged := existingCh.Models != d.ch.Models
+			if keyChanged {
+				updates["key"] = d.ch.Key
+			}
+			if modelsChanged {
+				updates["models"] = d.ch.Models
+			}
+			if existingCh.Type != d.ch.Type {
+				updates["type"] = d.ch.Type
+			}
+			if len(updates) > 0 {
+				if err := model.DB.Transaction(func(tx *gorm.DB) error {
+					if err := tx.Model(existingCh).Updates(updates).Error; err != nil {
+						return err
+					}
+					if !modelsChanged {
+						return nil
+					}
+					updatedCh := *existingCh
+					updatedCh.Models = d.ch.Models
+					return updatedCh.UpdateAbilitiesWithDB(tx)
+				}); err != nil {
+					logger.SysError(fmt.Sprintf("[free_pool] failed to update channel %s: %v", d.name, err))
+					return fmt.Errorf("failed to reconcile channel %s: %w", d.name, err)
+				}
 				existingCh.Key = d.ch.Key
 				existingCh.Models = d.ch.Models
 				existingCh.Type = d.ch.Type
-				if err := model.DB.Model(existingCh).Updates(map[string]interface{}{
-					"key":    existingCh.Key,
-					"models": existingCh.Models,
-					"type":   existingCh.Type,
-				}).Error; err != nil {
-					logger.SysError(fmt.Sprintf("[free_pool] failed to update channel %s: %v", d.name, err))
-					continue
+				if modelsChanged {
+					logger.SysLog(fmt.Sprintf("[free_pool] auto channel %s (id=%d) model inventory refreshed", d.name, existingCh.Id))
 				}
-				_ = existingCh.UpdateAbilities()
-				logger.SysWarn(fmt.Sprintf("[free_pool] auto channel %s (id=%d) key updated - config sync overwrote previous key", d.name, existingCh.Id))
+				if keyChanged {
+					logger.SysWarn(fmt.Sprintf("[free_pool] auto channel %s (id=%d) key updated - config sync overwrote previous key", d.name, existingCh.Id))
+				}
 			}
 			// Ensure enabled
 			if existingCh.Status != model.ChannelStatusEnabled {
@@ -205,7 +227,10 @@ func SyncFreePool(cfg *Config) error {
 			continue
 		}
 		if existing, ok := cfg.Deployments[id]; ok {
-			dep = preserveDeploymentRealModelOverride(existing, dep, id, providerNameForAutoDeploymentID(id))
+			providerName := providerNameForAutoDeploymentID(id)
+			if !providerConfigOwnsAutoRealModel(cfg, providerName) {
+				dep = preserveDeploymentRealModelOverride(existing, dep, id, providerName)
+			}
 		}
 		cfg.Deployments[id] = dep
 	}
@@ -251,6 +276,32 @@ func preserveDeploymentRealModelOverride(existing DeploymentConfig, generated De
 	return generated
 }
 
+func routingModelForFetchedModels(providerName string, fetchedModels []string) string {
+	meta, ok := BuiltinFreeProviders[providerName]
+	if ok && meta.ModelFetchMode == ModelFetchOpenRouterFree && len(meta.DefaultModels) > 0 {
+		return meta.DefaultModels[0]
+	}
+	if len(fetchedModels) == 0 {
+		return ""
+	}
+	return fetchedModels[0]
+}
+
+func providerConfigOwnsAutoRealModel(cfg *Config, providerName string) bool {
+	if cfg == nil {
+		return false
+	}
+	fp, ok := cfg.FreeProviders[providerName]
+	if !ok {
+		return false
+	}
+	if len(fp.Models) > 0 {
+		return true
+	}
+	meta, ok := BuiltinFreeProviders[providerName]
+	return ok && meta.ModelFetchMode == ModelFetchOpenRouterFree
+}
+
 func isDeploymentRealModelOverride(currentRealModel string, generatedRealModel string, providerName string) bool {
 	currentRealModel = strings.TrimSpace(currentRealModel)
 	generatedRealModel = strings.TrimSpace(generatedRealModel)
@@ -272,6 +323,21 @@ func shouldSyncDeploymentRealModel(deploymentID string, generatedRealModel strin
 		return true
 	}
 	return !isDeploymentRealModelOverride(dep.RealModel, generatedRealModel, providerName)
+}
+
+func updateChannelModelsAndAbilities(channel *model.Channel, newModels string) error {
+	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(channel).Update("models", newModels).Error; err != nil {
+			return err
+		}
+		updatedChannel := *channel
+		updatedChannel.Models = newModels
+		return updatedChannel.UpdateAbilitiesWithDB(tx)
+	}); err != nil {
+		return err
+	}
+	channel.Models = newModels
+	return nil
 }
 
 func providerNameForAutoDeploymentID(id string) string {
@@ -410,8 +476,9 @@ func syncAllProviderModels(cfg *Config) {
 			}
 			recordModelSyncSuccess(depID)
 			// keyless 渚涘簲鍟嗗彧鏈変竴涓?channel,鐢ㄧ┖ key 鐨?hash
-			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
-				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
+			routingModel := routingModelForFetchedModels(providerName, models)
+			if shouldSyncDeploymentRealModel(depID, routingModel, providerName) && UpdateDeploymentRealModel(depID, routingModel) {
+				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, routingModel))
 			}
 			name := channelName(providerName, keyHash)
 			var ch model.Channel
@@ -423,12 +490,10 @@ func syncAllProviderModels(cfg *Config) {
 			if ch.Models == newModels {
 				continue // 鏃犲彉鍖?璺宠繃
 			}
-			if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
-				logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
+			if err := updateChannelModelsAndAbilities(&ch, newModels); err != nil {
+				logger.SysError(fmt.Sprintf("[free-pool] failed to update models and abilities for %s: %v", name, err))
 				continue
 			}
-			ch.Models = newModels
-			_ = ch.UpdateAbilities()
 			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
 			continue
 		}
@@ -452,8 +517,9 @@ func syncAllProviderModels(cfg *Config) {
 				continue
 			}
 			recordModelSyncSuccess(depID)
-			if shouldSyncDeploymentRealModel(depID, models[0], providerName) && UpdateDeploymentRealModel(depID, models[0]) {
-				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, models[0]))
+			routingModel := routingModelForFetchedModels(providerName, models)
+			if shouldSyncDeploymentRealModel(depID, routingModel, providerName) && UpdateDeploymentRealModel(depID, routingModel) {
+				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, routingModel))
 			}
 			// Update channel.Models so the admin UI and channel abilities see the
 			// same dynamic model list that routing now sees via RealModel.
@@ -467,12 +533,10 @@ func syncAllProviderModels(cfg *Config) {
 			if ch.Models == newModels {
 				continue // 鏃犲彉鍖?璺宠繃
 			}
-			if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
-				logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
+			if err := updateChannelModelsAndAbilities(&ch, newModels); err != nil {
+				logger.SysError(fmt.Sprintf("[free-pool] failed to update models and abilities for %s: %v", name, err))
 				continue
 			}
-			ch.Models = newModels
-			_ = ch.UpdateAbilities()
 			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
 		}
 	}

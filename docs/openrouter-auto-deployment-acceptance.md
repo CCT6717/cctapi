@@ -32,9 +32,11 @@ powershell -ExecutionPolicy Bypass -File scripts/fallback-openrouter-auto-smoke.
 - `GET /api/fallback/deployments/runtime-status` contains at least one deployment with prefix `free:openrouter-`.
 - `POST /v1/chat/completions` with `model=openrouter/auto` returns non-stream success and `choices`.
 - Stream request for `model=openrouter/auto` returns SSE text (`data:`).
-- `/api/fallback/free-pool/usage?provider=openrouter` returns success and has provider row data.
+- `/api/fallback/free-pool/usage?provider=openrouter` returns success, has provider row data, and shows positive request/success deltas.
 - `/metrics` shows `fallback_requests_total` increased.
-- `/fallback/free-pool` page is readable and includes OpenRouter auto path markers.
+- `/fallback/free-pool` returns HTTP 2xx (`pageReachable=true`).
+
+The provider catalog and `free:openrouter-` runtime row checks prove OpenRouter configuration. `pageContainsOpenRouterAuto` is informational because raw SPA shell HTML may not include authenticated route data; perform an authenticated browser check only when visible UI validation is required.
 
 ## Required evidence from `-OutputJson`
 
@@ -48,7 +50,10 @@ usageRowsAfter
 runtimeRows
 usageRequestCount
 usageSuccessCount
+usageRequestDelta
+usageSuccessDelta
 fallbackRequestsDelta
+pageReachable
 pageContainsOpenRouterAuto
 ```
 
@@ -74,6 +79,9 @@ pageContainsOpenRouterAuto
 - `usageRowsAfter`: `<number>`
 - `usageRequestCount`: `<number>`
 - `usageSuccessCount`: `<number>`
-- `fallbackRequestsDelta`: `<number>`
+- `usageRequestDelta`: `<positive number>`
+- `usageSuccessDelta`: `<positive number>`
+- `fallbackRequestsDelta`: `<positive number>`
+- `pageReachable`: `true` / `false`
 - `pageContainsOpenRouterAuto`: `true` / `false`
 - Remarks: `<short notes>`
