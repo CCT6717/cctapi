@@ -45,7 +45,7 @@ Submission note template:
   - success_count: `<number>`
   - usageRequestDelta: `<positive number>`
   - usageSuccessDelta: `<positive number>`
-  - fallback_requests_total delta: `<delta>`
+  - fallback_requests_total delta: `<positive number>`
   - pageReachable: `true/false`
   - pageContainsOpenRouterAuto (informational): `true/false`
   - deploymentId: `<value>`
