@@ -46,14 +46,14 @@ go test ./fallback
 cd D:\ct\project\web\default; npm run build
 ```
 
-The frontend build has existing ESLint warnings in unrelated files. A successful build with warnings is expected.
+The frontend build currently has zero ESLint warnings. A clean build is expected.
 
 ## Current Handoff
 
-Last verified handoff: 2026-07-10.
+Last verified handoff: 2026-07-12.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `b5a8aa1 Merge branch 'fix/openrouter-free-pool-stability'`.
+- Latest backend/runtime alignment commit: `bd6f82e Merge cleanup/eslint-warnings`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
 - Added openrouter/auto production smoke playbook:
@@ -63,10 +63,10 @@ Last verified handoff: 2026-07-10.
   - `docs/openrouter-auto-final-submission-template.md`
   - `docs/openrouter-auto-stability-runbook.md`
   - `scripts/fallback-openrouter-auto-smoke.ps1`
-- OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
-- Current outstanding step for this batch: build and test the pending frontend changes before committing.
+- OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`bd6f82e`) are verified.
+- Current outstanding step: none. The ESLint cleanup batch is complete (0 warnings, 24 files modified, build artifacts refreshed). All changes are committed and merged to `main`; no blockers remain.
 
-Final verification from the free-pool UI batch:
+Final verification from the ESLint cleanup batch:
 
 ```powershell
 cd D:\ct\project\web\default
@@ -79,14 +79,14 @@ go build -o one-api.exe .
 curl.exe -I http://127.0.0.1:3008/
 ```
 
-Expected result from the free-pool UI pass:
+Expected result from the latest pass:
 
 - Frontend tests: 8 suites passed, 35 tests passed.
-- Frontend production build: passed with existing unrelated ESLint warnings.
+- Frontend production build: passed, ESLint warnings cleared (0 warnings).
 - Storybook build: passed with asset-size warnings only.
 - Local server on port 3008: HTTP 200.
 
-Latest verification on `feat/freellmapi-native-core`:
+Latest verification on `main`:
 
 ```powershell
 $env:CGO_ENABLED='1'
@@ -258,7 +258,7 @@ Do not hardcode real tokens in repo files.
 - default frontend `npm ci` and `npm run build`
 - commit lint
 
-The frontend CI build sets `CI=false` because this inherited codebase has existing ESLint warnings that should not block build verification.
+The frontend CI build previously set `CI=false` to avoid blocking on inherited ESLint warnings. After the cleanup, the codebase builds cleanly; review whether to restore `CI=true` in `.github/workflows/ci.yml`.
 
 ## Footer Attribution
 
