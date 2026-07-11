@@ -63,7 +63,7 @@ Last verified handoff: 2026-07-12.
   - `docs/openrouter-auto-final-submission-template.md`
   - `docs/openrouter-auto-stability-runbook.md`
   - `scripts/fallback-openrouter-auto-smoke.ps1`
-- OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`bd6f82e`) are verified.
+- OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
 - Current outstanding step: none. The ESLint cleanup batch is complete (0 warnings, 24 files modified, build artifacts refreshed). All changes are committed and merged to `main`; no blockers remain.
 
 Final verification from the ESLint cleanup batch:
