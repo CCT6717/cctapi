@@ -4,6 +4,7 @@ import (
 	"errors"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 
 	dbmodel "github.com/songquanpeng/one-api/model"
@@ -11,26 +12,72 @@ import (
 	"gorm.io/gorm"
 )
 
-type countingLedgerMigrator struct {
-	gorm.Migrator
-	autoMigrateCalls *int
+type ledgerMigrationControl struct {
+	mu                sync.Mutex
+	autoMigrateCalls  int
+	failuresRemaining int
+	afterSuccess      func()
 }
 
-func (m countingLedgerMigrator) AutoMigrate(values ...interface{}) error {
-	*m.autoMigrateCalls++
-	return m.Migrator.AutoMigrate(values...)
-}
-
-type countingLedgerDialector struct {
-	gorm.Dialector
-	autoMigrateCalls int
-}
-
-func (d *countingLedgerDialector) Migrator(db *gorm.DB) gorm.Migrator {
-	return countingLedgerMigrator{
-		Migrator:         d.Dialector.Migrator(db),
-		autoMigrateCalls: &d.autoMigrateCalls,
+func (c *ledgerMigrationControl) autoMigrate(base gorm.Migrator, values ...interface{}) error {
+	c.mu.Lock()
+	c.autoMigrateCalls++
+	shouldFail := c.failuresRemaining > 0
+	if shouldFail {
+		c.failuresRemaining--
 	}
+	afterSuccess := c.afterSuccess
+	c.mu.Unlock()
+
+	if shouldFail {
+		return errors.New("controlled ledger migration failure")
+	}
+	if err := base.AutoMigrate(values...); err != nil {
+		return err
+	}
+	if afterSuccess != nil {
+		afterSuccess()
+	}
+	return nil
+}
+
+func (c *ledgerMigrationControl) callCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.autoMigrateCalls
+}
+
+type controlledLedgerMigrator struct {
+	gorm.Migrator
+	control *ledgerMigrationControl
+}
+
+func (m controlledLedgerMigrator) AutoMigrate(values ...interface{}) error {
+	return m.control.autoMigrate(m.Migrator, values...)
+}
+
+type controlledLedgerDialector struct {
+	gorm.Dialector
+	control *ledgerMigrationControl
+}
+
+func (d *controlledLedgerDialector) Migrator(db *gorm.DB) gorm.Migrator {
+	return controlledLedgerMigrator{
+		Migrator: d.Dialector.Migrator(db),
+		control:  d.control,
+	}
+}
+
+func openControlledFreeProviderLedgerTestDB(t *testing.T, control *ledgerMigrationControl) *gorm.DB {
+	t.Helper()
+	db, err := gorm.Open(&controlledLedgerDialector{
+		Dialector: sqlite.Open(":memory:"),
+		control:   control,
+	}, &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open controlled in-memory DB: %v", err)
+	}
+	return db
 }
 
 func setupFreeProviderLedgerTestDB(t *testing.T) func() {
@@ -52,11 +99,8 @@ func TestInitFreeProviderLedgerStoreMigratesEachDatabaseOnlyOnce(t *testing.T) {
 		dbmodel.DB = originalDB
 	}()
 
-	dialector := &countingLedgerDialector{Dialector: sqlite.Open(":memory:")}
-	db, err := gorm.Open(dialector, &gorm.Config{})
-	if err != nil {
-		t.Fatalf("failed to open in-memory DB: %v", err)
-	}
+	control := &ledgerMigrationControl{}
+	db := openControlledFreeProviderLedgerTestDB(t, control)
 	dbmodel.DB = db
 
 	if err := InitFreeProviderLedgerStore(); err != nil {
@@ -65,8 +109,166 @@ func TestInitFreeProviderLedgerStoreMigratesEachDatabaseOnlyOnce(t *testing.T) {
 	if err := InitFreeProviderLedgerStore(); err != nil {
 		t.Fatalf("second InitFreeProviderLedgerStore failed: %v", err)
 	}
-	if dialector.autoMigrateCalls != 1 {
-		t.Fatalf("expected one migration for one database, got %d", dialector.autoMigrateCalls)
+	if calls := control.callCount(); calls != 1 {
+		t.Fatalf("expected one migration for one database, got %d", calls)
+	}
+}
+
+func TestInitFreeProviderLedgerStoreEvictsPreviousDatabase(t *testing.T) {
+	originalDB := dbmodel.DB
+	defer func() {
+		dbmodel.DB = originalDB
+	}()
+
+	firstControl := &ledgerMigrationControl{}
+	firstDB := openControlledFreeProviderLedgerTestDB(t, firstControl)
+	secondControl := &ledgerMigrationControl{}
+	secondDB := openControlledFreeProviderLedgerTestDB(t, secondControl)
+
+	dbmodel.DB = firstDB
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("first database initialization failed: %v", err)
+	}
+	dbmodel.DB = secondDB
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("second database initialization failed: %v", err)
+	}
+	dbmodel.DB = firstDB
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("replaced database initialization failed: %v", err)
+	}
+
+	if calls := firstControl.callCount(); calls != 2 {
+		t.Fatalf("expected replaced database to migrate again, got %d migrations", calls)
+	}
+	if calls := secondControl.callCount(); calls != 1 {
+		t.Fatalf("expected replacement database to migrate once, got %d migrations", calls)
+	}
+}
+
+func TestInitFreeProviderLedgerStoreSerializesConcurrentCallers(t *testing.T) {
+	originalDB := dbmodel.DB
+	defer func() {
+		dbmodel.DB = originalDB
+	}()
+
+	control := &ledgerMigrationControl{}
+	dbmodel.DB = openControlledFreeProviderLedgerTestDB(t, control)
+
+	const callers = 32
+	start := make(chan struct{})
+	errs := make(chan error, callers)
+	var wg sync.WaitGroup
+	for i := 0; i < callers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			errs <- InitFreeProviderLedgerStore()
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent initialization failed: %v", err)
+		}
+	}
+	if calls := control.callCount(); calls != 1 {
+		t.Fatalf("expected one migration for concurrent callers, got %d", calls)
+	}
+}
+
+func TestInitFreeProviderLedgerStoreRetriesMigrationAfterFailure(t *testing.T) {
+	originalDB := dbmodel.DB
+	defer func() {
+		dbmodel.DB = originalDB
+	}()
+
+	control := &ledgerMigrationControl{failuresRemaining: 1}
+	dbmodel.DB = openControlledFreeProviderLedgerTestDB(t, control)
+
+	if err := InitFreeProviderLedgerStore(); err == nil {
+		t.Fatal("expected first initialization to return the controlled migration failure")
+	}
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("second initialization should retry and succeed: %v", err)
+	}
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("successful initialization should stay cached: %v", err)
+	}
+	if calls := control.callCount(); calls != 2 {
+		t.Fatalf("expected failed migration to be retried once, got %d migrations", calls)
+	}
+}
+
+func TestRecordFreeProviderUsageUsesInitializedDatabase(t *testing.T) {
+	originalDB := dbmodel.DB
+	defer func() {
+		dbmodel.DB = originalDB
+	}()
+
+	replacementDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open replacement in-memory DB: %v", err)
+	}
+	control := &ledgerMigrationControl{
+		afterSuccess: func() {
+			dbmodel.DB = replacementDB
+		},
+	}
+	initializedDB := openControlledFreeProviderLedgerTestDB(t, control)
+	dbmodel.DB = initializedDB
+
+	if err := RecordFreeProviderUsage("free:groq-001122ff", "llama-free", UsageInfo{TotalTokens: 3}); err != nil {
+		t.Fatalf("RecordFreeProviderUsage should use the initialized database: %v", err)
+	}
+
+	var count int64
+	if err := initializedDB.Model(&FreeProviderUsageLedger{}).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count initialized database rows: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected one row in the initialized database, got %d", count)
+	}
+}
+
+func TestListFreeProviderUsageUsesInitializedDatabase(t *testing.T) {
+	originalDB := dbmodel.DB
+	defer func() {
+		dbmodel.DB = originalDB
+	}()
+
+	replacementDB, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open replacement in-memory DB: %v", err)
+	}
+	var initializedDB *gorm.DB
+	control := &ledgerMigrationControl{
+		afterSuccess: func() {
+			row := FreeProviderUsageLedger{
+				Provider:  "groq",
+				KeyHash:   "001122ff",
+				ModelName: "llama-free",
+				Period:    todayString(),
+			}
+			if err := initializedDB.Create(&row).Error; err != nil {
+				t.Fatalf("failed to seed initialized database: %v", err)
+			}
+			dbmodel.DB = replacementDB
+		},
+	}
+	initializedDB = openControlledFreeProviderLedgerTestDB(t, control)
+	dbmodel.DB = initializedDB
+
+	rows, err := ListFreeProviderUsage(FreeProviderUsageFilter{Provider: "groq"})
+	if err != nil {
+		t.Fatalf("ListFreeProviderUsage should use the initialized database: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Provider != "groq" {
+		t.Fatalf("expected the initialized database row, got %+v", rows)
 	}
 }
 
