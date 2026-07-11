@@ -42,6 +42,7 @@ const EditRedemption = () => {
     if (isEdit) {
       loadRedemption().then();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submit = async () => {

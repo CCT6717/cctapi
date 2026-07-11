@@ -15,7 +15,6 @@ import {
   copy,
   showError,
   showInfo,
-  showNotice,
   showSuccess,
 } from '../../helpers';
 import Turnstile from 'react-turnstile';

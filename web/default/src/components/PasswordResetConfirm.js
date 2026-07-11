@@ -26,7 +26,7 @@ const PasswordResetConfirm = () => {
 
   const [countdown, setCountdown] = useState(30);
 
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   useEffect(() => {
     let token = searchParams.get('token');
     let email = searchParams.get('email');
@@ -34,7 +34,7 @@ const PasswordResetConfirm = () => {
       token,
       email,
     });
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     let countdownInterval = null;

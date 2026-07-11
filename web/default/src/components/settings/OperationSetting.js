@@ -166,6 +166,8 @@ const OperationSetting = () => {
           await updateOption('RetryTimes', inputs.RetryTimes);
         }
         break;
+      default:
+        break;
     }
   };
 

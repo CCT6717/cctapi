@@ -148,6 +148,7 @@ export const useLogsTable = (t) => {
 
   useEffect(() => {
     refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [logType]);
 
   const searchLogs = useCallback(async () => {
@@ -183,7 +184,7 @@ export const useLogsTable = (t) => {
         sortedLogs.sort((a, b) => {
           if (a[key] === b[key]) return 0;
           if (a[key] > b[key]) return -1;
-          if (a[key] < b[key]) return 1;
+          return 1;
         });
       }
       if (sortedLogs[0].id === logs[0].id) {

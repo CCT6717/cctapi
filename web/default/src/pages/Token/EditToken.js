@@ -113,6 +113,7 @@ const EditToken = () => {
     loadAvailableModels().catch((error) => {
       showError(error.message || 'Failed to load models');
     });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submit = async () => {

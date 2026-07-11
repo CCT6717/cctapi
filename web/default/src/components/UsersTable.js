@@ -77,6 +77,7 @@ const UsersTable = () => {
       .catch((reason) => {
         showError(reason);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderBy]);
 
   const manageUser = (username, action, idx) => {

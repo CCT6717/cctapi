@@ -165,6 +165,7 @@ const EditChannel = () => {
     }
     fetchModels().then();
     fetchGroups().then();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submit = async () => {
@@ -306,6 +307,7 @@ const EditChannel = () => {
                   参数替换为你的部署名称（模型名称中的点会被剔除），
                   <a
                     target='_blank'
+                    rel='noreferrer'
                     href='https://github.com/songquanpeng/one-api/issues/133?notification_referrer_id=NT_kwDOAmJSYrM2NjIwMzI3NDgyOjM5OTk4MDUw#issuecomment-1571602271'
                   >
                     图片演示
@@ -407,6 +409,7 @@ const EditChannel = () => {
                 {t('channel.edit.douban_notice')}
                 <a
                   target='_blank'
+                  rel='noreferrer'
                   href='https://console.volcengine.com/ark/region:ark+cn-beijing/endpoint'
                 >
                   {t('channel.edit.douban_notice_link')}

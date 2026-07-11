@@ -55,6 +55,7 @@ const Home = () => {
   useEffect(() => {
     displayNotice().then();
     displayHomePageContent().then();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -135,6 +136,7 @@ const Home = () => {
                           <a
                             href='https://github.com/songquanpeng/one-api'
                             target='_blank'
+                            rel='noreferrer'
                             style={{ color: 'var(--fb-primary, #3b82f6)' }}
                           >
                             {t('home.system_status.info.source_link')}
@@ -283,6 +285,7 @@ const Home = () => {
             <iframe
               src={homePageContent}
               style={{ width: '100%', height: '100vh', border: 'none' }}
+              title="home-page-content"
             />
           ) : (
             <div
