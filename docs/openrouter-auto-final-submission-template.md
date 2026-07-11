@@ -30,7 +30,7 @@ Reference:
 - usageSuccessCount: `<number>`
 - usageRequestDelta: `<positive number>`
 - usageSuccessDelta: `<positive number>`
-- fallbackRequestsDelta: `<number>`
+- fallbackRequestsDelta: `<positive number>`
 - pageReachable: `true` / `false`
 - pageContainsOpenRouterAuto: `true` / `false`
 - Remarks: `<text>`
@@ -84,7 +84,7 @@ usageRequestCount: <number>
 usageSuccessCount: <number>
 usageRequestDelta: <positive number>
 usageSuccessDelta: <positive number>
-fallbackRequestsDelta: <number>
+fallbackRequestsDelta: <positive number>
 pageReachable: true / false
 pageContainsOpenRouterAuto: true / false
 Remarks: <short notes>
