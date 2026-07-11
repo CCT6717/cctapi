@@ -4,6 +4,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -457,6 +459,165 @@ func TestSyncFreePoolRollsBackChannelModelsWhenAbilityRefreshFails(t *testing.T)
 	}
 	if len(abilities) != 1 || abilities[0].Model != "old-model" {
 		t.Fatalf("abilities = %+v, want original old-model ability", abilities)
+	}
+}
+
+func TestSyncAllProviderModelsRollsBackChannelModelsWhenAbilityRefreshFails(t *testing.T) {
+	tests := []struct {
+		name     string
+		provider string
+		key      string
+	}{
+		{name: "keyed", provider: "nvidia", key: "nvapi-dynamic-rollback"},
+		{name: "keyless", provider: "aihorde"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanupDB := setupFreePoolTestDB(t)
+			defer cleanupDB()
+			t.Cleanup(func() { resetConfigForTest(nil) })
+
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/v1/models" {
+					t.Fatalf("unexpected models path %s", r.URL.Path)
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"data":[{"id":"new-model-b"},{"id":"new-model-a"}]}`))
+			}))
+			defer server.Close()
+
+			originalMeta := BuiltinFreeProviders[tt.provider]
+			meta := originalMeta
+			meta.DefaultBaseURL = server.URL + "/v1"
+			meta.DefaultModels = nil
+			meta.ModelFetchMode = ModelFetchOpenAIModels
+			BuiltinFreeProviders[tt.provider] = meta
+			defer func() { BuiltinFreeProviders[tt.provider] = originalMeta }()
+
+			keyHash := SafeKeyHash(tt.key)
+			channel := dbmodel.Channel{
+				Name:   channelName(tt.provider, keyHash),
+				Type:   meta.ChannelType,
+				Key:    tt.key,
+				Models: "old-model",
+				Group:  "default",
+				Status: dbmodel.ChannelStatusEnabled,
+			}
+			if err := dbmodel.DB.Create(&channel).Error; err != nil {
+				t.Fatalf("create channel: %v", err)
+			}
+			if err := dbmodel.DB.Create(&dbmodel.Ability{
+				Group: "default", Model: "old-model", ChannelId: channel.Id, Enabled: true,
+			}).Error; err != nil {
+				t.Fatalf("create ability: %v", err)
+			}
+			if err := dbmodel.DB.Exec(`CREATE TRIGGER fail_dynamic_ability_recreate
+				BEFORE INSERT ON abilities
+				BEGIN
+					SELECT RAISE(ABORT, 'forced dynamic ability refresh failure');
+				END`).Error; err != nil {
+				t.Fatalf("create ability failure trigger: %v", err)
+			}
+
+			depID := deploymentID(tt.provider, keyHash)
+			var keys []string
+			if tt.key != "" {
+				keys = []string{tt.key}
+			}
+			resetConfigForTest(&Config{
+				Enabled: true,
+				FreeProviders: map[string]FreeProviderConfig{
+					tt.provider: {Enabled: true, Keys: keys},
+				},
+				Deployments: map[string]DeploymentConfig{
+					depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "old-model", Pool: "free"},
+				},
+			})
+
+			syncAllProviderModels(GetConfig())
+
+			var refreshed dbmodel.Channel
+			if err := dbmodel.DB.First(&refreshed, channel.Id).Error; err != nil {
+				t.Fatalf("reload channel: %v", err)
+			}
+			if refreshed.Models != "old-model" {
+				t.Fatalf("models = %q, want old-model after rollback", refreshed.Models)
+			}
+			var abilities []dbmodel.Ability
+			if err := dbmodel.DB.Where("channel_id = ?", channel.Id).Find(&abilities).Error; err != nil {
+				t.Fatalf("reload abilities: %v", err)
+			}
+			if len(abilities) != 1 || abilities[0].Model != "old-model" {
+				t.Fatalf("abilities = %+v, want original old-model ability", abilities)
+			}
+		})
+	}
+}
+
+func TestReloadConfigReturnsSyncFreePoolErrorAndPreservesActiveConfig(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() { resetConfigForTest(nil) })
+
+	key := "gsk-reload-sync-failure"
+	channel := dbmodel.Channel{
+		Name:   channelName("groq", SafeKeyHash(key)),
+		Type:   BuiltinFreeProviders["groq"].ChannelType,
+		Key:    key,
+		Models: "old-model",
+		Group:  "default",
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	if err := dbmodel.DB.Create(&dbmodel.Ability{
+		Group: "default", Model: "old-model", ChannelId: channel.Id, Enabled: true,
+	}).Error; err != nil {
+		t.Fatalf("create ability: %v", err)
+	}
+	if err := dbmodel.DB.Exec(`CREATE TRIGGER fail_reload_ability_recreate
+		BEFORE INSERT ON abilities
+		BEGIN
+			SELECT RAISE(ABORT, 'forced reload ability refresh failure');
+		END`).Error; err != nil {
+		t.Fatalf("create ability failure trigger: %v", err)
+	}
+
+	resetConfigForTest(&Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"old/active": {Enabled: true, Pools: []string{"old"}},
+		},
+	})
+
+	path := filepath.Join(t.TempDir(), "fallback.json")
+	data := `{
+		"enabled": true,
+		"virtual_models": {"new/active": {"enabled": true, "pools": ["free"]}},
+		"free_providers": {
+			"groq": {"enabled": true, "keys": ["gsk-reload-sync-failure"], "models": ["new-model"]}
+		}
+	}`
+	if err := os.WriteFile(path, []byte(data), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	err := ReloadConfig(path)
+	if err == nil {
+		t.Fatal("expected ReloadConfig to return SyncFreePool error")
+	}
+	if !strings.Contains(err.Error(), "sync free pool") {
+		t.Fatalf("ReloadConfig error = %q, want wrapped sync free pool error", err)
+	}
+
+	active := GetConfig()
+	if _, ok := active.VirtualModels["old/active"]; !ok {
+		t.Fatalf("old active config was replaced: %+v", active.VirtualModels)
+	}
+	if _, ok := active.VirtualModels["new/active"]; ok {
+		t.Fatalf("failed reload published new config: %+v", active.VirtualModels)
 	}
 }
 

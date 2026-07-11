@@ -325,6 +325,21 @@ func shouldSyncDeploymentRealModel(deploymentID string, generatedRealModel strin
 	return !isDeploymentRealModelOverride(dep.RealModel, generatedRealModel, providerName)
 }
 
+func updateChannelModelsAndAbilities(channel *model.Channel, newModels string) error {
+	if err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(channel).Update("models", newModels).Error; err != nil {
+			return err
+		}
+		updatedChannel := *channel
+		updatedChannel.Models = newModels
+		return updatedChannel.UpdateAbilitiesWithDB(tx)
+	}); err != nil {
+		return err
+	}
+	channel.Models = newModels
+	return nil
+}
+
 func providerNameForAutoDeploymentID(id string) string {
 	providerName, _ := FreeProviderNameFromDeploymentID(id)
 	return providerName
@@ -475,12 +490,10 @@ func syncAllProviderModels(cfg *Config) {
 			if ch.Models == newModels {
 				continue // 鏃犲彉鍖?璺宠繃
 			}
-			if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
-				logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
+			if err := updateChannelModelsAndAbilities(&ch, newModels); err != nil {
+				logger.SysError(fmt.Sprintf("[free-pool] failed to update models and abilities for %s: %v", name, err))
 				continue
 			}
-			ch.Models = newModels
-			_ = ch.UpdateAbilities()
 			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
 			continue
 		}
@@ -520,12 +533,10 @@ func syncAllProviderModels(cfg *Config) {
 			if ch.Models == newModels {
 				continue // 鏃犲彉鍖?璺宠繃
 			}
-			if err := model.DB.Model(&ch).Update("models", newModels).Error; err != nil {
-				logger.SysError(fmt.Sprintf("[free-pool] failed to update models for %s: %v", name, err))
+			if err := updateChannelModelsAndAbilities(&ch, newModels); err != nil {
+				logger.SysError(fmt.Sprintf("[free-pool] failed to update models and abilities for %s: %v", name, err))
 				continue
 			}
-			ch.Models = newModels
-			_ = ch.UpdateAbilities()
 			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
 		}
 	}

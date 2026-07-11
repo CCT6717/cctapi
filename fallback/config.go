@@ -736,6 +736,7 @@ func ReloadConfig(path string) error {
 	// pass validateConfigData.
 	if err := SyncFreePool(newCfg); err != nil {
 		logger.SysError(fmt.Sprintf("[config] failed to sync free pool: %v", err))
+		return fmt.Errorf("failed to sync free pool: %w", err)
 	}
 
 	// Step 4: Validate the new config before swapping

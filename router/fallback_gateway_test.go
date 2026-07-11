@@ -37,8 +37,8 @@ func ensureTestDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to open in-memory SQLite for tests: %v", err)
 	}
-	if err := db.AutoMigrate(&model.Channel{}); err != nil {
-		t.Fatalf("failed to auto-migrate Channel table: %v", err)
+	if err := db.AutoMigrate(&model.Channel{}, &model.Ability{}); err != nil {
+		t.Fatalf("failed to auto-migrate channel and ability tables: %v", err)
 	}
 	model.DB = db
 }
