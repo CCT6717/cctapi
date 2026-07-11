@@ -30,6 +30,7 @@ const About = () => {
 
   useEffect(() => {
     displayAbout().then();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -53,6 +54,7 @@ const About = () => {
             <iframe
               src={about}
               style={{ width: '100%', height: '100vh', border: 'none' }}
+              title="about"
             />
           ) : (
             <div className='dashboard-container'>

@@ -13,10 +13,8 @@ import {
   API,
   copy,
   showError,
-  showInfo,
   showSuccess,
   showWarning,
-  timestamp2string,
 } from '../helpers';
 
 import { ITEMS_PER_PAGE } from '../constants';
@@ -93,6 +91,7 @@ const RedemptionsTable = () => {
       .catch((reason) => {
         showError(reason);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const manageRedemption = async (id, action, idx) => {
@@ -109,6 +108,8 @@ const RedemptionsTable = () => {
       case 'disable':
         data.status = 2;
         res = await API.put('/api/redemption/?status_only=true', data);
+        break;
+      default:
         break;
     }
     const { success, message } = res.data;

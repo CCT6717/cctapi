@@ -50,10 +50,10 @@ The frontend build has existing ESLint warnings in unrelated files. A successful
 
 ## Current Handoff
 
-Last verified handoff: 2026-07-09.
+Last verified handoff: 2026-07-10.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `7516c9d docs: align handoff pointer to latest handoff head`.
+- Latest backend/runtime alignment commit: `b5a8aa1 Merge branch 'fix/openrouter-free-pool-stability'`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
 - Added openrouter/auto production smoke playbook:
@@ -63,7 +63,8 @@ Last verified handoff: 2026-07-09.
   - `docs/openrouter-auto-final-submission-template.md`
   - `docs/openrouter-auto-stability-runbook.md`
   - `scripts/fallback-openrouter-auto-smoke.ps1`
-- Next immediate functional checkpoint (blocking): run `scripts/fallback-openrouter-auto-smoke.ps1 -OutputJson` with real `CCT_API_TOKEN` + `CCT_ADMIN_TOKEN` against a running local service.
+- OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
+- Current outstanding step for this batch: build and test the pending frontend changes before committing.
 
 Final verification from the free-pool UI batch:
 

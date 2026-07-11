@@ -1,18 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Button,
   Divider,
   Form,
   Grid,
   Header,
   Message,
-  Modal,
 } from 'semantic-ui-react';
 import { Link } from 'react-router-dom';
-import { API, showError, showSuccess, verifyJSON } from '../../helpers';
-import { marked } from 'marked';
-import { sanitizeHtml } from '../../helpers/sanitize';
+import { API, showError } from '../../helpers';
 
 const OtherSetting = () => {
   const { t } = useTranslation();
@@ -26,11 +22,6 @@ const OtherSetting = () => {
     Theme: '',
   });
   let [loading, setLoading] = useState(false);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const [updateData, setUpdateData] = useState({
-    tag_name: '',
-    content: '',
-  });
 
   const getOptions = async () => {
     const res = await API.get('/api/option/');
@@ -50,6 +41,7 @@ const OtherSetting = () => {
 
   useEffect(() => {
     getOptions().then();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const updateOption = async (key, value) => {
@@ -93,26 +85,6 @@ const OtherSetting = () => {
 
   const submitOption = async (key) => {
     await updateOption(key, inputs[key]);
-  };
-
-  const openGitHubRelease = () => {
-    window.location = 'https://github.com/songquanpeng/one-api/releases/latest';
-  };
-
-  const checkUpdate = async () => {
-    const res = await API.get(
-      'https://api.github.com/repos/songquanpeng/one-api/releases/latest'
-    );
-    const { tag_name, body } = res.data;
-    if (tag_name === process.env.REACT_APP_VERSION) {
-      showSuccess(`已是最新版本：${tag_name}`);
-    } else {
-      setUpdateData({
-        tag_name: tag_name,
-        content: sanitizeHtml(marked.parse(body)),
-      });
-      setShowUpdateModal(true);
-    }
   };
 
   return (
@@ -225,28 +197,6 @@ const OtherSetting = () => {
           </Form.Button>
         </Form>
       </Grid.Column>
-      <Modal
-        onClose={() => setShowUpdateModal(false)}
-        onOpen={() => setShowUpdateModal(true)}
-        open={showUpdateModal}
-      >
-        <Modal.Header>新版本：{updateData.tag_name}</Modal.Header>
-        <Modal.Content>
-          <Modal.Description>
-            <div dangerouslySetInnerHTML={{ __html: sanitizeHtml(updateData.content) }}></div>
-          </Modal.Description>
-        </Modal.Content>
-        <Modal.Actions>
-          <Button onClick={() => setShowUpdateModal(false)}>关闭</Button>
-          <Button
-            content='详情'
-            onClick={() => {
-              setShowUpdateModal(false);
-              openGitHubRelease();
-            }}
-          />
-        </Modal.Actions>
-      </Modal>
     </Grid>
   );
 };

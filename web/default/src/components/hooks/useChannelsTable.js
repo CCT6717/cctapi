@@ -93,6 +93,8 @@ export const useChannelsTable = (t) => {
           if (data.weight < 0) data.weight = 0;
           res = await channelApi.updateChannel(data);
           break;
+        default:
+          break;
       }
       const { success, message } = res.data;
       if (success) {

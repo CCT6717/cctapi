@@ -7,6 +7,7 @@ const Chat = () => {
     <iframe
       src={chatLink}
       style={{ width: '100%', height: '85vh', border: 'none' }}
+      title="chat"
     />
   );
 };

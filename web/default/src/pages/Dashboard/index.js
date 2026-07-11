@@ -56,6 +56,7 @@ const chartConfig = {
 const Dashboard = () => {
   const { t } = useTranslation();
   const [data, setData] = useState([]);
+  // eslint-disable-next-line no-unused-vars
   const [summaryData, setSummaryData] = useState({
     todayRequests: 0,
     todayQuota: 0,
@@ -64,6 +65,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchDashboardData = async () => {

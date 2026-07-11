@@ -33,8 +33,6 @@ const ChannelsTable = () => {
     activePage,
     searchKeyword,
     searching,
-    updatingBalance,
-    setActivePage,
     refresh,
     onPaginationChange,
     manageChannel,
@@ -44,7 +42,6 @@ const ChannelsTable = () => {
     testChannels,
     deleteAllDisabledChannels,
     updateChannelBalance,
-    updateAllChannelsBalance,
     handleKeywordChange,
     sortChannel,
   } = useChannelsTable(t);

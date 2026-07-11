@@ -32,8 +32,8 @@ const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
 
 function App() {
-  const [userState, userDispatch] = useContext(UserContext);
-  const [statusState, statusDispatch] = useContext(StatusContext);
+  const [, userDispatch] = useContext(UserContext);
+  const [, statusDispatch] = useContext(StatusContext);
 
   const loadUser = () => {
     let user = localStorage.getItem('user');
@@ -91,6 +91,7 @@ function App() {
         linkElement.href = logo;
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (

@@ -16,7 +16,6 @@ import {
   showError,
   showSuccess,
   showWarning,
-  timestamp2string,
 } from '../helpers';
 
 import { ITEMS_PER_PAGE } from '../constants';
@@ -81,8 +80,6 @@ const TokensTable = () => {
   const [activePage, setActivePage] = useState(1);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searching, setSearching] = useState(false);
-  const [showTopUpModal, setShowTopUpModal] = useState(false);
-  const [targetTokenIdx, setTargetTokenIdx] = useState(0);
   const [orderBy, setOrderBy] = useState('');
 
   const loadTokens = async (startIdx) => {
@@ -214,6 +211,7 @@ const TokensTable = () => {
       .catch((reason) => {
         showError(reason);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderBy]);
 
   const manageToken = async (id, action, idx) => {
@@ -230,6 +228,8 @@ const TokensTable = () => {
       case 'disable':
         data.status = 2;
         res = await API.put('/api/token/?status_only=true', data);
+        break;
+      default:
         break;
     }
     const { success, message } = res.data;

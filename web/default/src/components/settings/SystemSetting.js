@@ -206,21 +206,6 @@ const SystemSetting = () => {
     }
   };
 
-  const submitMessagePusher = async () => {
-    if (originInputs['MessagePusherAddress'] !== inputs.MessagePusherAddress) {
-      await updateOption(
-        'MessagePusherAddress',
-        removeTrailingSlash(inputs.MessagePusherAddress)
-      );
-    }
-    if (
-      originInputs['MessagePusherToken'] !== inputs.MessagePusherToken &&
-      inputs.MessagePusherToken !== ''
-    ) {
-      await updateOption('MessagePusherToken', inputs.MessagePusherToken);
-    }
-  };
-
   const submitGitHubOAuth = async () => {
     if (originInputs['GitHubClientId'] !== inputs.GitHubClientId) {
       await updateOption('GitHubClientId', inputs.GitHubClientId);
@@ -254,28 +239,6 @@ const SystemSetting = () => {
       inputs.TurnstileSecretKey !== ''
     ) {
       await updateOption('TurnstileSecretKey', inputs.TurnstileSecretKey);
-    }
-  };
-
-  const submitNewRestrictedDomain = () => {
-    const localDomainList = inputs.EmailDomainWhitelist;
-    if (
-      restrictedDomainInput !== '' &&
-      !localDomainList.includes(restrictedDomainInput)
-    ) {
-      setRestrictedDomainInput('');
-      setInputs({
-        ...inputs,
-        EmailDomainWhitelist: [...localDomainList, restrictedDomainInput],
-      });
-      setEmailDomainWhitelist([
-        ...EmailDomainWhitelist,
-        {
-          key: restrictedDomainInput,
-          text: restrictedDomainInput,
-          value: restrictedDomainInput,
-        },
-      ]);
     }
   };
 
@@ -503,7 +466,7 @@ const SystemSetting = () => {
           <Header as='h3'>{t('setting.system.github.title')}</Header>
           <Message>
             {t('setting.system.github.subtitle')}
-            <a href='https://github.com/settings/developers' target='_blank'>
+            <a href='https://github.com/settings/developers' target='_blank' rel='noreferrer'>
               {t('setting.system.github.manage_link')}
             </a>
             {t('setting.system.github.manage_text')}
@@ -540,7 +503,7 @@ const SystemSetting = () => {
             {t('setting.system.lark.title')}
             <Header.Subheader>
               {t('setting.system.lark.subtitle')}
-              <a href='https://open.feishu.cn/app' target='_blank'>
+              <a href='https://open.feishu.cn/app' target='_blank' rel='noreferrer'>
                 {t('setting.system.lark.manage_link')}
               </a>
               {t('setting.system.lark.manage_text')}
@@ -583,6 +546,7 @@ const SystemSetting = () => {
               <a
                 href='https://github.com/songquanpeng/wechat-server'
                 target='_blank'
+                rel='noreferrer'
               >
                 {t('setting.system.wechat.learn_more')}
               </a>
@@ -626,7 +590,7 @@ const SystemSetting = () => {
             {t('setting.system.turnstile.title')}
             <Header.Subheader>
               {t('setting.system.turnstile.subtitle')}
-              <a href='https://dash.cloudflare.com/' target='_blank'>
+              <a href='https://dash.cloudflare.com/' target='_blank' rel='noreferrer'>
                 {t('setting.system.turnstile.manage_link')}
               </a>
               {t('setting.system.turnstile.manage_text')}

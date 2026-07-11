@@ -72,6 +72,7 @@ const EditUser = () => {
     if (userId) {
       fetchGroups().then();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const submit = async () => {
