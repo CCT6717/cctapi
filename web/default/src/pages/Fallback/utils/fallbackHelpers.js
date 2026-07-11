@@ -99,6 +99,8 @@ export const STATUS_SORT_OPTIONS = [
 ];
 
 export const PANEL_REFRESH_INTERVALS = {
+  gateway: 15000,
+  'free-pool': 15000,
   status: 15000,
   metrics: 30000,
   scores: 15000,
@@ -168,6 +170,9 @@ export const formatTime = (value) => {
 };
 
 export const formatInterval = (milliseconds) => {
+  if (!milliseconds || !Number.isFinite(milliseconds)) {
+    return '-';
+  }
   if (milliseconds >= 60000) {
     return `${Math.round(milliseconds / 60000)} 分钟`;
   }
