@@ -11,6 +11,28 @@ import (
 	"gorm.io/gorm"
 )
 
+type countingLedgerMigrator struct {
+	gorm.Migrator
+	autoMigrateCalls *int
+}
+
+func (m countingLedgerMigrator) AutoMigrate(values ...interface{}) error {
+	*m.autoMigrateCalls++
+	return m.Migrator.AutoMigrate(values...)
+}
+
+type countingLedgerDialector struct {
+	gorm.Dialector
+	autoMigrateCalls int
+}
+
+func (d *countingLedgerDialector) Migrator(db *gorm.DB) gorm.Migrator {
+	return countingLedgerMigrator{
+		Migrator:         d.Dialector.Migrator(db),
+		autoMigrateCalls: &d.autoMigrateCalls,
+	}
+}
+
 func setupFreeProviderLedgerTestDB(t *testing.T) func() {
 	t.Helper()
 	originalDB := dbmodel.DB
@@ -21,6 +43,30 @@ func setupFreeProviderLedgerTestDB(t *testing.T) func() {
 	dbmodel.DB = db
 	return func() {
 		dbmodel.DB = originalDB
+	}
+}
+
+func TestInitFreeProviderLedgerStoreMigratesEachDatabaseOnlyOnce(t *testing.T) {
+	originalDB := dbmodel.DB
+	defer func() {
+		dbmodel.DB = originalDB
+	}()
+
+	dialector := &countingLedgerDialector{Dialector: sqlite.Open(":memory:")}
+	db, err := gorm.Open(dialector, &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open in-memory DB: %v", err)
+	}
+	dbmodel.DB = db
+
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("first InitFreeProviderLedgerStore failed: %v", err)
+	}
+	if err := InitFreeProviderLedgerStore(); err != nil {
+		t.Fatalf("second InitFreeProviderLedgerStore failed: %v", err)
+	}
+	if dialector.autoMigrateCalls != 1 {
+		t.Fatalf("expected one migration for one database, got %d", dialector.autoMigrateCalls)
 	}
 }
 

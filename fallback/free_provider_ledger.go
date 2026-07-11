@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/songquanpeng/one-api/model"
@@ -33,11 +34,29 @@ type FreeProviderUsageFilter struct {
 	Period    string
 }
 
+var freeProviderLedgerStore = struct {
+	sync.Mutex
+	initialized map[*gorm.DB]struct{}
+}{
+	initialized: make(map[*gorm.DB]struct{}),
+}
+
 func InitFreeProviderLedgerStore() error {
-	if model.DB == nil {
+	db := model.DB
+	if db == nil {
 		return fmt.Errorf("database is not initialized")
 	}
-	return model.DB.AutoMigrate(&FreeProviderUsageLedger{})
+
+	freeProviderLedgerStore.Lock()
+	defer freeProviderLedgerStore.Unlock()
+	if _, ok := freeProviderLedgerStore.initialized[db]; ok {
+		return nil
+	}
+	if err := db.AutoMigrate(&FreeProviderUsageLedger{}); err != nil {
+		return err
+	}
+	freeProviderLedgerStore.initialized[db] = struct{}{}
+	return nil
 }
 
 func parseAutoFreeDeploymentID(deploymentID string) (provider string, keyHash string, ok bool) {
