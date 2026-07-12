@@ -64,7 +64,8 @@ Last verified handoff: 2026-07-12.
   - `docs/openrouter-auto-stability-runbook.md`
   - `scripts/fallback-openrouter-auto-smoke.ps1`
 - OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
-- Current outstanding step: none. The ESLint cleanup batch is complete (0 warnings, 24 files modified, build artifacts refreshed). All changes are committed and merged to `main`; no blockers remain.
+- Current runtime binary has been rebuilt with the latest `web/build/default` assets and restarted on port `3008`.
+- Screenshot archive follow-up: authenticated Dashboard desktop/mobile captures are still missing. Re-capture them only with a valid administrator login; do not archive the login page as a Dashboard screenshot.
 
 Final verification from the ESLint cleanup batch:
 
