@@ -55,7 +55,7 @@ Submission note template:
 Latest verified run:
 
 - Time: `2026-07-12 22:45 +08:00`
-- Host: `DESKTOP-RKMPM1R`
+- Host: local Windows acceptance host
 - Branch/commit: `main` / `fd1006a`
 - Result:
   - Non-stream: `pass`
@@ -72,6 +72,10 @@ Latest verified run:
   - deploymentId: `free:openrouter-1f9cf7de`
   - runtimeRows: `1`
 - Conclusion: `PASS`
+- Evidence: [`evidence/openrouter-auto-2026-07-12.json`](evidence/openrouter-auto-2026-07-12.json)
+- Artifact hashes:
+  - `one-api.exe` SHA256: `FA010662AB4C825F2D97A6CBA236BB82A5F21E350FF453E5385A6F26C926526C`
+  - `main.3b53fcb6.js` SHA256: `53B74539EBAB5D9C8CFF5C7C73F7BC4A96421B5208AF6415FBBF3793B9FB9E9D`
 
 Recommended follow-up:
 
