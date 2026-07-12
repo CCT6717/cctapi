@@ -50,11 +50,11 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 
 ## Current Handoff
 
-Last verified handoff: 2026-07-12.
+Last verified handoff: 2026-07-13.
 
 - Branch `main` is pushed to `origin/main`.
 - Latest backend/runtime alignment commit: `9c75341 Merge feat/vite-migration: CRA -> Vite + Vitest + Storybook Vite builder`.
-- Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 8.6.14.
+- Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 10.5.0.
 - react-scripts and Webpack dependency chain fully removed.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
@@ -67,27 +67,14 @@ Last verified handoff: 2026-07-12.
   - `scripts/fallback-openrouter-auto-smoke.ps1`
 - OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
 - Current runtime binary has been rebuilt with the latest `web/build/default` assets and restarted on port `3008`.
-- Screenshot archive is complete: Vite migration screenshots stored under `screenshots/vite-migration/`.
-
-- Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `59ba393 chore: harden frontend dependency reproducibility`.
-- Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
-- Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
-- Added openrouter/auto production smoke playbook:
-  - `docs/openrouter-auto-acceptance-checklist.md`
-  - `docs/openrouter-auto-stability-submission.md`
-  - `docs/openrouter-auto-deployment-acceptance.md`
-  - `docs/openrouter-auto-final-submission-template.md`
-  - `docs/openrouter-auto-stability-runbook.md`
-  - `scripts/fallback-openrouter-auto-smoke.ps1`
-- OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
-- Current runtime binary has been rebuilt with the latest `web/build/default` assets and restarted on port `3008`.
-- Screenshot archive is complete: authenticated Dashboard desktop/mobile captures are stored as `screenshots/dashboard-desktop.png` and `screenshots/dashboard-mobile.png`. Keep login-page captures out of the archive.
+- Vite migration screenshots are verified under `screenshots/vite-migration/`: 7 pages at desktop (`1425x891`) and mobile (`360x640`) viewports, with distinct hashes and confirmed page content.
+- Post-review `openrouter/auto` smoke passed with non-stream, stream, usage, and fallback metric checks; `pageContainsOpenRouterAuto` remains informational.
 
 Final verification from the Vite migration batch:
 
 ```powershell
 cd D:\ct\project\web\default
+npm run lint
 npm test
 npm run build
 $env:STORYBOOK_DISABLE_TELEMETRY='1'; npm run build-storybook
@@ -101,26 +88,8 @@ curl.exe -I http://127.0.0.1:3008/
 
 Expected result from the latest pass:
 
-- Frontend tests: 8 suites passed, 35 tests passed (Vitest 3.2.7).
-- Frontend production build: passed (Vite 6.4.3), ESLint 0 errors.
-- Storybook build: passed with asset-size warnings only.
-- Local server on port 3008: HTTP 200.
-
-```powershell
-cd D:\ct\project\web\default
-npm test -- --watchAll=false
-npm run build
-$env:CI='true'; $env:STORYBOOK_DISABLE_TELEMETRY='1'; npm run build-storybook
-
-cd D:\ct\project
-go build -o one-api.exe .
-curl.exe -I http://127.0.0.1:3008/
-```
-
-Expected result from the latest pass:
-
-- Frontend tests: 8 suites passed, 35 tests passed.
-- Frontend production build: passed, ESLint warnings cleared (0 warnings).
+- Frontend tests: 9 suites passed, 36 tests passed (Vitest 3.2.7).
+- Frontend production build: passed (Vite 6.4.3), ESLint 0 errors and 0 warnings.
 - Storybook build: passed with asset-size warnings only.
 - Local server on port 3008: HTTP 200.
 
@@ -135,7 +104,7 @@ $env:PATH='D:\ct\tools\w64devkit-1.23.0\bin;' + $env:PATH
 
 Expected result from the latest pass:
 
-- Full Go tests: 14 packages passed, 0 failed.
+- Full Go tests: all packages passed, 0 failed.
 - Go build: passed.
 - `git diff --check`: no actual formatting errors, only Git line-ending warnings.
 
@@ -219,7 +188,7 @@ Focused tests:
 
 ```powershell
 cd D:\ct\project\web\default
-npm test -- --watchAll=false --runTestsByPath src/components/fallback-gateway/freePoolUtils.test.js src/components/fallback-gateway/freeProviderDisplay.test.js src/components/fallback-gateway/FreeModelPool.test.js src/pages/Fallback/index.test.js src/pages/Fallback/Fallback.test.js
+npm test -- src/components/fallback-gateway/freePoolUtils.test.js src/components/fallback-gateway/freeProviderDisplay.test.js src/components/fallback-gateway/FreeModelPool.test.jsx src/pages/Fallback/index.test.js src/pages/Fallback/Fallback.test.jsx
 ```
 
 ## Added CCT API Features

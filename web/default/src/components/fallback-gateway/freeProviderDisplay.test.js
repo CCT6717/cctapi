@@ -1,6 +1,4 @@
 import { formatLimit, validateLimits } from './freeProviderDisplay';
-import { vi } from 'vitest';
-
 describe('freeProviderDisplay', () => {
   test('formatLimit treats zero as unlimited', () => {
     expect(formatLimit(0)).toBe('不限');

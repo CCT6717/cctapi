@@ -39,7 +39,7 @@ const TopUp = () => {
       } else {
         showError(message);
       }
-    } catch (err) {
+    } catch {
       showError(t('topup.redeem_code.request_failed'));
     } finally {
       setIsSubmitting(false);
@@ -215,7 +215,7 @@ const TopUp = () => {
                                 const text =
                                   await navigator.clipboard.readText();
                                 setRedemptionCode(text.trim());
-                              } catch (err) {
+                              } catch {
                                 showError(t('topup.redeem_code.paste_error'));
                               }
                             }}

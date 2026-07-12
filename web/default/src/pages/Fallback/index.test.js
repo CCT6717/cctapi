@@ -1,6 +1,4 @@
 import { sortScoreItems } from './utils/scoreUtils';
-import { vi } from 'vitest';
-
 describe('sortScoreItems', () => {
   it('按分数从高到低排序，100 分必须排前面', () => {
     const result = sortScoreItems([

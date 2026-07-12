@@ -13,7 +13,6 @@ const DeploymentRow = ({
   statusMeta,
   ownerNames,
   ownerText,
-  vmKey,
   draftDeployments,
   currentMode,
   healthTesting,
@@ -41,7 +40,9 @@ const DeploymentRow = ({
         const res = await API.get(`/api/channel/${dep.channel_id}`);
         const { success, data } = res.data || {};
         if (success && data?.key) setRealKey(data.key);
-      } catch (e) { /* ignore */ }
+      } catch {
+        // The deployment remains editable even when the key cannot be loaded.
+      }
       setKeyLoading(false);
     }
     setShowKey((v) => !v);

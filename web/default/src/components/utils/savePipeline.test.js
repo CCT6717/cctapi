@@ -1,6 +1,4 @@
 import { buildSavePayload } from './savePipeline';
-import { vi } from 'vitest';
-
 describe('buildSavePayload', () => {
   test('fixed mode keeps fallback routing while pinning the preferred deployment', () => {
     const fresh = {

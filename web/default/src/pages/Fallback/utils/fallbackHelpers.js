@@ -354,7 +354,7 @@ export const loadMetricSamples = () => {
     return normalizeMetricSamples(
       JSON.parse(window.localStorage.getItem(METRIC_SAMPLE_STORAGE_KEY) || '[]')
     ).filter((sample) => sample.timestamp >= cutoff);
-  } catch (e) {
+  } catch {
     return [];
   }
 };
@@ -368,7 +368,7 @@ export const saveMetricSamples = (samples) => {
       METRIC_SAMPLE_STORAGE_KEY,
       JSON.stringify(samples)
     );
-  } catch (e) {
+  } catch {
     // Ignore storage failures; the panel can still use in-memory samples.
   }
 };

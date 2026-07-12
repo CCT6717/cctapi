@@ -20,6 +20,9 @@
     "fallback_metrics": "监控指标",
     "fallback_scores": "排序分数"
   },
+  "chat": {
+    "no_link_configured": "未配置聊天页面链接，请先在设置中配置聊天页面链接。"
+  },
   "topup": {
     "title": "充值中心",
     "get_code": {

@@ -49,7 +49,7 @@ const PasswordResetConfirm = () => {
     return () => clearInterval(countdownInterval);
   }, [disableButton, countdown]);
 
-  async function handleSubmit(e) {
+  async function handleSubmit() {
     setDisableButton(true);
     if (!email) return;
     setLoading(true);

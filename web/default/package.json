@@ -2,6 +2,7 @@
   "name": "react-template",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "antd": "^6.5.0",
     "axios": "1.18.1",
@@ -25,7 +26,8 @@
   },
   "scripts": {
     "start": "vite",
-    "build": "vite build && node scripts/sync-build.js",
+    "build": "vite build && node scripts/sync-build.cjs",
+    "lint": "eslint src --max-warnings=0",
     "test": "vitest run",
     "test:watch": "vitest",
     "storybook": "storybook dev -p 6006",
@@ -44,11 +46,9 @@
     ]
   },
   "devDependencies": {
-    "@storybook/addon-essentials": "^8.6.14",
-    "@storybook/builder-vite": "^8.6.14",
-    "@storybook/react": "^8.6.14",
-    "@storybook/react-vite": "^8.6.14",
-    "@storybook/test": "^8.6.14",
+    "@storybook/addon-docs": "10.5.0",
+    "@storybook/react-vite": "10.5.0",
+    "@testing-library/dom": "10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
@@ -61,7 +61,7 @@
     "globals": "^17.7.0",
     "jsdom": "^26.1.0",
     "prettier": "^2.7.1",
-    "storybook": "^8.6.14",
+    "storybook": "10.5.0",
     "vite": "^6.4.3",
     "vitest": "^3.2.7"
   },

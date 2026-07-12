@@ -73,7 +73,7 @@ export const useFallbackPage = () => {
       if (success) {
         setSummary(data);
       }
-    } catch (e) {
+    } catch {
       // silently fail
     }
   }, [admin]);

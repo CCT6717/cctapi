@@ -20,6 +20,9 @@
     "fallback_metrics": "Metrics",
     "fallback_scores": "Scores"
   },
+  "chat": {
+    "no_link_configured": "Chat page link is not configured. Configure it in settings first."
+  },
   "topup": {
     "title": "Top Up Center",
     "get_code": {

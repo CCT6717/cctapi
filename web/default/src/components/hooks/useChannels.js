@@ -40,7 +40,7 @@ export const useChannels = (scope = 'manual') => {
         models: (ch.models || '').split(',').map((m) => m.trim()).filter(Boolean),
       }));
       setChannels(parsed);
-    } catch (e) {
+    } catch {
       // 静默失败，渠道数据可选
     }
   }, [scope]);

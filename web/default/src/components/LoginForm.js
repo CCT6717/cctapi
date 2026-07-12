@@ -70,7 +70,7 @@ const LoginForm = () => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit() {
     if (username && password) {
       const res = await API.post(`/api/user/login`, {
         username,

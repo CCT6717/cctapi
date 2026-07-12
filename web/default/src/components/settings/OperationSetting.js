@@ -299,7 +299,7 @@ const OperationSetting = () => {
               value={historyTimestamp}
               type='datetime-local'
               name='history_timestamp'
-              onChange={(e, { name, value }) => {
+              onChange={(_event, { value }) => {
                 setHistoryTimestamp(value);
               }}
             />

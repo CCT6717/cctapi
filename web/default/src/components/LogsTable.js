@@ -242,8 +242,8 @@ const LogsTable = () => {
               (activePage - 1) * ITEMS_PER_PAGE,
               activePage * ITEMS_PER_PAGE
             )
-            .map((log, idx) => {
-              if (log.deleted) return <></>;
+            .map((log) => {
+              if (log.deleted) return null;
               return (
                 <Table.Row key={log.id}>
                   <Table.Cell>
@@ -323,7 +323,7 @@ const LogsTable = () => {
                 style={{ marginRight: '8px' }}
                 name='logType'
                 value={logType}
-                onChange={(e, { name, value }) => {
+                onChange={(_event, { value }) => {
                   setLogType(value);
                 }}
               />

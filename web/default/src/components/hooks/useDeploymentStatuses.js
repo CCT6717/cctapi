@@ -18,7 +18,7 @@ export const useDeploymentStatuses = () => {
       if (success && data) {
         setDeploymentStatuses(data);
       }
-    } catch (e) {
+    } catch {
       // 静默失败，状态数据可选
     }
   }, []);

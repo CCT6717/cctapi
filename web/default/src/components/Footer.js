@@ -44,7 +44,7 @@ const Footer = () => {
               target='_blank'
               rel='noreferrer'
             >
-              {systemName} {process.env.REACT_APP_VERSION}{' '}
+              {systemName} {import.meta.env.VITE_APP_VERSION}{' '}
             </a>
             {t('footer.built_by')}{' '}
             <a

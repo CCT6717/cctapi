@@ -90,9 +90,6 @@ const VirtualModelsEditor = ({ virtualModels, onChange }) => {
                         options={DEFAULT_POOL_OPTIONS}
                         value={Array.isArray(vm.pools) ? vm.pools : []}
                         onChange={(_, { value }) => updateVM(key, 'pools', value)}
-                        onAddItem={(_, { value }) => {
-                          // allowAdditions handles this automatically
-                        }}
                         style={{ minWidth: 240 }}
                         placeholder='选择或添加 pool'
                       />

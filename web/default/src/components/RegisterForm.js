@@ -69,7 +69,7 @@ const RegisterForm = () => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit() {
     if (password.length < 8) {
       showInfo(t('messages.error.password_length'));
       return;

@@ -43,9 +43,9 @@ export async function copy(text) {
   let okay = true;
   try {
     await navigator.clipboard.writeText(text);
-  } catch (e) {
+  } catch (error) {
     okay = false;
-    console.error(e);
+    console.error(error);
   }
   return okay;
 }
@@ -176,7 +176,7 @@ export function downloadTextAsFile(text, filename) {
 export const verifyJSON = (str) => {
   try {
     JSON.parse(str);
-  } catch (e) {
+  } catch {
     return false;
   }
   return true;

@@ -1,6 +1,6 @@
 const config = {
   stories: ['../src/**/*.stories.@(js|jsx)'],
-  addons: ['@storybook/addon-essentials'],
+  addons: ['@storybook/addon-docs'],
   framework: {
     name: '@storybook/react-vite',
     options: {},
