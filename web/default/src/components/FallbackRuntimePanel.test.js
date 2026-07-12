@@ -3,6 +3,9 @@ import { createRoot } from 'react-dom/client';
 import FallbackRuntimePanel from './FallbackRuntimePanel';
 import { API } from '../helpers';
 
+/* global globalThis */
+/* eslint-disable testing-library/no-unnecessary-act */
+
 jest.mock('../helpers', () => ({
   API: {
     get: jest.fn(),

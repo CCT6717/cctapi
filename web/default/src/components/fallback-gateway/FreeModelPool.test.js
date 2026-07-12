@@ -7,6 +7,9 @@ import {
   getRuntimeStatus,
 } from './gatewayConfigApi';
 
+/* global globalThis */
+/* eslint-disable testing-library/no-unnecessary-act */
+
 jest.mock('../../helpers', () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),

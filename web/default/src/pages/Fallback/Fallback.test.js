@@ -4,6 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import Fallback from './index';
 import { useFallbackPage } from './hooks/useFallbackPage';
 
+/* global globalThis */
+/* eslint-disable testing-library/no-unnecessary-act */
+
 jest.mock('./hooks/useFallbackPage', () => ({
   useFallbackPage: jest.fn(),
 }));
