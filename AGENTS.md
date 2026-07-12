@@ -65,7 +65,7 @@ Last verified handoff: 2026-07-12.
   - `scripts/fallback-openrouter-auto-smoke.ps1`
 - OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
 - Current runtime binary has been rebuilt with the latest `web/build/default` assets and restarted on port `3008`.
-- Screenshot archive follow-up: authenticated Dashboard desktop/mobile captures are still missing. Re-capture them only with a valid administrator login; do not archive the login page as a Dashboard screenshot.
+- Screenshot archive is complete: authenticated Dashboard desktop/mobile captures are stored as `screenshots/dashboard-desktop.png` and `screenshots/dashboard-mobile.png`. Keep login-page captures out of the archive.
 
 Final verification from the ESLint cleanup batch:
 
