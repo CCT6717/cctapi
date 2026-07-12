@@ -184,7 +184,10 @@
     },
     "buttons": {
       "copy": "复制",
-      "chat": "聊天",
+      "chat": {
+        "title": "聊天",
+        "no_link_configured": "未配置聊天页面链接，请在设置中配置聊天页面链接后访问。"
+      },
       "delete": "删除",
       "confirm_delete": "删除令牌",
       "enable": "启用",
