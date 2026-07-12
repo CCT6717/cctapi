@@ -184,7 +184,10 @@
     },
     "buttons": {
       "copy": "Copy",
-      "chat": "Chat",
+      "chat": {
+        "title": "Chat",
+        "no_link_configured": "Chat page link not configured. Please set it in settings before accessing."
+      },
       "delete": "Delete",
       "confirm_delete": "Delete Token",
       "enable": "Enable",
