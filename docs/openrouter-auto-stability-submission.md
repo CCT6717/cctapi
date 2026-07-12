@@ -88,6 +88,17 @@ Post-hardening verification:
   - `one-api.exe` SHA256: `98BAEF8F4694CABB822E163D691CD52EB1E8C17AD3E91FB11D385196D87C9B2E`
   - `main.7b346cd1.js` SHA256: `5958ACBB1DCA3EA4885B123E721AD97EAAF4298100EF2BEB7E875AA0B5F25ABF`
 
+Post-Vite-review verification:
+
+- Time: `2026-07-13 02:14 +08:00`
+- Branch/commit: `main` / `c5a0ed2`
+- Changes under verification: Vite config hardening, Storybook 10.5.0, strict ESLint, corrected responsive screenshots, Chat translation fix, and rebuilt embedded frontend.
+- Result: `PASS`
+- Evidence: [`evidence/openrouter-auto-2026-07-13-vite-review.json`](evidence/openrouter-auto-2026-07-13-vite-review.json)
+- Artifact hashes:
+  - `one-api.exe` SHA256: `01716AB9AB42FDED3B1243F461FF40886E0FF45ACC632B8364ABDC6F77D7BFC4`
+  - `index-BZLCYnQY.js` SHA256: `55B50150EBEA6B88ADE4CD6F9F2F3235E558DF31A2104D20F01E7280D36AB916`
+
 Recommended follow-up:
 
 - If openrouter routing succeeds but usage row count is unchanged, verify provider row replacement logic in `/api/fallback/free-pool/usage`.

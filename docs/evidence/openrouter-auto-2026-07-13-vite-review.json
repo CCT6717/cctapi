@@ -1,0 +1,50 @@
+{
+  "executionTime": "2026-07-13T02:14:00+08:00",
+  "environment": "local Windows acceptance host",
+  "operator": "Codex local acceptance",
+  "branch": "main",
+  "commit": "c5a0ed2",
+  "command": "powershell -ExecutionPolicy Bypass -File scripts/fallback-openrouter-auto-smoke.ps1 -OutputJson",
+  "result": {
+    "pass": true,
+    "baseUrl": "http://127.0.0.1:3008",
+    "model": "nvidia/nemotron-3-ultra-550b-a55b-20260604:free",
+    "deploymentId": "free:openrouter-1f9cf7de",
+    "usageRowsBefore": 1,
+    "usageRowsAfter": 1,
+    "runtimeRows": 1,
+    "usageRequestCount": 5,
+    "usageSuccessCount": 5,
+    "usageRequestDelta": 1,
+    "usageSuccessDelta": 1,
+    "fallbackRequestsDelta": 2,
+    "pageReachable": true,
+    "pageContainsOpenRouterAuto": false
+  },
+  "frontend": {
+    "lintWarnings": 0,
+    "testFiles": 9,
+    "tests": 36,
+    "storybookVersion": "10.5.0",
+    "npmAuditVulnerabilities": 0,
+    "screenshots": {
+      "count": 14,
+      "desktop": "1425x891",
+      "mobile": "360x640",
+      "duplicateHashes": 0
+    }
+  },
+  "artifacts": {
+    "one-api.exe": {
+      "sha256": "01716AB9AB42FDED3B1243F461FF40886E0FF45ACC632B8364ABDC6F77D7BFC4"
+    },
+    "web/build/default/static/index-BZLCYnQY.js": {
+      "sha256": "55B50150EBEA6B88ADE4CD6F9F2F3235E558DF31A2104D20F01E7280D36AB916"
+    }
+  },
+  "notes": [
+    "Non-stream and streaming requests passed after the Vite migration review fixes.",
+    "pageContainsOpenRouterAuto is informational for the unauthenticated SPA shell.",
+    "No API key, management token, password, session cookie, or machine hostname is stored in this evidence file."
+  ]
+}

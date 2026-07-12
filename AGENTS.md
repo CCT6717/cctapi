@@ -53,7 +53,7 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 Last verified handoff: 2026-07-13.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `9c75341 Merge feat/vite-migration: CRA -> Vite + Vitest + Storybook Vite builder`.
+- Latest backend/runtime alignment commit: `c5a0ed2 fix: harden Vite migration and release verification`.
 - Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 10.5.0.
 - react-scripts and Webpack dependency chain fully removed.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
