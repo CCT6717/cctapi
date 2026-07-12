@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
@@ -5,27 +6,26 @@ import Fallback from './index';
 import { useFallbackPage } from './hooks/useFallbackPage';
 
 /* global globalThis */
-/* eslint-disable testing-library/no-unnecessary-act */
 
-jest.mock('./hooks/useFallbackPage', () => ({
-  useFallbackPage: jest.fn(),
+vi.mock('./hooks/useFallbackPage', () => ({
+  useFallbackPage: vi.fn(),
 }));
 
-jest.mock('../../components/FallbackConfigPanel', () => () => (
+vi.mock('../../components/FallbackConfigPanel', () => ({ default: () => (
   <div>Gateway panel</div>
-));
+) }));
 
-jest.mock('../../components/fallback-gateway/FreeModelPool', () => () => (
+vi.mock('../../components/fallback-gateway/FreeModelPool', () => ({ default: () => (
   <div>Free pool panel</div>
-));
+) }));
 
-jest.mock('./panels/SummaryBar', () => () => <div>Summary bar</div>);
-jest.mock('./panels/StatusPanel', () => () => <div>Status panel</div>);
-jest.mock('./panels/MetricsPanel', () => () => <div>Metrics panel</div>);
-jest.mock('./panels/ScoresPanel', () => () => <div>Scores panel</div>);
-jest.mock('./panels/AlertsPanel', () => () => <div>Alerts panel</div>);
-jest.mock('./panels/LogsPanel', () => () => <div>Logs panel</div>);
-jest.mock('./panels/KpiCards', () => () => <div>Kpi cards</div>);
+vi.mock('./panels/SummaryBar', () => ({ default: () => <div>Summary bar</div> }));
+vi.mock('./panels/StatusPanel', () => ({ default: () => <div>Status panel</div> }));
+vi.mock('./panels/MetricsPanel', () => ({ default: () => <div>Metrics panel</div> }));
+vi.mock('./panels/ScoresPanel', () => ({ default: () => <div>Scores panel</div> }));
+vi.mock('./panels/AlertsPanel', () => ({ default: () => <div>Alerts panel</div> }));
+vi.mock('./panels/LogsPanel', () => ({ default: () => <div>Logs panel</div> }));
+vi.mock('./panels/KpiCards', () => ({ default: () => <div>Kpi cards</div> }));
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -43,18 +43,18 @@ const buildPageState = (overrides = {}) => ({
   metricSamples: [],
   metricRows: [],
   configMeta: {},
-  setStatusSort: jest.fn(),
-  setGuideOpen: jest.fn(),
+  setStatusSort: vi.fn(),
+  setGuideOpen: vi.fn(),
   statusDisplayRows: [],
   runtimeMetrics: {},
   runtimeHealth: {},
   metricTrendData: [],
   scoreTrend: [],
   scoreTrendGroups: [],
-  loadPanel: jest.fn(),
-  markAllAlertsRead: jest.fn(),
-  runDeploymentAction: jest.fn(),
-  exportMetricsCSV: jest.fn(),
+  loadPanel: vi.fn(),
+  markAllAlertsRead: vi.fn(),
+  runDeploymentAction: vi.fn(),
+  exportMetricsCSV: vi.fn(),
   admin: true,
   refreshInterval: 15000,
   ...overrides,
@@ -70,7 +70,7 @@ describe('Fallback shell', () => {
   let root;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
@@ -99,7 +99,7 @@ describe('Fallback shell', () => {
   };
 
   test('renders the modern fallback shell and refresh action', async () => {
-    const loadPanel = jest.fn();
+    const loadPanel = vi.fn();
     await renderFallback({ loadPanel });
 
     expect(container.textContent).toContain('Fallback 面板');

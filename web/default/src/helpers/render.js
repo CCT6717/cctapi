@@ -26,13 +26,13 @@ export function renderGroup(group) {
         rowGap: '6px',
       }}
     >
-      {groups.map((group) => {
+      {groups.map((group, index) => {
         if (group === 'vip' || group === 'pro') {
-          return <Label color='yellow'>{group}</Label>;
+          return <Label key={index} color='yellow'>{group}</Label>;
         } else if (group === 'svip' || group === 'premium') {
-          return <Label color='red'>{group}</Label>;
+          return <Label key={index} color='red'>{group}</Label>;
         }
-        return <Label>{group}</Label>;
+        return <Label key={index}>{group}</Label>;
       })}
     </div>
   );

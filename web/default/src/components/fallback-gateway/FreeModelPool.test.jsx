@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import FreeModelPool from './FreeModelPool';
@@ -8,24 +9,23 @@ import {
 } from './gatewayConfigApi';
 
 /* global globalThis */
-/* eslint-disable testing-library/no-unnecessary-act */
 
-jest.mock('../../helpers', () => ({
-  showError: jest.fn(),
-  showSuccess: jest.fn(),
+vi.mock('../../helpers', () => ({
+  showError: vi.fn(),
+  showSuccess: vi.fn(),
 }));
 
-jest.mock('./gatewayConfigApi', () => ({
-  cleanupDryRun: jest.fn(),
-  getFreePoolUsage: jest.fn(),
-  getGatewayConfig: jest.fn(),
-  getRuntimeStatus: jest.fn(),
-  reloadConfig: jest.fn(),
-  saveGatewayConfig: jest.fn(),
-  syncFreePool: jest.fn(),
+vi.mock('./gatewayConfigApi', () => ({
+  cleanupDryRun: vi.fn(),
+  getFreePoolUsage: vi.fn(),
+  getGatewayConfig: vi.fn(),
+  getRuntimeStatus: vi.fn(),
+  reloadConfig: vi.fn(),
+  saveGatewayConfig: vi.fn(),
+  syncFreePool: vi.fn(),
 }));
 
-jest.mock('semantic-ui-react', () => {
+vi.mock('semantic-ui-react', () => {
   const React = require('react');
   const passthrough = (tag) => ({ children, className }) =>
     React.createElement(tag, className ? { className } : null, children);
@@ -92,7 +92,7 @@ describe('FreeModelPool', () => {
   let root;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
