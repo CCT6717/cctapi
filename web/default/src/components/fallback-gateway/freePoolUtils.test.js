@@ -1,3 +1,4 @@
+import { vi } from 'vitest';
 import {
   buildClearKeysProviderConfig,
   buildBulkEnabledProviderConfig,
@@ -286,13 +287,13 @@ describe('freePoolUtils', () => {
 
   it('loads config and runtime data when usage endpoint fails', async () => {
     const result = await loadFreePoolDashboardData({
-      getGatewayConfig: jest.fn().mockResolvedValue({
+      getGatewayConfig: vi.fn().mockResolvedValue({
         data: { success: true, data: { free_providers: { groq: { enabled: true } } } },
       }),
-      getRuntimeStatus: jest.fn().mockResolvedValue({
+      getRuntimeStatus: vi.fn().mockResolvedValue({
         data: { success: true, data: [{ deployment_id: 'free:groq-1' }] },
       }),
-      getFreePoolUsage: jest.fn().mockRejectedValue(new Error('usage unavailable')),
+      getFreePoolUsage: vi.fn().mockRejectedValue(new Error('usage unavailable')),
     });
 
     expect(result.configData.data.free_providers.groq.enabled).toBe(true);
@@ -304,13 +305,13 @@ describe('freePoolUtils', () => {
 
   it('reports usage unavailable when usage response is unsuccessful', async () => {
     const result = await loadFreePoolDashboardData({
-      getGatewayConfig: jest.fn().mockResolvedValue({
+      getGatewayConfig: vi.fn().mockResolvedValue({
         data: { success: true, data: { free_providers: {} } },
       }),
-      getRuntimeStatus: jest.fn().mockResolvedValue({
+      getRuntimeStatus: vi.fn().mockResolvedValue({
         data: { success: true, data: [] },
       }),
-      getFreePoolUsage: jest.fn().mockResolvedValue({
+      getFreePoolUsage: vi.fn().mockResolvedValue({
         data: { success: false, message: 'sanitized usage lookup failed' },
       }),
     });

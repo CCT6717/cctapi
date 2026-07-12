@@ -2,20 +2,20 @@ import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import FallbackRuntimePanel from './FallbackRuntimePanel';
 import { API } from '../helpers';
+import { vi } from 'vitest';
 
 /* global globalThis */
-/* eslint-disable testing-library/no-unnecessary-act */
 
-jest.mock('../helpers', () => ({
+vi.mock('../helpers', () => ({
   API: {
-    get: jest.fn(),
-    post: jest.fn(),
+    get: vi.fn(),
+    post: vi.fn(),
   },
-  showError: jest.fn(),
-  showSuccess: jest.fn(),
+  showError: vi.fn(),
+  showSuccess: vi.fn(),
 }));
 
-jest.mock('semantic-ui-react', () => {
+vi.mock('semantic-ui-react', () => {
   const React = require('react');
   const passthrough = (tag) => ({ children, className }) =>
     React.createElement(tag, className ? { className } : null, children);
@@ -59,7 +59,7 @@ describe('FallbackRuntimePanel', () => {
   let root;
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
