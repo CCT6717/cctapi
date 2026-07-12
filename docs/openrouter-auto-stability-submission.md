@@ -52,6 +52,27 @@ Submission note template:
   - runtimeRows: `<count>`
 - Conclusion: `PASS` / `FAIL`
 
+Latest verified run:
+
+- Time: `2026-07-12 22:45 +08:00`
+- Host: `DESKTOP-RKMPM1R`
+- Branch/commit: `main` / `fd1006a`
+- Result:
+  - Non-stream: `pass`
+  - Stream: `pass`
+  - resolved model: `nvidia/nemotron-3-ultra-550b-a55b-20260604:free`
+  - usage rows before/after: `1 / 1`
+  - request_count: `1`
+  - success_count: `1`
+  - usageRequestDelta: `1`
+  - usageSuccessDelta: `1`
+  - fallback_requests_total delta: `2`
+  - pageReachable: `true`
+  - pageContainsOpenRouterAuto (informational): `false`
+  - deploymentId: `free:openrouter-1f9cf7de`
+  - runtimeRows: `1`
+- Conclusion: `PASS`
+
 Recommended follow-up:
 
 - If openrouter routing succeeds but usage row count is unchanged, verify provider row replacement logic in `/api/fallback/free-pool/usage`.
