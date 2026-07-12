@@ -53,7 +53,7 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 Last verified handoff: 2026-07-12.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `bd6f82e Merge cleanup/eslint-warnings`.
+- Latest backend/runtime alignment commit: `3111859 chore: rebuild frontend assets after latest verification`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
 - Added openrouter/auto production smoke playbook:
