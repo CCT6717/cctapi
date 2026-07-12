@@ -77,6 +77,17 @@ Latest verified run:
   - `one-api.exe` SHA256: `FA010662AB4C825F2D97A6CBA236BB82A5F21E350FF453E5385A6F26C926526C`
   - `main.3b53fcb6.js` SHA256: `53B74539EBAB5D9C8CFF5C7C73F7BC4A96421B5208AF6415FBBF3793B9FB9E9D`
 
+Post-hardening verification:
+
+- Time: `2026-07-13 00:23 +08:00`
+- Branch/commit: `main` / `59ba393`
+- Changes under verification: Axios `1.18.1`, committed npm lockfile, reproducible `npm ci`, rebuilt embedded frontend.
+- Result: `PASS`
+- Evidence: [`evidence/openrouter-auto-2026-07-13.json`](evidence/openrouter-auto-2026-07-13.json)
+- Artifact hashes:
+  - `one-api.exe` SHA256: `98BAEF8F4694CABB822E163D691CD52EB1E8C17AD3E91FB11D385196D87C9B2E`
+  - `main.7b346cd1.js` SHA256: `5958ACBB1DCA3EA4885B123E721AD97EAAF4298100EF2BEB7E875AA0B5F25ABF`
+
 Recommended follow-up:
 
 - If openrouter routing succeeds but usage row count is unchanged, verify provider row replacement logic in `/api/fallback/free-pool/usage`.

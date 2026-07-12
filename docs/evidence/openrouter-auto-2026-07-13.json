@@ -1,0 +1,37 @@
+{
+  "executionTime": "2026-07-13T00:23:00+08:00",
+  "environment": "local Windows acceptance host",
+  "operator": "Codex local acceptance",
+  "branch": "main",
+  "commit": "59ba393",
+  "command": "powershell -ExecutionPolicy Bypass -File scripts/fallback-openrouter-auto-smoke.ps1 -OutputJson",
+  "result": {
+    "pass": true,
+    "baseUrl": "http://127.0.0.1:3008",
+    "model": "nvidia/nemotron-3.5-content-safety-20260604:free",
+    "deploymentId": "free:openrouter-1f9cf7de",
+    "usageRowsBefore": 1,
+    "usageRowsAfter": 1,
+    "runtimeRows": 1,
+    "usageRequestCount": 4,
+    "usageSuccessCount": 4,
+    "usageRequestDelta": 2,
+    "usageSuccessDelta": 2,
+    "fallbackRequestsDelta": 2,
+    "pageReachable": true,
+    "pageContainsOpenRouterAuto": false
+  },
+  "artifacts": {
+    "one-api.exe": {
+      "sha256": "98BAEF8F4694CABB822E163D691CD52EB1E8C17AD3E91FB11D385196D87C9B2E"
+    },
+    "web/build/default/static/js/main.7b346cd1.js": {
+      "sha256": "5958ACBB1DCA3EA4885B123E721AD97EAAF4298100EF2BEB7E875AA0B5F25ABF"
+    }
+  },
+  "notes": [
+    "Non-stream and streaming requests passed after the dependency hardening rebuild.",
+    "pageContainsOpenRouterAuto is informational for the unauthenticated SPA shell.",
+    "No API key, management token, password, session cookie, or machine hostname is stored in this evidence file."
+  ]
+}
