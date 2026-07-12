@@ -53,7 +53,7 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 Last verified handoff: 2026-07-12.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `6b8a81f chore: add puppeteer-core for screenshot automation and clean failed captures`.
+- Latest backend/runtime alignment commit: `71085fe docs: record successful openrouter auto acceptance`.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
 - Added openrouter/auto production smoke playbook:
