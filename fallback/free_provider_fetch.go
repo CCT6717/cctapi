@@ -21,6 +21,8 @@ type openRouterModelsResponse struct {
 
 const maxFreeProviderCatalogResponseBytes = 8 << 20
 
+const freeProviderCatalogRequestTimeout = 15 * time.Second
+
 type openRouterCreditsResponse struct {
 	Data struct {
 		TotalCredits float64 `json:"total_credits"`
@@ -85,7 +87,7 @@ func fetchOpenRouterModels(key string) ([]string, error) {
 }
 
 func fetchOpenRouterCatalog(key string) (FreeProviderCatalogCandidate, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), freeProviderCatalogRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://openrouter.ai/api/v1/models", nil)
 	if err != nil {
@@ -171,7 +173,7 @@ func fetchKiloModels() ([]string, error) {
 }
 
 func fetchKiloCatalog() (FreeProviderCatalogCandidate, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), freeProviderCatalogRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.kilo.ai/api/gateway/models", nil)
 	if err != nil {
@@ -296,7 +298,7 @@ func fetchOVHChatCatalog(baseURL, key string) (FreeProviderCatalogCandidate, err
 
 func fetchOpenAICompatModelsBody(baseURL, key string) ([]byte, error) {
 	modelsURL := strings.TrimRight(baseURL, "/") + "/models"
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), freeProviderCatalogRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
 	if err != nil {
@@ -412,7 +414,7 @@ func validateUpstreamCatalogModelID(rawID string, seen map[string]struct{}) (str
 }
 
 func queryOpenRouterCredits(key string) (float64, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), freeProviderCatalogRequestTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://openrouter.ai/api/v1/credits", nil)
 	if err != nil {

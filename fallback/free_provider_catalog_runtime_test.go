@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseKiloFreeCatalogExtractsPerModelCapabilities(t *testing.T) {
@@ -284,5 +285,11 @@ func TestReadFreeProviderCatalogResponseBodyRejectsOversizedPayload(t *testing.T
 	_, err := readFreeProviderCatalogResponseBody(response)
 	if err == nil || !strings.Contains(err.Error(), "exceeds") {
 		t.Fatalf("error = %v, want oversized catalog rejection", err)
+	}
+}
+
+func TestFreeProviderCatalogRequestTimeoutAllowsSlowCatalogs(t *testing.T) {
+	if freeProviderCatalogRequestTimeout < 10*time.Second {
+		t.Fatalf("catalog request timeout = %s, want at least 10s for slow public catalogs", freeProviderCatalogRequestTimeout)
 	}
 }
