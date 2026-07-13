@@ -2,7 +2,12 @@ import { vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import FreeModelPool from './FreeModelPool';
-import { showSuccess, showWarning } from '../../helpers';
+import {
+  API,
+  showError,
+  showSuccess,
+  showWarning,
+} from '../../helpers';
 import {
   getFreePoolUsage,
   getGatewayConfig,
@@ -13,6 +18,9 @@ import {
 /* global globalThis */
 
 vi.mock('../../helpers', () => ({
+  API: {
+    post: vi.fn(),
+  },
   showError: vi.fn(),
   showSuccess: vi.fn(),
   showWarning: vi.fn(),
@@ -127,6 +135,25 @@ describe('FreeModelPool', () => {
       root.unmount();
     });
     container.remove();
+  });
+
+  test('sync API accepts HTTP 500 locally but leaves other errors to the interceptor', async () => {
+    API.post.mockResolvedValue({ data: {} });
+    const { syncFreePool: syncFreePoolRequest } = await vi.importActual('./gatewayConfigApi');
+
+    await syncFreePoolRequest();
+
+    expect(API.post).toHaveBeenCalledWith(
+      '/api/fallback/free-pool/sync',
+      undefined,
+      { validateStatus: expect.any(Function) },
+    );
+    const validateStatus = API.post.mock.calls[0][2].validateStatus;
+    expect(validateStatus(200)).toBe(true);
+    expect(validateStatus(299)).toBe(true);
+    expect(validateStatus(500)).toBe(true);
+    expect(validateStatus(401)).toBe(false);
+    expect(validateStatus(503)).toBe(false);
   });
 
   test('renders usage unavailable state instead of the no-usage row', async () => {
@@ -252,6 +279,7 @@ describe('FreeModelPool', () => {
             attempted: 3,
             succeeded: 2,
             failed: 1,
+            skipped: 0,
             results: [{ provider: 'ovh', success: false, error: 'upstream unavailable' }],
           },
         },
@@ -272,9 +300,140 @@ describe('FreeModelPool', () => {
     });
 
     await vi.waitFor(() => {
-      expect(showWarning).toHaveBeenCalledWith(expect.stringContaining('1 个目录刷新失败'));
+      expect(showWarning).toHaveBeenCalledWith(
+        '免费池同步未完整完成：尝试刷新 3 个目录，2 个成功，1 个目录刷新失败，0 个目录被跳过',
+      );
+      expect(getGatewayConfig).toHaveBeenCalledTimes(2);
     });
     expect(showSuccess).not.toHaveBeenCalled();
+  });
+
+  test('uses the catalog report when a partial sync response has success false', async () => {
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: true, data: [] },
+    });
+    syncFreePool.mockResolvedValue({
+      data: {
+        success: false,
+        message: 'free pool synced with catalog refresh failures',
+        data: {
+          catalog_sync: {
+            attempted: 5,
+            succeeded: 3,
+            failed: 2,
+            skipped: 0,
+          },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    const syncButton = findButtonByText(container, '同步并刷新目录');
+    await act(async () => {
+      syncButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(showWarning).toHaveBeenCalledWith(
+        '免费池同步未完整完成：尝试刷新 5 个目录，3 个成功，2 个目录刷新失败，0 个目录被跳过',
+      );
+      expect(getGatewayConfig).toHaveBeenCalledTimes(2);
+    });
+    expect(showError).not.toHaveBeenCalled();
+    expect(showSuccess).not.toHaveBeenCalled();
+  });
+
+  test('warns with all catalog counts when a successful sync skips refreshes', async () => {
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: true, data: [] },
+    });
+    syncFreePool.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          catalog_sync: {
+            attempted: 4,
+            succeeded: 3,
+            failed: 0,
+            skipped: 1,
+          },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    const syncButton = findButtonByText(container, '同步并刷新目录');
+    await act(async () => {
+      syncButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(showWarning).toHaveBeenCalledWith(
+        '免费池同步未完整完成：尝试刷新 4 个目录，3 个成功，0 个目录刷新失败，1 个目录被跳过',
+      );
+      expect(getGatewayConfig).toHaveBeenCalledTimes(2);
+    });
+    expect(showSuccess).not.toHaveBeenCalled();
+  });
+
+  test('shows the backend message from an HTTP 500 sync response', async () => {
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: true, data: [] },
+    });
+    syncFreePool.mockResolvedValue({
+      status: 500,
+      data: {
+        success: false,
+        message: '目录刷新服务暂时不可用',
+      },
+    });
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    const syncButton = findButtonByText(container, '同步并刷新目录');
+    await act(async () => {
+      syncButton.click();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(showError).toHaveBeenCalledWith('目录刷新服务暂时不可用');
+    });
+    expect(getGatewayConfig).toHaveBeenCalledTimes(1);
+  });
+
+  test('handles a swallowed sync response without dereferencing undefined', async () => {
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: true, data: [] },
+    });
+    syncFreePool.mockResolvedValue(undefined);
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    const syncButton = findButtonByText(container, '同步并刷新目录');
+    await act(async () => {
+      syncButton.click();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(showError).toHaveBeenCalledWith('免费池同步失败');
+    });
+    expect(getGatewayConfig).toHaveBeenCalledTimes(1);
   });
 
   test('filters provider rows and stages bulk disable for selected visible providers', async () => {

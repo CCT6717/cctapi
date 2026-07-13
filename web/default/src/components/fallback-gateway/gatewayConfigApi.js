@@ -16,7 +16,9 @@ export const reloadConfig = () =>
   API.post('/api/fallback/config/reload');
 
 export const syncFreePool = () =>
-  API.post('/api/fallback/free-pool/sync');
+  API.post('/api/fallback/free-pool/sync', undefined, {
+    validateStatus: (status) => (status >= 200 && status < 300) || status === 500,
+  });
 
 export const cleanupDryRun = () =>
   API.post('/api/fallback/free-pool/cleanup/dry-run');

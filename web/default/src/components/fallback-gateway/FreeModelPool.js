@@ -232,22 +232,30 @@ const FreeModelPool = () => {
     setActingAction('sync');
     try {
       const res = await syncFreePool();
-      const catalogSync = res.data?.data?.catalog_sync;
-      if (res.data?.success === false && !catalogSync) {
-        showError(res.data?.message || '免费池同步失败');
+      const responseData = res?.data;
+      if (!responseData) {
+        showError('免费池同步失败');
         return;
       }
 
+      const catalogSync = responseData.data?.catalog_sync;
       const attempted = Number(catalogSync?.attempted || 0);
       const failed = Number(catalogSync?.failed || 0);
       const succeeded = Number(catalogSync?.succeeded || 0);
-      if (failed > 0) {
+      const skipped = Number(catalogSync?.skipped || 0);
+      if (catalogSync && (failed > 0 || skipped > 0)) {
         showWarning(
-          `免费池同步完成：尝试刷新 ${attempted} 个目录，${succeeded} 个成功，${failed} 个目录刷新失败`,
+          `免费池同步未完整完成：尝试刷新 ${attempted} 个目录，${succeeded} 个成功，${failed} 个目录刷新失败，${skipped} 个目录被跳过`,
         );
-      } else {
-        showSuccess('免费池同步与目录刷新完成');
+        await loadAll(true);
+        return;
       }
+      if (responseData.success === false) {
+        showError(responseData.message || '免费池同步失败');
+        return;
+      }
+
+      showSuccess('免费池同步与目录刷新完成');
       await loadAll(true);
     } catch (e) {
       showError(e.message || '免费池同步失败');
