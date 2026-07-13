@@ -325,10 +325,10 @@ if ($OutputJson) {
     usageRowsBefore = $usageBeforeCount
     usageRowsAfter = $usageAfterCount
     runtimeRows = $runtimeRows.Count
-    usageRequestCount = $usageRequestCountAfter
-    usageSuccessCount = $usageSuccessCountAfter
-    usageRequestDelta = $usageRequestDelta
-    usageSuccessDelta = $usageSuccessDelta
+    usageRequestCount = [long]$usageRequestCountAfter
+    usageSuccessCount = [long]$usageSuccessCountAfter
+    usageRequestDelta = [long]$usageRequestDelta
+    usageSuccessDelta = [long]$usageSuccessDelta
     fallbackRequestsDelta = $delta
     pageReachable = $pageReachable
     pageContainsOpenRouterAuto = $pageHasOpenRouterAuto
