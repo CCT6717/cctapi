@@ -19,6 +19,7 @@ function Request-Fallback {
     [string]$Path,
     [string]$Token,
     [object]$Body = $null,
+    [int]$RequestTimeoutSec = 0,
     [switch]$NoRedirect
   )
 
@@ -27,10 +28,11 @@ function Request-Fallback {
     $headers = @{ Authorization = "Bearer $Token" }
   }
 
+  $effectiveTimeoutSec = if ($RequestTimeoutSec -gt 0) { $RequestTimeoutSec } else { $TimeoutSec }
   $params = @{
     Uri = "$BaseUrl$Path"
     Method = $Method
-    TimeoutSec = $TimeoutSec
+    TimeoutSec = $effectiveTimeoutSec
     UseBasicParsing = $true
   }
   if ($headers) {
@@ -259,30 +261,46 @@ if ($streamResp.Content -notmatch "data:") {
 Write-Host "Stream request passed."
 
 Write-Host "==> 7) Validate usage and counters after request"
+$expectedUsageDelta = 2
 $metricsAfterRaw = (Request-Fallback -Method GET -Path "/metrics" -Token $AdminToken).Content
 $metricsAfter = Parse-Metrics -Text $metricsAfterRaw
-$usageAfterRaw = Request-Fallback -Method GET -Path "/api/fallback/free-pool/usage?provider=$ExpectedProvider" -Token $AdminToken
-$usageAfter = Parse-UsageResponse -Text $usageAfterRaw.Content -Path "/api/fallback/free-pool/usage?provider=$ExpectedProvider"
-$usageAfterCount = @($usageAfter | Measure-Object).Count
+$usageDeadline = [DateTime]::UtcNow.AddSeconds($TimeoutSec)
+do {
+  $usageRemainingMs = ($usageDeadline - [DateTime]::UtcNow).TotalMilliseconds
+  if ($usageRemainingMs -le 0) {
+    break
+  }
+  $usageRequestTimeoutSec = [Math]::Max(1, [int][Math]::Ceiling($usageRemainingMs / 1000))
+  $usageAfterRaw = Request-Fallback -Method GET -Path "/api/fallback/free-pool/usage?provider=$ExpectedProvider" -Token $AdminToken -RequestTimeoutSec $usageRequestTimeoutSec
+  $usageAfter = Parse-UsageResponse -Text $usageAfterRaw.Content -Path "/api/fallback/free-pool/usage?provider=$ExpectedProvider"
+  $usageAfterCount = @($usageAfter | Measure-Object).Count
+  $providerRowsAfter = @($usageAfter | Where-Object { $_.provider -eq $ExpectedProvider })
+  $usageRequestCountAfter = Get-UsageTotal -Rows $providerRowsAfter -Property "request_count"
+  $usageSuccessCountAfter = Get-UsageTotal -Rows $providerRowsAfter -Property "success_count"
+  $usageRequestDelta = $usageRequestCountAfter - $usageRequestCountBefore
+  $usageSuccessDelta = $usageSuccessCountAfter - $usageSuccessCountBefore
+  if ($providerRowsAfter.Count -ge 1 -and $usageRequestDelta -ge $expectedUsageDelta -and $usageSuccessDelta -ge $expectedUsageDelta) {
+    break
+  }
+  $usageRemainingMs = ($usageDeadline - [DateTime]::UtcNow).TotalMilliseconds
+  if ($usageRemainingMs -le 0) {
+    break
+  }
+  Start-Sleep -Milliseconds ([Math]::Min(250, [int][Math]::Floor($usageRemainingMs)))
+} while ($true)
 
 if ($usageAfterCount -le 0) {
   throw "Usage query returned zero rows for provider=$ExpectedProvider."
 }
-
-$providerRowsAfter = @($usageAfter | Where-Object { $_.provider -eq $ExpectedProvider })
 if ($providerRowsAfter.Count -lt 1) {
   throw "Usage query has data but no provider=$ExpectedProvider row."
 }
-$usageRequestCountAfter = Get-UsageTotal -Rows $providerRowsAfter -Property "request_count"
-$usageSuccessCountAfter = Get-UsageTotal -Rows $providerRowsAfter -Property "success_count"
-$usageRequestDelta = $usageRequestCountAfter - $usageRequestCountBefore
-$usageSuccessDelta = $usageSuccessCountAfter - $usageSuccessCountBefore
 Assert-Int "usage request_count" 1 $usageRequestCountAfter
-if ($usageRequestDelta -le 0) {
-  throw "usage request_count did not increase (before=$usageRequestCountBefore, after=$usageRequestCountAfter)."
+if ($usageRequestDelta -lt $expectedUsageDelta) {
+  throw "usage request_count did not record both smoke requests (expected delta >= $expectedUsageDelta, before=$usageRequestCountBefore, after=$usageRequestCountAfter)."
 }
-if ($usageSuccessDelta -le 0) {
-  throw "usage success_count did not increase (before=$usageSuccessCountBefore, after=$usageSuccessCountAfter)."
+if ($usageSuccessDelta -lt $expectedUsageDelta) {
+  throw "usage success_count did not record both smoke requests (expected delta >= $expectedUsageDelta, before=$usageSuccessCountBefore, after=$usageSuccessCountAfter)."
 }
 Write-Host "Usage recorded for provider '$ExpectedProvider' (rows=$($providerRowsAfter.Count))."
 Write-Host "Usage deltas: request_count +$usageRequestDelta, success_count +$usageSuccessDelta"

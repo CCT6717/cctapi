@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
 type smokeFixture struct {
@@ -22,14 +23,17 @@ type smokeFixture struct {
 }
 
 type smokeFixtureOptions struct {
-	metricBefore       string
-	metricAfter        string
-	usageRequestBefore int64
-	usageSuccessBefore int64
-	usageRequestDelta  int64
-	usageSuccessDelta  int64
-	redirectPage       bool
-	redirectFollowed   *int64
+	metricBefore                string
+	metricAfter                 string
+	usageRequestBefore          int64
+	usageSuccessBefore          int64
+	usageRequestDelta           int64
+	usageSuccessDelta           int64
+	usagePartialVisibilityCalls int64
+	usageFirstPollDelay         time.Duration
+	usageObservedCalls          *int64
+	redirectPage                bool
+	redirectFollowed            *int64
 }
 
 type smokeSummary struct {
@@ -118,6 +122,44 @@ func TestOpenRouterAutoSmokeSupportsInt64UsageCounters(t *testing.T) {
 	}
 	if summary.UsageSuccessDelta != options.usageSuccessDelta {
 		t.Fatalf("usageSuccessDelta=%d, want %d", summary.UsageSuccessDelta, options.usageSuccessDelta)
+	}
+}
+
+func TestOpenRouterAutoSmokeWaitsForCompleteUsageAccounting(t *testing.T) {
+	options := defaultSmokeFixtureOptions()
+	options.usagePartialVisibilityCalls = 2
+	server := newSmokeServer(t, options)
+	defer server.Close()
+
+	output, err := runOpenRouterAutoSmoke(t, server.URL)
+	if err != nil {
+		t.Fatalf("smoke script did not wait for complete usage accounting: %v\noutput:\n%s", err, output)
+	}
+
+	summary := parseSmokeSummary(t, output)
+	if summary.UsageRequestDelta != options.usageRequestDelta {
+		t.Fatalf("usageRequestDelta=%d, want %d", summary.UsageRequestDelta, options.usageRequestDelta)
+	}
+	if summary.UsageSuccessDelta != options.usageSuccessDelta {
+		t.Fatalf("usageSuccessDelta=%d, want %d", summary.UsageSuccessDelta, options.usageSuccessDelta)
+	}
+}
+
+func TestOpenRouterAutoSmokeDoesNotPollUsagePastDeadline(t *testing.T) {
+	var usageCalls int64
+	options := defaultSmokeFixtureOptions()
+	options.usagePartialVisibilityCalls = 100
+	options.usageFirstPollDelay = 800 * time.Millisecond
+	options.usageObservedCalls = &usageCalls
+	server := newSmokeServer(t, options)
+	defer server.Close()
+
+	output, err := runOpenRouterAutoSmokeWithTimeout(t, server.URL, 1)
+	if err == nil {
+		t.Fatalf("smoke script accepted incomplete usage accounting; output:\n%s", output)
+	}
+	if got := atomic.LoadInt64(&usageCalls); got != 2 {
+		t.Fatalf("usage endpoint called %d times, want 2 (baseline plus one deadline-bounded poll)\noutput:\n%s", got, output)
 	}
 }
 
@@ -226,11 +268,27 @@ func newSmokeServer(t *testing.T, options smokeFixtureOptions) *httptest.Server 
 			fmt.Fprintf(w, "# TYPE fallback_requests_total counter\n%s", samples)
 		case "/api/fallback/free-pool/usage":
 			call := atomic.AddInt64(&fixture.usageCalls, 1)
+			if fixture.options.usageObservedCalls != nil {
+				atomic.StoreInt64(fixture.options.usageObservedCalls, call)
+			}
+			if call == 2 && fixture.options.usageFirstPollDelay > 0 {
+				time.Sleep(fixture.options.usageFirstPollDelay)
+			}
 			requestCount := fixture.options.usageRequestBefore
 			successCount := fixture.options.usageSuccessBefore
 			if call > 1 {
-				requestCount += fixture.options.usageRequestDelta
-				successCount += fixture.options.usageSuccessDelta
+				requestDelta := fixture.options.usageRequestDelta
+				successDelta := fixture.options.usageSuccessDelta
+				if call <= 1+fixture.options.usagePartialVisibilityCalls {
+					if requestDelta > 0 {
+						requestDelta--
+					}
+					if successDelta > 0 {
+						successDelta--
+					}
+				}
+				requestCount += requestDelta
+				successCount += successDelta
 			}
 			writeJSON(t, w, map[string]any{
 				"success": true,
@@ -301,6 +359,10 @@ func writeJSON(t *testing.T, w http.ResponseWriter, value any) {
 }
 
 func runOpenRouterAutoSmoke(t *testing.T, baseURL string) ([]byte, error) {
+	return runOpenRouterAutoSmokeWithTimeout(t, baseURL, 5)
+}
+
+func runOpenRouterAutoSmokeWithTimeout(t *testing.T, baseURL string, timeoutSec int) ([]byte, error) {
 	t.Helper()
 
 	powerShell := findPowerShell(t)
@@ -319,7 +381,7 @@ func runOpenRouterAutoSmoke(t *testing.T, baseURL string) ([]byte, error) {
 		"-BaseUrl", baseURL,
 		"-ApiToken", "fake-api-token",
 		"-AdminToken", "fake-admin-token",
-		"-TimeoutSec", "5",
+		"-TimeoutSec", fmt.Sprint(timeoutSec),
 		"-OutputJson",
 	)
 	cmd.Env = withoutEnvironmentVariables(os.Environ(), "CCT_API_TOKEN", "CCT_ADMIN_TOKEN")
