@@ -173,7 +173,7 @@ func markFreeProviderCatalogFailure(deploymentID, provider, source string, attem
 	defer freeProviderCatalogWriteMu.Unlock()
 
 	attemptedAt = attemptedAt.UTC()
-	errorText := strings.TrimSpace(syncErr.Error())
+	errorText := sanitizeFreeProviderCatalogError(syncErr, "")
 	var record freeProviderCatalogRecord
 	err := dbmodel.DB.Where("deployment_id = ?", deploymentID).First(&record).Error
 	switch {

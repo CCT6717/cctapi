@@ -232,12 +232,12 @@ const FreeModelPool = () => {
     setActingAction('sync');
     try {
       const res = await syncFreePool();
-      if (res.data?.success === false) {
+      const catalogSync = res.data?.data?.catalog_sync;
+      if (res.data?.success === false && !catalogSync) {
         showError(res.data?.message || '免费池同步失败');
         return;
       }
 
-      const catalogSync = res.data?.data?.catalog_sync;
       const attempted = Number(catalogSync?.attempted || 0);
       const failed = Number(catalogSync?.failed || 0);
       const succeeded = Number(catalogSync?.succeeded || 0);

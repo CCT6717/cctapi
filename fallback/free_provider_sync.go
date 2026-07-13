@@ -629,8 +629,9 @@ func sanitizeFreeProviderCatalogError(err error, key string) string {
 	}
 	message = strings.Join(strings.Fields(message), " ")
 	const maxErrorLength = 512
-	if len(message) > maxErrorLength {
-		message = message[:maxErrorLength]
+	runes := []rune(message)
+	if len(runes) > maxErrorLength {
+		message = string(runes[:maxErrorLength])
 	}
 	return message
 }

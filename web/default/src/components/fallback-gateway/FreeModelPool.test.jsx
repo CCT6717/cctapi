@@ -246,7 +246,7 @@ describe('FreeModelPool', () => {
     });
     syncFreePool.mockResolvedValue({
       data: {
-        success: true,
+        success: false,
         data: {
           catalog_sync: {
             attempted: 3,
