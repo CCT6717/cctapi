@@ -81,8 +81,9 @@ const ChannelsTable = () => {
           {t('channel.detail_notice')}
         </Message>
       )}
-      <Table basic={'very'} compact size='small'>
-        <Table.Header>
+      <div className='table-responsive-wrapper'>
+        <Table basic={'very'} compact size='small' unstackable>
+          <Table.Header>
           <Table.Row>
             <Table.HeaderCell
               style={{ cursor: 'pointer' }}
@@ -370,8 +371,9 @@ const ChannelsTable = () => {
               </Button>
             </Table.HeaderCell>
           </Table.Row>
-        </Table.Footer>
-      </Table>
+          </Table.Footer>
+        </Table>
+      </div>
     </>
   );
 };

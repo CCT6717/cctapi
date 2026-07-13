@@ -192,3 +192,29 @@ code {
   font-size: 14px !important;
 }
 
+/* These routes are lazy-loaded, so shared responsive rules must stay global. */
+@media (max-width: 768px) {
+  .settings-tab {
+    display: flex;
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  .settings-tab .item {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .table-responsive-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table-responsive-wrapper .ui.table {
+    min-width: 900px;
+    margin-bottom: 0;
+  }
+}

@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  frontend:
+    name: Frontend Build & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web/default
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: web/default/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build production
+        run: npm run build
+
+      - name: Build Storybook
+        run: npm run build-storybook -- --quiet
+        env:
+          STORYBOOK_DISABLE_TELEMETRY: "1"
+
+  go:
+    name: Go Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Run Go tests
+        run: go test ./... -count=1
+
+      - name: Build Go binary
+        run: go build -o one-api.exe .
+
+  repository-checks:
+    name: Repository Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for merge conflicts
+        run: git diff --check origin/main...HEAD
+
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: web/default/package-lock.json
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+
+      - name: Install frontend dependencies
+        working-directory: web/default
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: web/default
+        run: npm run build
+
+      - name: Build Go binary
+        run: go build -o one-api.exe .
+
+      - name: Install Playwright browsers
+        working-directory: web/default
+        run: npx playwright install chromium
+
+      - name: Start server and run E2E tests
+        working-directory: web/default
+        run: |
+          ../../one-api.exe --port 3008 > /tmp/cctapi-e2e.log 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:3008/ > /dev/null; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              cat /tmp/cctapi-e2e.log
+              exit 1
+            fi
+            sleep 1
+          done
+          npm run test:e2e

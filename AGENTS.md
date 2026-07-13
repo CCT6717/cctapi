@@ -53,9 +53,12 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 Last verified handoff: 2026-07-13.
 
 - Branch `main` is pushed to `origin/main`.
-- Latest backend/runtime alignment commit: `c5a0ed2 fix: harden Vite migration and release verification`.
+- Prior verified baseline before the current CI/lazy-loading batch: `c5a0ed2 fix: harden Vite migration and release verification`.
 - Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 10.5.0.
 - react-scripts and Webpack dependency chain fully removed.
+- All routed page components are loaded with `React.lazy` and `Suspense`; the production entry bundle is split into route chunks.
+- Playwright smoke coverage contains 16 desktop/mobile checks for public pages, protected redirects, authenticated admin pages, and responsive scrolling.
+- Web rate limiting skips immutable static assets so route chunks cannot be blocked with HTTP 429 during rapid navigation.
 - Local preview route: `http://127.0.0.1:3008/fallback/free-pool`.
 - Free-pool UI acceptance and backend FreeLLMAPI core integration are validated and currently in release-ready state.
 - Added openrouter/auto production smoke playbook:
@@ -68,6 +71,7 @@ Last verified handoff: 2026-07-13.
 - OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
 - Current runtime binary has been rebuilt with the latest `web/build/default` assets and restarted on port `3008`.
 - Vite migration screenshots are verified under `screenshots/vite-migration/`: 7 pages at desktop (`1425x891`) and mobile (`360x640`) viewports, with distinct hashes and confirmed page content.
+- Final channel/settings responsive acceptance screenshots are under `screenshots/final-validation/`.
 - Post-review `openrouter/auto` smoke passed with non-stream, stream, usage, and fallback metric checks; `pageContainsOpenRouterAuto` remains informational.
 
 Final verification from the Vite migration batch:
@@ -89,6 +93,7 @@ curl.exe -I http://127.0.0.1:3008/
 Expected result from the latest pass:
 
 - Frontend tests: 9 suites passed, 36 tests passed (Vitest 3.2.7).
+- Browser tests: 16 Playwright checks passed across desktop Chromium and Mobile Chrome.
 - Frontend production build: passed (Vite 6.4.3), ESLint 0 errors and 0 warnings.
 - Storybook build: passed with asset-size warnings only.
 - Local server on port 3008: HTTP 200.
@@ -274,11 +279,10 @@ Do not hardcode real tokens in repo files.
 
 `.github/workflows/ci.yml` includes:
 
-- Go tests with coverage
-- default frontend `npm ci` and `npm run build`
-- commit lint
-
-The frontend CI build previously set `CI=false` to avoid blocking on inherited ESLint warnings. After the cleanup, the codebase builds cleanly; review whether to restore `CI=true` in `.github/workflows/ci.yml`.
+- Frontend install, ESLint, Vitest, Vite production build, and Storybook build.
+- Full Go tests and Go binary build.
+- Repository whitespace/conflict checks.
+- Playwright desktop/mobile E2E against a CI-built frontend and Go server.
 
 ## Footer Attribution
 

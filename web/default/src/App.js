@@ -1,35 +1,35 @@
 import React, { lazy, Suspense, useContext, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import Loading from './components/Loading';
-import User from './pages/User';
 import { PrivateRoute } from './components/PrivateRoute';
-import RegisterForm from './components/RegisterForm';
-import LoginForm from './components/LoginForm';
 import NotFound from './pages/NotFound';
-import Setting from './pages/Setting';
-import EditUser from './pages/User/EditUser';
-import AddUser from './pages/User/AddUser';
 import { API, getLogo, getSystemName, showError, showNotice } from './helpers';
-import PasswordResetForm from './components/PasswordResetForm';
-import GitHubOAuth from './components/GitHubOAuth';
-import PasswordResetConfirm from './components/PasswordResetConfirm';
 import { UserContext } from './context/User';
 import { StatusContext } from './context/Status';
-import Channel from './pages/Channel';
-import Token from './pages/Token';
-import EditToken from './pages/Token/EditToken';
-import EditChannel from './pages/Channel/EditChannel';
-import Redemption from './pages/Redemption';
-import EditRedemption from './pages/Redemption/EditRedemption';
-import TopUp from './pages/TopUp';
-import Log from './pages/Log';
-import Chat from './pages/Chat';
-import LarkOAuth from './components/LarkOAuth';
-import Dashboard from './pages/Dashboard';
-import Fallback from './pages/Fallback';
 
 const Home = lazy(() => import('./pages/Home'));
 const About = lazy(() => import('./pages/About'));
+const Channel = lazy(() => import('./pages/Channel'));
+const EditChannel = lazy(() => import('./pages/Channel/EditChannel'));
+const Token = lazy(() => import('./pages/Token'));
+const EditToken = lazy(() => import('./pages/Token/EditToken'));
+const Redemption = lazy(() => import('./pages/Redemption'));
+const EditRedemption = lazy(() => import('./pages/Redemption/EditRedemption'));
+const User = lazy(() => import('./pages/User'));
+const EditUser = lazy(() => import('./pages/User/EditUser'));
+const AddUser = lazy(() => import('./pages/User/AddUser'));
+const PasswordResetConfirm = lazy(() => import('./components/PasswordResetConfirm'));
+const LoginForm = lazy(() => import('./components/LoginForm'));
+const RegisterForm = lazy(() => import('./components/RegisterForm'));
+const PasswordResetForm = lazy(() => import('./components/PasswordResetForm'));
+const GitHubOAuth = lazy(() => import('./components/GitHubOAuth'));
+const LarkOAuth = lazy(() => import('./components/LarkOAuth'));
+const Setting = lazy(() => import('./pages/Setting'));
+const TopUp = lazy(() => import('./pages/TopUp'));
+const Log = lazy(() => import('./pages/Log'));
+const Chat = lazy(() => import('./pages/Chat'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Fallback = lazy(() => import('./pages/Fallback'));
 
 function App() {
   const [, userDispatch] = useContext(UserContext);
@@ -108,7 +108,9 @@ function App() {
         path='/channel'
         element={
           <PrivateRoute>
-            <Channel />
+            <Suspense fallback={<Loading></Loading>}>
+              <Channel />
+            </Suspense>
           </PrivateRoute>
         }
       />
@@ -132,7 +134,9 @@ function App() {
         path='/token'
         element={
           <PrivateRoute>
-            <Token />
+            <Suspense fallback={<Loading></Loading>}>
+              <Token />
+            </Suspense>
           </PrivateRoute>
         }
       />
@@ -156,7 +160,9 @@ function App() {
         path='/redemption'
         element={
           <PrivateRoute>
-            <Redemption />
+            <Suspense fallback={<Loading></Loading>}>
+              <Redemption />
+            </Suspense>
           </PrivateRoute>
         }
       />
@@ -180,7 +186,9 @@ function App() {
         path='/user'
         element={
           <PrivateRoute>
-            <User />
+            <Suspense fallback={<Loading></Loading>}>
+              <User />
+            </Suspense>
           </PrivateRoute>
         }
       />
@@ -280,7 +288,9 @@ function App() {
         path='/log'
         element={
           <PrivateRoute>
-            <Log />
+            <Suspense fallback={<Loading></Loading>}>
+              <Log />
+            </Suspense>
           </PrivateRoute>
         }
       />
@@ -304,7 +314,9 @@ function App() {
         path='/dashboard'
         element={
           <PrivateRoute>
-            <Dashboard />
+            <Suspense fallback={<Loading></Loading>}>
+              <Dashboard />
+            </Suspense>
           </PrivateRoute>
         }
       />
@@ -320,7 +332,9 @@ function App() {
         path='/fallback/:panel'
         element={
           <PrivateRoute>
-            <Fallback />
+            <Suspense fallback={<Loading></Loading>}>
+              <Fallback />
+            </Suspense>
           </PrivateRoute>
         }
       />

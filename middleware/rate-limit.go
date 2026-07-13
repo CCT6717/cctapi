@@ -91,7 +91,14 @@ func rateLimitFactory(maxRequestNum int, duration int64, mark string) func(c *gi
 }
 
 func GlobalWebRateLimit() func(c *gin.Context) {
-	return rateLimitFactory(config.GlobalWebRateLimitNum, config.GlobalWebRateLimitDuration, "GW")
+	limiter := rateLimitFactory(config.GlobalWebRateLimitNum, config.GlobalWebRateLimitDuration, "GW")
+	return func(c *gin.Context) {
+		if isStaticAsset(c.Request.URL.Path) {
+			c.Next()
+			return
+		}
+		limiter(c)
+	}
 }
 
 func GlobalAPIRateLimit() func(c *gin.Context) {

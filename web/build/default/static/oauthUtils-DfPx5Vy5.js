@@ -1,0 +1,2 @@
+import{A as o,b as s}from"./index-DDZbM2-z.js";async function i(){const e=await o.get("/api/oauth/state"),{success:t,message:a,data:n}=e.data;return t?n:(s(a),"")}async function u(e){const t=await i();t&&window.open(`https://github.com/login/oauth/authorize?client_id=${e}&state=${t}&scope=user:email`)}async function c(e){const t=await i();if(!t)return;let a=`${window.location.origin}/oauth/lark`;window.open(`https://open.feishu.cn/open-apis/authen/v1/index?redirect_uri=${a}&app_id=${e}&state=${t}`)}export{c as a,u as o};
+//# sourceMappingURL=oauthUtils-DfPx5Vy5.js.map

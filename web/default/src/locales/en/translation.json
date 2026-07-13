@@ -49,6 +49,13 @@
     "balance_notice": "OpenAI channels no longer support getting balance via key, so balance shows as 0. For supported channel types, click balance to refresh.",
     "test_notice": "Channel testing only supports chat models, preferring gpt-3.5-turbo. If unavailable, uses the first model in your configured list.",
     "detail_notice": "Click the detail button below to show balance and set additional test models.",
+    "types": {
+      "unknown": "Unknown Type"
+    },
+    "balance": {
+      "unlimited": "Unlimited",
+      "unknown": "Unknown Balance"
+    },
     "table": {
       "id": "ID",
       "name": "Name",
@@ -719,6 +726,7 @@
         },
         "about": {
           "title": "About System",
+          "placeholder": "Enter new about content here, supports Markdown & HTML code. If a link is entered, it will be used as the src attribute of an iframe, allowing you to set any webpage as about page.",
           "description": "You can set about content in settings page, supports HTML & Markdown",
           "repository": "Project Repository:",
           "loading_failed": "Failed to load about content..."

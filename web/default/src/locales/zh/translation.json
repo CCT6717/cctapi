@@ -49,6 +49,13 @@
     "balance_notice": "OpenAI 渠道已经不再支持通过 key 获取余额，因此余额显示为 0。对于支持的渠道类型，请点击余额进行刷新。",
     "test_notice": "渠道测试仅支持 chat 模型，优先使用 gpt-3.5-turbo，如果该模型不可用则使用你所配置的模型列表中的第一个模型。",
     "detail_notice": "点击下方详情按钮可以显示余额以及设置额外的测试模型。",
+    "types": {
+      "unknown": "未知类型"
+    },
+    "balance": {
+      "unlimited": "无限制",
+      "unknown": "未知余额"
+    },
     "table": {
       "id": "ID",
       "name": "名称",

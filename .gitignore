@@ -33,6 +33,8 @@ data/backups/
 .superpowers/
 .worktrees/
 web/default/node_modules/
+web/default/playwright-report/
+web/default/test-results/
 coverage.txt
 tmp/
 .git-rewrite/
@@ -47,9 +49,6 @@ tmp_*.txt
 # System files
 .DS_Store
 Thumbs.db
-
-# Keep local-only upstream workflow templates out unless intentionally force-added.
-.github/workflows/
 
 data/fallback.json
 
