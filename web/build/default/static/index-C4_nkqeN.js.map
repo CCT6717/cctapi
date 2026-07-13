@@ -1,1 +1,0 @@
-{"version":3,"file":"index-C4_nkqeN.js","sources":["../../node_modules/semantic-ui-react/dist/es/lib/eventStack/index.js"],"sourcesContent":["import { instance } from '@semantic-ui-react/event-stack';\nexport default instance;"],"names":["eventStack","instance"],"mappings":"yCACA,MAAAA,EAAeC,EAAAA","x_google_ignoreList":[0]}
