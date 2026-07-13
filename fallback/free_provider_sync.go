@@ -300,6 +300,22 @@ func currentFreePoolGeneration() uint64 {
 	return freePoolGeneration
 }
 
+func markFreeProviderCatalogFailureAtGeneration(
+	deploymentID string,
+	providerName string,
+	source string,
+	attemptedAt time.Time,
+	syncErr error,
+	generation uint64,
+) (bool, error) {
+	freePoolMutationMu.Lock()
+	defer freePoolMutationMu.Unlock()
+	if generation != freePoolGeneration {
+		return false, nil
+	}
+	return true, markFreeProviderCatalogFailure(deploymentID, providerName, source, attemptedAt, syncErr)
+}
+
 func deploymentUsesAutoChannel(dep DeploymentConfig, autoChannelIDs map[int]bool) bool {
 	if dep.ChannelID <= 0 {
 		return false
@@ -334,11 +350,7 @@ func providerConfigOwnsAutoRealModel(cfg *Config, providerName string) bool {
 	if !ok {
 		return false
 	}
-	if len(fp.Models) > 0 {
-		return true
-	}
-	meta, ok := BuiltinFreeProviders[providerName]
-	return ok && meta.ModelFetchMode == ModelFetchOpenRouterFree
+	return len(fp.Models) > 0
 }
 
 func isDeploymentRealModelOverride(currentRealModel string, generatedRealModel string, providerName string) bool {
@@ -562,7 +574,13 @@ func syncAllProviderModelsAtGeneration(cfg *Config, generation uint64) FreeProvi
 			if key == "" && !meta.Keyless {
 				continue
 			}
-			attempt := syncOneFreeProviderCatalog(providerName, key, meta, generation)
+			attempt := freeProviderCatalogAttemptResult{}
+			if generation != currentFreePoolGeneration() {
+				attempt.skipped = true
+				logger.SysLog(fmt.Sprintf("[free-pool] skipped queued superseded catalog refresh for %s", providerName))
+			} else {
+				attempt = syncOneFreeProviderCatalog(providerName, key, meta, generation)
+			}
 			providerResult.Attempted++
 			if attempt.modelCount > providerResult.ModelCount {
 				providerResult.ModelCount = attempt.modelCount
@@ -581,17 +599,23 @@ func syncAllProviderModelsAtGeneration(cfg *Config, generation uint64) FreeProvi
 		if providerResult.Attempted == 0 {
 			continue
 		}
-		report.Results = append(report.Results, providerResult)
-		report.Attempted++
-		if providerResult.Failed > 0 {
-			report.Failed++
-		} else if providerResult.Succeeded > 0 {
-			report.Succeeded++
-		} else {
-			report.Skipped++
-		}
+		addFreeProviderCatalogResult(&report, providerResult)
 	}
 	return report
+}
+
+func addFreeProviderCatalogResult(report *FreeProviderCatalogSyncReport, providerResult FreeProviderCatalogSyncResult) {
+	report.Results = append(report.Results, providerResult)
+	report.Attempted++
+	if providerResult.Failed > 0 {
+		report.Failed++
+	} else if providerResult.Skipped > 0 {
+		report.Skipped++
+	} else if providerResult.Succeeded > 0 {
+		report.Succeeded++
+	} else {
+		report.Skipped++
+	}
 }
 
 func isDynamicFreeProviderCatalog(fetchMode string) bool {
@@ -627,9 +651,17 @@ func syncOneFreeProviderCatalog(providerName, key string, meta FreeProviderMeta,
 			logger.SysLog(fmt.Sprintf("[free-pool] skipped superseded catalog refresh for %s", depID))
 			return result
 		}
-		result.errorText = sanitizeFreeProviderCatalogError(err, key)
-		safeErr := errors.New(result.errorText)
-		if storeErr := markFreeProviderCatalogFailure(depID, providerName, meta.ModelFetchMode, attemptedAt, safeErr); storeErr != nil {
+		safeErrorText := sanitizeFreeProviderCatalogError(err, key)
+		applied, storeErr := markFreeProviderCatalogFailureAtGeneration(
+			depID, providerName, meta.ModelFetchMode, attemptedAt, errors.New(safeErrorText), generation,
+		)
+		if !applied {
+			result.skipped = true
+			logger.SysLog(fmt.Sprintf("[free-pool] skipped superseded catalog failure for %s", depID))
+			return result
+		}
+		result.errorText = safeErrorText
+		if storeErr != nil {
 			logger.SysError(fmt.Sprintf("[free-pool] failed to persist catalog error for %s: %v", depID, storeErr))
 		}
 		logger.SysWarn(fmt.Sprintf("[free-pool] %s catalog refresh failed for %s: %s (keeping last successful snapshot)", providerName, depID, result.errorText))

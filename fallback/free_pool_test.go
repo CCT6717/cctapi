@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -339,6 +340,36 @@ func TestSyncAllProviderModelsKeepsOpenRouterFreeAlias(t *testing.T) {
 	}
 	if dep.RealModel != "openrouter/free" {
 		t.Fatalf("real model = %q, want openrouter/free", dep.RealModel)
+	}
+}
+
+func TestSyncFreePoolPreservesOpenRouterConcreteModelOverride(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+
+	key := "sk-or-v1-manual-model"
+	keyHash := SafeKeyHash(key)
+	channel := dbmodel.Channel{
+		Name: channelName("openrouter", keyHash), Type: BuiltinFreeProviders["openrouter"].ChannelType,
+		Key: key, Models: "openrouter/free", Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	depID := deploymentID("openrouter", keyHash)
+	cfg := &Config{
+		Enabled:       true,
+		FreeProviders: map[string]FreeProviderConfig{"openrouter": {Enabled: true, Keys: []string{key}}},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "openai/gpt-oss-20b:free", Pool: "free"},
+		},
+	}
+
+	if err := SyncFreePool(cfg); err != nil {
+		t.Fatalf("SyncFreePool: %v", err)
+	}
+	if got := cfg.Deployments[depID].RealModel; got != "openai/gpt-oss-20b:free" {
+		t.Fatalf("OpenRouter concrete model override was replaced: %q", got)
 	}
 }
 
@@ -897,6 +928,22 @@ func TestSyncAndRefreshFreePoolRuntimeAggregatesMultipleKeysByProvider(t *testin
 	}
 }
 
+func TestAddFreeProviderCatalogResultTreatsPartialSkipAsSkipped(t *testing.T) {
+	report := FreeProviderCatalogSyncReport{}
+	result := FreeProviderCatalogSyncResult{
+		Provider:  "nvidia",
+		Attempted: 2,
+		Succeeded: 1,
+		Skipped:   1,
+	}
+
+	addFreeProviderCatalogResult(&report, result)
+
+	if report.Attempted != 1 || report.Succeeded != 0 || report.Failed != 0 || report.Skipped != 1 {
+		t.Fatalf("partial skip must not be reported as provider success: %#v", report)
+	}
+}
+
 func TestSyncAllProviderModelsKeepsDeploymentRealModelOverride(t *testing.T) {
 	cleanupDB := setupFreePoolTestDB(t)
 	defer cleanupDB()
@@ -1120,6 +1167,97 @@ func TestApplyValidatedCatalogRejectsEarlierConfigGeneration(t *testing.T) {
 	}
 	if stored.Models != "old-model" {
 		t.Fatalf("superseded generation changed channel inventory: %q", stored.Models)
+	}
+}
+
+func TestSyncOneProviderCatalogIgnoresFailureFromEarlierConfigGeneration(t *testing.T) {
+	cleanupDB := setupFreeProviderCatalogStoreTestDB(t)
+	defer cleanupDB()
+
+	providerName := "nvidia"
+	key := "nvapi-stale-failure"
+	depID := deploymentID(providerName, SafeKeyHash(key))
+	successAt := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	snapshot := FreeProviderCatalogSnapshot{
+		DeploymentID:  depID,
+		Provider:      providerName,
+		Source:        ModelFetchOpenAIModels,
+		Models:        []FreeModelCatalogEntry{{ID: "nvidia/last-good"}},
+		SelectedModel: "nvidia/last-good",
+		LastAttemptAt: successAt,
+		LastSuccessAt: successAt,
+	}
+	if err := saveFreeProviderCatalogSuccess(snapshot); err != nil {
+		t.Fatalf("save successful snapshot: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "stale upstream failure", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	originalMeta := BuiltinFreeProviders[providerName]
+	meta := originalMeta
+	meta.DefaultBaseURL = server.URL + "/v1"
+	meta.ModelFetchMode = ModelFetchOpenAIModels
+	BuiltinFreeProviders[providerName] = meta
+	t.Cleanup(func() { BuiltinFreeProviders[providerName] = originalMeta })
+	refreshGeneration := currentFreePoolGeneration()
+	freePoolMutationMu.Lock()
+	freePoolGeneration++
+	freePoolMutationMu.Unlock()
+
+	result := syncOneFreeProviderCatalog(providerName, key, meta, refreshGeneration)
+	if !result.skipped || result.success || result.errorText != "" {
+		t.Fatalf("stale failure must be skipped without diagnostics: %#v", result)
+	}
+	got, ok := GetFreeProviderCatalogSnapshot(depID)
+	if !ok {
+		t.Fatal("expected last successful snapshot")
+	}
+	if !got.LastAttemptAt.Equal(successAt) || got.LastError != "" {
+		t.Fatalf("stale failure polluted current snapshot: %#v", got)
+	}
+}
+
+func TestSyncAllProviderModelsSkipsNetworkForEarlierConfigGeneration(t *testing.T) {
+	cleanupDB := setupFreeProviderCatalogStoreTestDB(t)
+	defer cleanupDB()
+
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		calls.Add(1)
+		http.Error(w, "must not be called", http.StatusServiceUnavailable)
+	}))
+	defer server.Close()
+
+	providerName := "nvidia"
+	originalMeta := BuiltinFreeProviders[providerName]
+	meta := originalMeta
+	meta.DefaultBaseURL = server.URL + "/v1"
+	meta.ModelFetchMode = ModelFetchOpenAIModels
+	BuiltinFreeProviders[providerName] = meta
+	t.Cleanup(func() { BuiltinFreeProviders[providerName] = originalMeta })
+	cfg := &Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			providerName: {Enabled: true, Keys: []string{"nvapi-queued-refresh"}},
+		},
+	}
+	refreshGeneration := currentFreePoolGeneration()
+	freePoolMutationMu.Lock()
+	freePoolGeneration++
+	freePoolMutationMu.Unlock()
+
+	report := syncAllProviderModelsAtGeneration(cfg, refreshGeneration)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("superseded refresh made %d upstream requests", got)
+	}
+	if report.Attempted != 1 || report.Succeeded != 0 || report.Failed != 0 || report.Skipped != 1 {
+		t.Fatalf("superseded provider must be reported as skipped: %#v", report)
+	}
+	if len(report.Results) != 1 || report.Results[0].Attempted != 1 || report.Results[0].Skipped != 1 {
+		t.Fatalf("unexpected superseded provider detail: %#v", report.Results)
 	}
 }
 

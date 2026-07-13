@@ -655,7 +655,7 @@ func TestGatewayUpdateConfig_FreeProviderModelsPreservedWhenOmitted(t *testing.T
 	}
 }
 
-func TestGatewayUpdateConfig_OpenRouterRoundTripKeepsStableAlias(t *testing.T) {
+func TestGatewayUpdateConfig_OpenRouterRoundTripPreservesConcreteModel(t *testing.T) {
 	key := "sk-or-v1-gateway-round-trip-test"
 	depID := "free:openrouter-" + fallback.SafeKeyHash(key)
 	ensureTestDB(t)
@@ -698,8 +698,8 @@ func TestGatewayUpdateConfig_OpenRouterRoundTripKeepsStableAlias(t *testing.T) {
 	}
 
 	cfg := fallback.GetConfig()
-	if got := cfg.Deployments[depID].RealModel; got != "openrouter/free" {
-		t.Fatalf("round-trip real model = %q, want openrouter/free", got)
+	if got := cfg.Deployments[depID].RealModel; got != "openai/gpt-oss-20b:free" {
+		t.Fatalf("round-trip concrete model override was replaced: %q", got)
 	}
 }
 
