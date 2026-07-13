@@ -30,139 +30,269 @@ type openRouterCreditsResponse struct {
 // their behavior through FreeProviderMeta.ModelFetchMode so adding a new
 // FreeLLMAPI-style provider does not require another hard-coded switch branch.
 func fetchModels(providerName, key string) ([]string, error) {
+	candidate, err := fetchProviderCatalog(providerName, key)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(candidate.Models))
+	for _, entry := range candidate.Models {
+		models = append(models, entry.ID)
+	}
+	return models, nil
+}
+
+func fetchProviderCatalog(providerName, key string) (FreeProviderCatalogCandidate, error) {
 	meta, ok := BuiltinFreeProviders[providerName]
 	if !ok {
-		return nil, fmt.Errorf("fetchModels: unsupported provider %q", providerName)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("fetchProviderCatalog: unsupported provider %q", providerName)
 	}
 
 	switch meta.ModelFetchMode {
 	case ModelFetchOpenRouterFree:
-		return fetchOpenRouterModels(key)
+		return fetchOpenRouterCatalog(key)
 	case ModelFetchKiloFree:
-		return fetchKiloModels()
+		return fetchKiloCatalog()
 	case ModelFetchOpenAIModels:
-		return fetchOpenAICompatModels(meta.DefaultBaseURL, key)
+		return fetchOpenAICompatCatalog(meta.DefaultBaseURL, key)
 	case ModelFetchStatic, "":
-		return append([]string{}, meta.DefaultModels...), nil
+		models := make([]FreeModelCatalogEntry, 0, len(meta.DefaultModels))
+		for _, modelID := range meta.DefaultModels {
+			models = append(models, FreeModelCatalogEntry{ID: modelID})
+		}
+		return validateFreeProviderCatalog(FreeProviderCatalogCandidate{
+			Source: ModelFetchStatic,
+			Models: models,
+		})
 	default:
-		return nil, fmt.Errorf("fetchModels: unsupported fetch mode %q for provider %q", meta.ModelFetchMode, providerName)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("fetchProviderCatalog: unsupported fetch mode %q for provider %q", meta.ModelFetchMode, providerName)
 	}
 }
 
 func fetchOpenRouterModels(key string) ([]string, error) {
+	candidate, err := fetchOpenRouterCatalog(key)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(candidate.Models))
+	for _, entry := range candidate.Models {
+		models = append(models, entry.ID)
+	}
+	return models, nil
+}
+
+func fetchOpenRouterCatalog(key string) (FreeProviderCatalogCandidate, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://openrouter.ai/api/v1/models", nil)
 	if err != nil {
-		return nil, err
+		return FreeProviderCatalogCandidate{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+key)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("openrouter /v1/models request: %w", err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("openrouter /v1/models request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("openrouter /v1/models status %d", resp.StatusCode)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("openrouter /v1/models status %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read models body: %w", err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("read models body: %w", err)
 	}
-	return parseFreeModels(body)
+	candidate, err := parseOpenRouterFreeCatalog(body)
+	if err != nil {
+		return FreeProviderCatalogCandidate{}, err
+	}
+	return validateFreeProviderCatalog(candidate)
 }
 
 func parseFreeModels(body []byte) ([]string, error) {
+	candidate, err := parseOpenRouterFreeCatalog(body)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(candidate.Models))
+	for _, entry := range candidate.Models {
+		models = append(models, entry.ID)
+	}
+	return models, nil
+}
+
+func parseOpenRouterFreeCatalog(body []byte) (FreeProviderCatalogCandidate, error) {
 	var respData openRouterModelsResponse
 	if err := json.Unmarshal(body, &respData); err != nil {
-		return nil, fmt.Errorf("parse models json: %w", err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("parse models json: %w", err)
 	}
 	seen := make(map[string]struct{}, len(respData.Data))
-	var free []string
+	var free []FreeModelCatalogEntry
 	for _, m := range respData.Data {
 		if strings.HasSuffix(m.ID, ":free") {
 			if _, ok := seen[m.ID]; !ok {
 				seen[m.ID] = struct{}{}
-				free = append(free, m.ID)
+				free = append(free, FreeModelCatalogEntry{ID: m.ID})
 			}
 		}
 	}
-	sort.Strings(free)
-	return free, nil
+	sort.Slice(free, func(i, j int) bool { return free[i].ID < free[j].ID })
+	return FreeProviderCatalogCandidate{Source: ModelFetchOpenRouterFree, Models: free}, nil
 }
 
 type kiloModelsResponse struct {
 	Data []struct {
-		ID     string `json:"id"`
-		IsFree bool   `json:"isFree"`
+		ID                  string   `json:"id"`
+		IsFree              bool     `json:"isFree"`
+		ContextLength       int      `json:"context_length"`
+		SupportedParameters []string `json:"supported_parameters"`
+		Architecture        struct {
+			InputModalities []string `json:"input_modalities"`
+		} `json:"architecture"`
+		TopProvider struct {
+			ContextLength int `json:"context_length"`
+		} `json:"top_provider"`
 	} `json:"data"`
 }
 
 func fetchKiloModels() ([]string, error) {
+	candidate, err := fetchKiloCatalog()
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(candidate.Models))
+	for _, entry := range candidate.Models {
+		models = append(models, entry.ID)
+	}
+	return models, nil
+}
+
+func fetchKiloCatalog() (FreeProviderCatalogCandidate, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.kilo.ai/api/gateway/models", nil)
 	if err != nil {
-		return nil, err
+		return FreeProviderCatalogCandidate{}, err
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("kilo /models request: %w", err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("kilo /models request: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("kilo /models status %d", resp.StatusCode)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("kilo /models status %d", resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read kilo models body: %w", err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("read kilo models body: %w", err)
 	}
-	return parseKiloFreeModels(body)
+	candidate, err := parseKiloFreeCatalog(body)
+	if err != nil {
+		return FreeProviderCatalogCandidate{}, err
+	}
+	return validateFreeProviderCatalog(candidate)
 }
 
 func parseKiloFreeModels(body []byte) ([]string, error) {
+	candidate, err := parseKiloFreeCatalog(body)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(candidate.Models))
+	for _, entry := range candidate.Models {
+		models = append(models, entry.ID)
+	}
+	return models, nil
+}
+
+func parseKiloFreeCatalog(body []byte) (FreeProviderCatalogCandidate, error) {
 	var respData kiloModelsResponse
 	if err := json.Unmarshal(body, &respData); err != nil {
-		return nil, fmt.Errorf("parse kilo models json: %w", err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("parse kilo models json: %w", err)
 	}
 	seen := make(map[string]struct{}, len(respData.Data))
-	var free []string
+	models := make([]FreeModelCatalogEntry, 0, len(respData.Data))
 	for _, m := range respData.Data {
-		if m.IsFree {
-			if _, ok := seen[m.ID]; !ok {
-				seen[m.ID] = struct{}{}
-				free = append(free, m.ID)
+		if !m.IsFree || strings.TrimSpace(m.ID) == "" {
+			continue
+		}
+		if _, ok := seen[m.ID]; ok {
+			continue
+		}
+		seen[m.ID] = struct{}{}
+		parameters := make(map[string]struct{}, len(m.SupportedParameters))
+		for _, parameter := range m.SupportedParameters {
+			parameters[strings.ToLower(strings.TrimSpace(parameter))] = struct{}{}
+		}
+		_, supportsTools := parameters["tools"]
+		if !supportsTools {
+			_, supportsTools = parameters["tool_choice"]
+		}
+		_, supportsJSON := parameters["structured_outputs"]
+		if !supportsJSON {
+			_, supportsJSON = parameters["response_format"]
+		}
+		supportsVision := false
+		for _, modality := range m.Architecture.InputModalities {
+			if strings.EqualFold(strings.TrimSpace(modality), "image") {
+				supportsVision = true
+				break
 			}
 		}
+		contextLength := m.ContextLength
+		if contextLength <= 0 {
+			contextLength = m.TopProvider.ContextLength
+		}
+		models = append(models, FreeModelCatalogEntry{
+			ID:             m.ID,
+			SupportsTools:  boolPtr(supportsTools),
+			SupportsJSON:   boolPtr(supportsJSON),
+			SupportsVision: boolPtr(supportsVision),
+			ContextLength:  catalogIntPtr(contextLength),
+		})
 	}
-	sort.Strings(free)
-	return free, nil
+	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
+	return FreeProviderCatalogCandidate{Source: ModelFetchKiloFree, Models: models}, nil
 }
 
 func fetchOpenAICompatModels(baseURL, key string) ([]string, error) {
+	candidate, err := fetchOpenAICompatCatalog(baseURL, key)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(candidate.Models))
+	for _, entry := range candidate.Models {
+		models = append(models, entry.ID)
+	}
+	return models, nil
+}
+
+func fetchOpenAICompatCatalog(baseURL, key string) (FreeProviderCatalogCandidate, error) {
 	modelsURL := strings.TrimRight(baseURL, "/") + "/models"
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
 	if err != nil {
-		return nil, err
+		return FreeProviderCatalogCandidate{}, err
 	}
 	if key != "" {
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%s request: %w", modelsURL, err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("%s request: %w", modelsURL, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%s status %d", modelsURL, resp.StatusCode)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("%s status %d", modelsURL, resp.StatusCode)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("read models body from %s: %w", modelsURL, err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("read models body from %s: %w", modelsURL, err)
 	}
-	return parseOpenAICompatModels(body)
+	candidate, err := parseOpenAICompatCatalog(body)
+	if err != nil {
+		return FreeProviderCatalogCandidate{}, err
+	}
+	return validateFreeProviderCatalog(candidate)
 }
 
 type openAICompatModelsResponse struct {
@@ -172,23 +302,35 @@ type openAICompatModelsResponse struct {
 }
 
 func parseOpenAICompatModels(body []byte) ([]string, error) {
+	candidate, err := parseOpenAICompatCatalog(body)
+	if err != nil {
+		return nil, err
+	}
+	models := make([]string, 0, len(candidate.Models))
+	for _, entry := range candidate.Models {
+		models = append(models, entry.ID)
+	}
+	return models, nil
+}
+
+func parseOpenAICompatCatalog(body []byte) (FreeProviderCatalogCandidate, error) {
 	var respData openAICompatModelsResponse
 	if err := json.Unmarshal(body, &respData); err != nil {
-		return nil, fmt.Errorf("parse models json: %w", err)
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("parse models json: %w", err)
 	}
 	seen := make(map[string]struct{}, len(respData.Data))
-	var models []string
+	var models []FreeModelCatalogEntry
 	for _, m := range respData.Data {
 		if m.ID == "" {
 			continue
 		}
 		if _, ok := seen[m.ID]; !ok {
 			seen[m.ID] = struct{}{}
-			models = append(models, m.ID)
+			models = append(models, FreeModelCatalogEntry{ID: m.ID})
 		}
 	}
-	sort.Strings(models)
-	return models, nil
+	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
+	return FreeProviderCatalogCandidate{Source: ModelFetchOpenAIModels, Models: models}, nil
 }
 
 func queryOpenRouterCredits(key string) (float64, error) {
