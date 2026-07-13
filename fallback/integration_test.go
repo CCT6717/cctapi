@@ -39,6 +39,67 @@ func TestIntegrationCapabilityFilterContextLength(t *testing.T) {
 	}
 }
 
+func TestIntegrationCapabilityFilterSelectsCatalogModelForTools(t *testing.T) {
+	cleanup := setupFreeProviderCatalogStoreTestDB(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	toolsFalse := false
+	toolsTrue := true
+	depID := "free:kilo-e3b0c442"
+	if err := saveFreeProviderCatalogSuccess(FreeProviderCatalogSnapshot{
+		DeploymentID: depID,
+		Provider:     "kilo",
+		Source:       ModelFetchKiloFree,
+		Models: []FreeModelCatalogEntry{
+			{ID: "kilo/text:free", SupportsTools: &toolsFalse},
+			{ID: "kilo/tools:free", SupportsTools: &toolsTrue},
+		},
+		SelectedModel: "kilo/text:free",
+		LastAttemptAt: now,
+		LastSuccessAt: now,
+	}); err != nil {
+		t.Fatalf("save catalog: %v", err)
+	}
+
+	got := FilterByCapability([]DeploymentConfig{{
+		ID: depID, RealModel: "kilo/text:free", Pool: "free", SupportsStream: true,
+	}}, RequestCapabilities{Tools: true})
+	if len(got) != 1 {
+		t.Fatalf("expected one catalog-backed deployment, got %#v", got)
+	}
+	if got[0].RealModel != "kilo/tools:free" || !got[0].SupportsTools {
+		t.Fatalf("tool request selected wrong model: %#v", got[0])
+	}
+}
+
+func TestIntegrationCapabilityFilterPreservesManualCatalogOverride(t *testing.T) {
+	cleanup := setupFreeProviderCatalogStoreTestDB(t)
+	defer cleanup()
+
+	now := time.Now().UTC()
+	toolsTrue := true
+	depID := "free:kilo-e3b0c442"
+	if err := saveFreeProviderCatalogSuccess(FreeProviderCatalogSnapshot{
+		DeploymentID:  depID,
+		Provider:      "kilo",
+		Source:        ModelFetchKiloFree,
+		Models:        []FreeModelCatalogEntry{{ID: "kilo/tools:free", SupportsTools: &toolsTrue}},
+		SelectedModel: "kilo/tools:free",
+		LastAttemptAt: now,
+		LastSuccessAt: now,
+	}); err != nil {
+		t.Fatalf("save catalog: %v", err)
+	}
+
+	got := FilterByCapability([]DeploymentConfig{{
+		ID: depID, RealModel: "operator/manual-model", Pool: "free", SupportsTools: false,
+	}}, RequestCapabilities{Tools: true})
+	if len(got) != 0 {
+		t.Fatalf("manual model override must not be silently replaced: %#v", got)
+	}
+}
+
 func TestIntegrationQuotaPreCheckBlocksRPM(t *testing.T) {
 	resetRuntimeForTest()
 	dep := DeploymentConfig{ID: "groq", RPMLimit: 30}

@@ -41,7 +41,8 @@ func DetectRequestCapabilities(req *model.GeneralOpenAIRequest) RequestCapabilit
 
 	// response_format json
 	if req.ResponseFormat != nil {
-		if strings.EqualFold(req.ResponseFormat.Type, "json_object") {
+		if strings.EqualFold(req.ResponseFormat.Type, "json_object") ||
+			strings.EqualFold(req.ResponseFormat.Type, "json_schema") {
 			caps.JSON = true
 		}
 	}
@@ -101,9 +102,65 @@ func DeploymentSupports(dep DeploymentConfig, caps RequestCapabilities) bool {
 func FilterByCapability(deployments []DeploymentConfig, caps RequestCapabilities) []DeploymentConfig {
 	out := make([]DeploymentConfig, 0, len(deployments))
 	for _, dep := range deployments {
-		if DeploymentSupports(dep, caps) {
-			out = append(out, dep)
+		resolved, ok := resolveFreeProviderCatalogModel(dep, caps)
+		if ok {
+			out = append(out, resolved)
 		}
 	}
 	return out
+}
+
+func resolveFreeProviderCatalogModel(dep DeploymentConfig, caps RequestCapabilities) (DeploymentConfig, bool) {
+	if !IsAutoDeploymentID(dep.ID) {
+		return dep, DeploymentSupports(dep, caps)
+	}
+	snapshot, ok := GetFreeProviderCatalogSnapshot(dep.ID)
+	if !ok || len(snapshot.Models) == 0 {
+		return dep, DeploymentSupports(dep, caps)
+	}
+	// A deployment model that differs from the snapshot selection is an operator
+	// override. Keep its existing capability contract instead of silently
+	// switching to another upstream model.
+	if strings.TrimSpace(dep.RealModel) != strings.TrimSpace(snapshot.SelectedModel) {
+		return dep, DeploymentSupports(dep, caps)
+	}
+
+	providerName, ok := FreeProviderNameFromDeploymentID(dep.ID)
+	if !ok {
+		return dep, DeploymentSupports(dep, caps)
+	}
+	meta, ok := BuiltinFreeProviders[providerName]
+	if !ok {
+		return dep, DeploymentSupports(dep, caps)
+	}
+
+	ordered := make([]FreeModelCatalogEntry, 0, len(snapshot.Models))
+	if selected, found := findFreeModelCatalogEntry(snapshot.Models, dep.RealModel); found {
+		ordered = append(ordered, selected)
+	}
+	for _, entry := range snapshot.Models {
+		if entry.ID != dep.RealModel {
+			ordered = append(ordered, entry)
+		}
+	}
+	if len(ordered) == 0 {
+		return dep, DeploymentSupports(dep, caps)
+	}
+
+	for _, entry := range ordered {
+		candidate := dep
+		candidate.SupportsVision = meta.SupportsVision
+		candidate.SupportsStream = meta.SupportsStream
+		candidate.SupportsTools = meta.SupportsTools
+		candidate.SupportsJSON = meta.SupportsJSON
+		candidate.ContextLength = meta.ContextLength
+		candidate = applyFreeModelCapabilities(candidate, entry)
+		if meta.Quirks != nil && meta.Quirks.DisableStream {
+			candidate.SupportsStream = false
+		}
+		if DeploymentSupports(candidate, caps) {
+			return candidate, true
+		}
+	}
+	return dep, false
 }
