@@ -242,18 +242,21 @@ func IsDeploymentAvailable(dep DeploymentConfig) (bool, string) {
 
 // RecordDeploymentUsage records token usage for deployment
 func RecordDeploymentUsage(deploymentID string, usage UsageInfo) error {
-	state, err := EnsureDeploymentState(deploymentID, todayString())
+	_, err := EnsureDeploymentState(deploymentID, todayString())
 	if err != nil {
 		return err
 	}
 
-	state.UsedPromptTokens += usage.PromptTokens
-	state.UsedCompletionTokens += usage.CompletionTokens
-	state.UsedTotalTokens += int64(usage.TotalTokens)
-	state.RequestCount++
-	state.UpdatedAt = time.Now().UTC()
-
-	return model.DB.Save(state).Error
+	date := todayString()
+	return model.DB.Model(&DeploymentState{}).
+		Where("deployment_id = ? AND date = ?", deploymentID, date).
+		UpdateColumns(map[string]interface{}{
+			"used_prompt_tokens":       gorm.Expr("used_prompt_tokens + ?", usage.PromptTokens),
+			"used_completion_tokens":   gorm.Expr("used_completion_tokens + ?", usage.CompletionTokens),
+			"used_total_tokens":        gorm.Expr("used_total_tokens + ?", int64(usage.TotalTokens)),
+			"request_count":            gorm.Expr("request_count + ?", 1),
+			"updated_at":               time.Now().UTC(),
+		}).Error
 }
 
 // RecordDeploymentSuccess records successful deployment request
@@ -279,18 +282,21 @@ func RecordFallbackDeploymentSuccess(deploymentID string, modelName string, usag
 
 // RecordDeploymentError records deployment error
 func RecordDeploymentError(deploymentID string, originalErr error) error {
-	state, dbErr := EnsureDeploymentState(deploymentID, todayString())
+	_, dbErr := EnsureDeploymentState(deploymentID, todayString())
 	if dbErr != nil {
 		return dbErr
 	}
 
-	state.ErrorCount++
-	state.RequestCount++
-	state.LastErrorCode = "unknown"
-	state.LastErrorMessage = originalErr.Error()
-	state.UpdatedAt = time.Now().UTC()
-
-	return model.DB.Save(state).Error
+	date := todayString()
+	return model.DB.Model(&DeploymentState{}).
+		Where("deployment_id = ? AND date = ?", deploymentID, date).
+		UpdateColumns(map[string]interface{}{
+			"error_count":        gorm.Expr("error_count + ?", 1),
+			"request_count":      gorm.Expr("request_count + ?", 1),
+			"last_error_code":    "unknown",
+			"last_error_message": originalErr.Error(),
+			"updated_at":         time.Now().UTC(),
+		}).Error
 }
 
 // MarkDeploymentExhausted marks deployment as exhausted until specific time
