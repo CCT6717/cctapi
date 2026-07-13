@@ -64,6 +64,10 @@ explicit false value.
 Snapshots are guarded by a package-level read/write lock and returned as deep
 copies.
 
+A dynamic catalog is stale when its latest attempt failed or when the last
+success is older than twelve hours (twice the six-hour schedule). Static,
+disabled, and operator-overridden model lists are not marked stale.
+
 ## Fetch And Validation
 
 - `openai_models`: parse IDs from `/models`; capability fields remain unknown.
@@ -99,7 +103,9 @@ Each gateway v2 free-provider object gains read-only `catalog_status` and
 `model_capabilities`. Secret keys remain excluded. The provider row shows a
 compact Chinese status for current, stale, failed, or not-yet-refreshed state,
 including model count and last successful time. The existing page-level sync
-button remains the manual refresh action.
+button remains the manual refresh action. Manual sync returns attempted,
+succeeded, and failed provider counts so a partial refresh is shown as a warning
+instead of a false success.
 
 ## Testing
 
