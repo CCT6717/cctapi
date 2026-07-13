@@ -169,3 +169,63 @@ func TestFetchProviderCatalogStaticModeReturnsRegistryModels(t *testing.T) {
 		t.Fatal("static catalog contains empty model id")
 	}
 }
+
+func TestParseOVHChatCatalogFiltersNonChatModels(t *testing.T) {
+	candidate, err := parseOVHChatCatalog([]byte(`{
+		"data": [
+			{"id": "chat-b", "max_completion_tokens": 32768, "context_length": 65536},
+			{"id": "embedding", "max_completion_tokens": 0, "context_length": 8192},
+			{"id": "chat-a", "max_completion_tokens": 16384, "context_length": 32768}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("parseOVHChatCatalog error: %v", err)
+	}
+	if candidate.Source != ModelFetchOVHChat || len(candidate.Models) != 2 {
+		t.Fatalf("unexpected OVH catalog: %#v", candidate)
+	}
+	if candidate.Models[0].ID != "chat-a" || candidate.Models[1].ID != "chat-b" {
+		t.Fatalf("OVH models not filtered/sorted: %#v", candidate.Models)
+	}
+	if candidate.Models[0].ContextLength == nil || *candidate.Models[0].ContextLength != 32768 {
+		t.Fatalf("OVH context metadata missing: %#v", candidate.Models[0])
+	}
+}
+
+func TestApplyFreeModelCapabilitiesOverridesDeploymentDefaults(t *testing.T) {
+	tools := false
+	vision := true
+	contextLength := 65536
+	dep := DeploymentConfig{
+		ID:             "free:kilo-test",
+		RealModel:      "old-model",
+		SupportsStream: true,
+		SupportsTools:  true,
+		SupportsJSON:   true,
+		SupportsVision: false,
+		ContextLength:  128000,
+	}
+	entry := FreeModelCatalogEntry{
+		ID:             "new-model",
+		SupportsTools:  &tools,
+		SupportsVision: &vision,
+		ContextLength:  &contextLength,
+	}
+
+	got := applyFreeModelCapabilities(dep, entry)
+	if got.RealModel != "new-model" {
+		t.Fatalf("real model = %q, want new-model", got.RealModel)
+	}
+	if got.SupportsTools {
+		t.Fatal("explicit model tools=false must override provider default true")
+	}
+	if !got.SupportsJSON {
+		t.Fatal("unknown model JSON capability must inherit provider default true")
+	}
+	if !got.SupportsVision || !got.SupportsStream {
+		t.Fatalf("unexpected inherited/overridden capabilities: %#v", got)
+	}
+	if got.ContextLength != contextLength {
+		t.Fatalf("context length = %d, want %d", got.ContextLength, contextLength)
+	}
+}

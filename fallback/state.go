@@ -88,6 +88,9 @@ func InitStateStore() error {
 	if err := InitScoreHistoryStore(); err != nil {
 		return err
 	}
+	if err := InitFreeProviderCatalogStore(); err != nil {
+		return err
+	}
 	return InitFreeProviderLedgerStore()
 }
 

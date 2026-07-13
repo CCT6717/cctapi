@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/common/logger"
@@ -37,19 +39,29 @@ func buildDesiredFreeProviderResources(cfg *Config) ([]desiredFreeProviderResour
 		}
 		logger.SysLog(fmt.Sprintf("[free_pool] processing provider %q (enabled=%v, keys=%d)", providerName, fp.Enabled, len(fp.Keys)))
 
-		models := fp.Models
-		if len(models) == 0 {
-			models = meta.DefaultModels
-		}
-		if len(models) == 0 {
-			models = []string{providerName + "/free"}
-			logger.SysLog(fmt.Sprintf("[free_pool] provider %q has no models, using placeholder: %v", providerName, models))
-		}
-		realModel := models[0]
-
 		addResource := func(key string) {
 			key = strings.TrimSpace(key)
 			keyHash := SafeKeyHash(key)
+			depID := deploymentID(providerName, keyHash)
+			models := append([]string{}, fp.Models...)
+			if len(models) == 0 {
+				models = append([]string{}, meta.DefaultModels...)
+			}
+			var persistedSnapshot FreeProviderCatalogSnapshot
+			if len(fp.Models) == 0 {
+				if snapshot, ok := GetFreeProviderCatalogSnapshot(depID); ok && len(snapshot.Models) > 0 {
+					persistedSnapshot = snapshot
+					models = freeProviderCatalogModelIDs(snapshot.Models)
+				}
+			}
+			if len(models) == 0 {
+				models = []string{providerName + "/free"}
+				logger.SysLog(fmt.Sprintf("[free_pool] provider %q has no catalog snapshot, using placeholder: %v", providerName, models))
+			}
+			realModel := models[0]
+			if persistedSnapshot.SelectedModel != "" {
+				realModel = persistedSnapshot.SelectedModel
+			}
 			name := channelName(providerName, keyHash)
 			weight := uint(0)
 			baseURL := meta.DefaultBaseURL
@@ -65,8 +77,7 @@ func buildDesiredFreeProviderResources(cfg *Config) ([]desiredFreeProviderResour
 			desiredChannels = append(desiredChannels, desiredFreeProviderResource{name: name, ch: ch, provider: providerName, keyHash: keyHash})
 
 			rpm, rpd, tpm, tpd := ResolveFreeProviderLimits(meta, fp)
-			depID := deploymentID(providerName, keyHash)
-			autoDeployments[depID] = DeploymentConfig{
+			deployment := DeploymentConfig{
 				ID:                    depID,
 				Enabled:               true,
 				ChannelID:             0,
@@ -90,6 +101,10 @@ func buildDesiredFreeProviderResources(cfg *Config) ([]desiredFreeProviderResour
 				TPMLimit:              tpm,
 				TPDLimit:              tpd,
 			}
+			if entry, ok := findFreeModelCatalogEntry(persistedSnapshot.Models, realModel); ok {
+				deployment = applyFreeModelCapabilities(deployment, entry)
+			}
+			autoDeployments[depID] = deployment
 		}
 
 		if len(fp.Keys) == 0 {
@@ -327,17 +342,21 @@ func shouldSyncDeploymentRealModel(deploymentID string, generatedRealModel strin
 
 func updateChannelModelsAndAbilities(channel *model.Channel, newModels string) error {
 	if err := model.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Model(channel).Update("models", newModels).Error; err != nil {
-			return err
-		}
-		updatedChannel := *channel
-		updatedChannel.Models = newModels
-		return updatedChannel.UpdateAbilitiesWithDB(tx)
+		return updateChannelModelsAndAbilitiesWithDB(tx, channel, newModels)
 	}); err != nil {
 		return err
 	}
 	channel.Models = newModels
 	return nil
+}
+
+func updateChannelModelsAndAbilitiesWithDB(tx *gorm.DB, channel *model.Channel, newModels string) error {
+	if err := tx.Model(channel).Update("models", newModels).Error; err != nil {
+		return err
+	}
+	updatedChannel := *channel
+	updatedChannel.Models = newModels
+	return updatedChannel.UpdateAbilitiesWithDB(tx)
 }
 
 func providerNameForAutoDeploymentID(id string) string {
@@ -444,13 +463,33 @@ func DryRunCleanStale() (*StaleCleanupReport, error) {
 	return report, nil
 }
 
-// syncAllProviderModels refreshes dynamic model lists for enabled providers.
-// It only uses the passed config snapshot and applies live model updates via
-// the dedicated update helpers.
-func syncAllProviderModels(cfg *Config) {
+type FreeProviderCatalogSyncResult struct {
+	Provider     string `json:"provider"`
+	DeploymentID string `json:"deployment_id"`
+	Success      bool   `json:"success"`
+	ModelCount   int    `json:"model_count"`
+	Error        string `json:"error,omitempty"`
+}
+
+type FreeProviderCatalogSyncReport struct {
+	Attempted int                             `json:"attempted"`
+	Succeeded int                             `json:"succeeded"`
+	Failed    int                             `json:"failed"`
+	Results   []FreeProviderCatalogSyncResult `json:"results"`
+}
+
+var freeProviderCatalogRefreshMu sync.Mutex
+
+// syncAllProviderModels serializes scheduled and manual refreshes so an older,
+// slower request cannot overwrite a newer catalog.
+func syncAllProviderModels(cfg *Config) FreeProviderCatalogSyncReport {
+	report := FreeProviderCatalogSyncReport{}
 	if cfg == nil || cfg.FreeProviders == nil {
-		return
+		return report
 	}
+	freeProviderCatalogRefreshMu.Lock()
+	defer freeProviderCatalogRefreshMu.Unlock()
+
 	for providerName, fp := range cfg.FreeProviders {
 		if !fp.Enabled {
 			continue
@@ -459,106 +498,148 @@ func syncAllProviderModels(cfg *Config) {
 			logger.SysLog(fmt.Sprintf("[free-pool] %s has configured models, skipping dynamic model sync", providerName))
 			continue
 		}
-		// keyless 渚涘簲鍟?鐢ㄧ┖ key 璋冧竴娆?fetchModels
-		if len(fp.Keys) == 0 {
-			keyHash := SafeKeyHash("")
-			depID := deploymentID(providerName, keyHash)
-			models, err := fetchModels(providerName, "")
-			if err != nil {
-				recordModelSyncFailure(depID, providerName, err)
-				logger.SysWarn(fmt.Sprintf("[free-pool] %s model fetch failed: %v (keeping static default)", providerName, err))
-				continue
-			}
-			if len(models) == 0 {
-				recordModelSyncFailure(depID, providerName, fmt.Errorf("returned no models"))
-				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models (keeping static default)", providerName))
-				continue
-			}
-			recordModelSyncSuccess(depID)
-			// keyless 渚涘簲鍟嗗彧鏈変竴涓?channel,鐢ㄧ┖ key 鐨?hash
-			routingModel := routingModelForFetchedModels(providerName, models)
-			if shouldSyncDeploymentRealModel(depID, routingModel, providerName) && UpdateDeploymentRealModel(depID, routingModel) {
-				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, routingModel))
-			}
-			name := channelName(providerName, keyHash)
-			var ch model.Channel
-			if err := model.DB.Where("name = ?", name).First(&ch).Error; err != nil {
-				logger.SysWarn(fmt.Sprintf("[free-pool] %s channel %s not found in DB: %v", providerName, name, err))
-				continue
-			}
-			newModels := strings.Join(models, ",")
-			if ch.Models == newModels {
-				continue // 鏃犲彉鍖?璺宠繃
-			}
-			if err := updateChannelModelsAndAbilities(&ch, newModels); err != nil {
-				logger.SysError(fmt.Sprintf("[free-pool] failed to update models and abilities for %s: %v", name, err))
-				continue
-			}
-			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
+		meta, ok := BuiltinFreeProviders[providerName]
+		if !ok || !isDynamicFreeProviderCatalog(meta.ModelFetchMode) {
 			continue
 		}
-		// 鏈?key 鐨勪緵搴斿晢:閬嶅巻姣忎釜 key
-		for _, key := range fp.Keys {
+
+		keys := append([]string{}, fp.Keys...)
+		if len(keys) == 0 && meta.Keyless {
+			keys = []string{""}
+		}
+		for _, key := range keys {
 			key = strings.TrimSpace(key)
-			if key == "" {
+			if key == "" && !meta.Keyless {
 				continue
 			}
-			keyHash := SafeKeyHash(key)
-			depID := deploymentID(providerName, keyHash)
-			models, err := fetchModels(providerName, key)
-			if err != nil {
-				recordModelSyncFailure(depID, providerName, err)
-				logger.SysWarn(fmt.Sprintf("[free-pool] %s model fetch failed for %s: %v (keeping static default)", providerName, depID, err))
-				continue
+			result := syncOneFreeProviderCatalog(providerName, key, meta)
+			report.Results = append(report.Results, result)
+			report.Attempted++
+			if result.Success {
+				report.Succeeded++
+			} else {
+				report.Failed++
 			}
-			if len(models) == 0 {
-				recordModelSyncFailure(depID, providerName, fmt.Errorf("returned no models"))
-				logger.SysWarn(fmt.Sprintf("[free-pool] %s returned no models for %s (keeping static default)", providerName, depID))
-				continue
-			}
-			recordModelSyncSuccess(depID)
-			routingModel := routingModelForFetchedModels(providerName, models)
-			if shouldSyncDeploymentRealModel(depID, routingModel, providerName) && UpdateDeploymentRealModel(depID, routingModel) {
-				logger.SysLog(fmt.Sprintf("[free-pool] %s %s real_model synced to %s", providerName, depID, routingModel))
-			}
-			// Update channel.Models so the admin UI and channel abilities see the
-			// same dynamic model list that routing now sees via RealModel.
-			name := channelName(providerName, keyHash)
-			var ch model.Channel
-			if err := model.DB.Where("name = ?", name).First(&ch).Error; err != nil {
-				logger.SysWarn(fmt.Sprintf("[free-pool] %s channel %s not found in DB: %v", providerName, name, err))
-				continue
-			}
-			newModels := strings.Join(models, ",")
-			if ch.Models == newModels {
-				continue // 鏃犲彉鍖?璺宠繃
-			}
-			if err := updateChannelModelsAndAbilities(&ch, newModels); err != nil {
-				logger.SysError(fmt.Sprintf("[free-pool] failed to update models and abilities for %s: %v", name, err))
-				continue
-			}
-			logger.SysLog(fmt.Sprintf("[free-pool] %s %s models synced: %d models", providerName, name, len(models)))
 		}
+	}
+	return report
+}
+
+func isDynamicFreeProviderCatalog(fetchMode string) bool {
+	switch fetchMode {
+	case ModelFetchOpenRouterFree, ModelFetchKiloFree, ModelFetchOpenAIModels, ModelFetchOVHChat:
+		return true
+	default:
+		return false
 	}
 }
 
-func recordModelSyncFailure(deploymentID string, providerName string, err error) {
-	if deploymentID == "" || err == nil {
-		return
+func syncOneFreeProviderCatalog(providerName, key string, meta FreeProviderMeta) FreeProviderCatalogSyncResult {
+	keyHash := SafeKeyHash(key)
+	depID := deploymentID(providerName, keyHash)
+	result := FreeProviderCatalogSyncResult{Provider: providerName, DeploymentID: depID}
+	attemptedAt := time.Now().UTC()
+	candidate, err := fetchProviderCatalog(providerName, key)
+	if err == nil {
+		candidate, err = validateFreeProviderCatalog(candidate)
 	}
-	RecordFailure(deploymentID, fmt.Sprintf("model sync failed for %s: %v", providerName, err), false)
-	setHealthStatus(deploymentID, HealthError)
-}
-
-func recordModelSyncSuccess(deploymentID string) {
-	if deploymentID == "" {
-		return
-	}
-	snap := SnapshotRuntimeState(deploymentID)
-	if strings.Contains(snap.LastError, "model sync failed") {
-		clearRuntimeError(deploymentID)
-		if GetHealthStatus(deploymentID) == HealthError {
-			setHealthStatus(deploymentID, HealthHealthy)
+	if err == nil {
+		var channel model.Channel
+		name := channelName(providerName, keyHash)
+		err = model.DB.Where("name = ?", name).First(&channel).Error
+		if err == nil {
+			routingModel := routingModelForFetchedModels(providerName, freeProviderCatalogModelIDs(candidate.Models))
+			err = applyValidatedFreeProviderCatalog(depID, providerName, meta, &channel, candidate, routingModel, attemptedAt)
 		}
 	}
+	if err != nil {
+		result.Error = err.Error()
+		if storeErr := markFreeProviderCatalogFailure(depID, providerName, meta.ModelFetchMode, attemptedAt, err); storeErr != nil {
+			logger.SysError(fmt.Sprintf("[free-pool] failed to persist catalog error for %s: %v", depID, storeErr))
+		}
+		logger.SysWarn(fmt.Sprintf("[free-pool] %s catalog refresh failed for %s: %v (keeping last successful snapshot)", providerName, depID, err))
+		return result
+	}
+	result.Success = true
+	result.ModelCount = len(candidate.Models)
+	logger.SysLog(fmt.Sprintf("[free-pool] %s %s catalog synced: %d models", providerName, depID, result.ModelCount))
+	return result
+}
+
+func applyValidatedFreeProviderCatalog(
+	deploymentID string,
+	providerName string,
+	meta FreeProviderMeta,
+	channel *model.Channel,
+	candidate FreeProviderCatalogCandidate,
+	routingModel string,
+	attemptedAt time.Time,
+) error {
+	if channel == nil {
+		return fmt.Errorf("channel is nil")
+	}
+	if err := InitFreeProviderCatalogStore(); err != nil {
+		return err
+	}
+	if routingModel == "" {
+		return fmt.Errorf("catalog returned no routing model")
+	}
+	newModels := strings.Join(freeProviderCatalogModelIDs(candidate.Models), ",")
+	previousSnapshot, hasPreviousSnapshot := GetFreeProviderCatalogSnapshot(deploymentID)
+
+	configLock.Lock()
+	if config == nil || config.Deployments == nil {
+		configLock.Unlock()
+		return fmt.Errorf("fallback config is not initialized")
+	}
+	current, ok := config.Deployments[deploymentID]
+	if !ok {
+		configLock.Unlock()
+		return fmt.Errorf("deployment %s is not initialized", deploymentID)
+	}
+	target := current
+	previousAutomaticSelection := hasPreviousSnapshot &&
+		strings.TrimSpace(previousSnapshot.SelectedModel) != "" &&
+		strings.TrimSpace(current.RealModel) == strings.TrimSpace(previousSnapshot.SelectedModel)
+	if previousAutomaticSelection || !isDeploymentRealModelOverride(current.RealModel, routingModel, providerName) {
+		target.RealModel = routingModel
+		target.SupportsVision = meta.SupportsVision
+		target.SupportsStream = meta.SupportsStream
+		target.SupportsTools = meta.SupportsTools
+		target.SupportsJSON = meta.SupportsJSON
+		target.ContextLength = meta.ContextLength
+		if entry, found := findFreeModelCatalogEntry(candidate.Models, routingModel); found {
+			target = applyFreeModelCapabilities(target, entry)
+		}
+	} else if entry, found := findFreeModelCatalogEntry(candidate.Models, current.RealModel); found {
+		target = applyFreeModelCapabilities(target, entry)
+	}
+
+	snapshot := FreeProviderCatalogSnapshot{
+		DeploymentID:  deploymentID,
+		Provider:      providerName,
+		Source:        candidate.Source,
+		Models:        candidate.Models,
+		SelectedModel: target.RealModel,
+		LastAttemptAt: attemptedAt,
+		LastSuccessAt: attemptedAt,
+	}
+	err := model.DB.Transaction(func(tx *gorm.DB) error {
+		if channel.Models != newModels {
+			if err := updateChannelModelsAndAbilitiesWithDB(tx, channel, newModels); err != nil {
+				return err
+			}
+		}
+		return saveFreeProviderCatalogSuccessWithDB(tx, snapshot)
+	})
+	if err == nil {
+		config.Deployments[deploymentID] = target
+	}
+	configLock.Unlock()
+	if err != nil {
+		return err
+	}
+	channel.Models = newModels
+	cacheFreeProviderCatalogSnapshot(snapshot)
+	return nil
 }

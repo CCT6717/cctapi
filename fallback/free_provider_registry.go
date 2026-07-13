@@ -23,6 +23,7 @@ const (
 	ModelFetchOpenAIModels   = "openai_models"
 	ModelFetchOpenRouterFree = "openrouter_free"
 	ModelFetchKiloFree       = "kilo_free"
+	ModelFetchOVHChat        = "ovh_chat"
 )
 
 type FreeProviderMeta struct {
@@ -251,7 +252,7 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		ContextLength:  262144,
 		SupportsStream: true,
 		Keyless:        true,
-		ModelFetchMode: ModelFetchStatic,
+		ModelFetchMode: ModelFetchOVHChat,
 	},
 	"agnes": {
 		ProviderID:     "agnes",

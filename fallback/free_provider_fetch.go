@@ -54,6 +54,8 @@ func fetchProviderCatalog(providerName, key string) (FreeProviderCatalogCandidat
 		return fetchKiloCatalog()
 	case ModelFetchOpenAIModels:
 		return fetchOpenAICompatCatalog(meta.DefaultBaseURL, key)
+	case ModelFetchOVHChat:
+		return fetchOVHChatCatalog(meta.DefaultBaseURL, key)
 	case ModelFetchStatic, "":
 		models := make([]FreeModelCatalogEntry, 0, len(meta.DefaultModels))
 		for _, modelID := range meta.DefaultModels {
@@ -266,27 +268,9 @@ func fetchOpenAICompatModels(baseURL, key string) ([]string, error) {
 }
 
 func fetchOpenAICompatCatalog(baseURL, key string) (FreeProviderCatalogCandidate, error) {
-	modelsURL := strings.TrimRight(baseURL, "/") + "/models"
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
+	body, err := fetchOpenAICompatModelsBody(baseURL, key)
 	if err != nil {
 		return FreeProviderCatalogCandidate{}, err
-	}
-	if key != "" {
-		req.Header.Set("Authorization", "Bearer "+key)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return FreeProviderCatalogCandidate{}, fmt.Errorf("%s request: %w", modelsURL, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return FreeProviderCatalogCandidate{}, fmt.Errorf("%s status %d", modelsURL, resp.StatusCode)
-	}
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return FreeProviderCatalogCandidate{}, fmt.Errorf("read models body from %s: %w", modelsURL, err)
 	}
 	candidate, err := parseOpenAICompatCatalog(body)
 	if err != nil {
@@ -295,9 +279,49 @@ func fetchOpenAICompatCatalog(baseURL, key string) (FreeProviderCatalogCandidate
 	return validateFreeProviderCatalog(candidate)
 }
 
+func fetchOVHChatCatalog(baseURL, key string) (FreeProviderCatalogCandidate, error) {
+	body, err := fetchOpenAICompatModelsBody(baseURL, key)
+	if err != nil {
+		return FreeProviderCatalogCandidate{}, err
+	}
+	candidate, err := parseOVHChatCatalog(body)
+	if err != nil {
+		return FreeProviderCatalogCandidate{}, err
+	}
+	return validateFreeProviderCatalog(candidate)
+}
+
+func fetchOpenAICompatModelsBody(baseURL, key string) ([]byte, error) {
+	modelsURL := strings.TrimRight(baseURL, "/") + "/models"
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, modelsURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	if key != "" {
+		req.Header.Set("Authorization", "Bearer "+key)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("%s request: %w", modelsURL, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%s status %d", modelsURL, resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read models body from %s: %w", modelsURL, err)
+	}
+	return body, nil
+}
+
 type openAICompatModelsResponse struct {
 	Data []struct {
-		ID string `json:"id"`
+		ID                  string `json:"id"`
+		MaxCompletionTokens int    `json:"max_completion_tokens"`
+		ContextLength       int    `json:"context_length"`
 	} `json:"data"`
 }
 
@@ -331,6 +355,31 @@ func parseOpenAICompatCatalog(body []byte) (FreeProviderCatalogCandidate, error)
 	}
 	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
 	return FreeProviderCatalogCandidate{Source: ModelFetchOpenAIModels, Models: models}, nil
+}
+
+func parseOVHChatCatalog(body []byte) (FreeProviderCatalogCandidate, error) {
+	var respData openAICompatModelsResponse
+	if err := json.Unmarshal(body, &respData); err != nil {
+		return FreeProviderCatalogCandidate{}, fmt.Errorf("parse OVH models json: %w", err)
+	}
+	seen := make(map[string]struct{}, len(respData.Data))
+	models := make([]FreeModelCatalogEntry, 0, len(respData.Data))
+	for _, model := range respData.Data {
+		model.ID = strings.TrimSpace(model.ID)
+		if model.ID == "" || model.MaxCompletionTokens <= 0 {
+			continue
+		}
+		if _, ok := seen[model.ID]; ok {
+			continue
+		}
+		seen[model.ID] = struct{}{}
+		models = append(models, FreeModelCatalogEntry{
+			ID:            model.ID,
+			ContextLength: catalogIntPtr(model.ContextLength),
+		})
+	}
+	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
+	return FreeProviderCatalogCandidate{Source: ModelFetchOVHChat, Models: models}, nil
 }
 
 func queryOpenRouterCredits(key string) (float64, error) {

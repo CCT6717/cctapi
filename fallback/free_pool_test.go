@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	dbmodel "github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/channeltype"
@@ -477,6 +478,7 @@ func TestSyncAllProviderModelsRollsBackChannelModelsWhenAbilityRefreshFails(t *t
 			cleanupDB := setupFreePoolTestDB(t)
 			defer cleanupDB()
 			t.Cleanup(func() { resetConfigForTest(nil) })
+			t.Cleanup(resetFreeProviderCatalogCacheForTest)
 
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/v1/models" {
@@ -551,7 +553,64 @@ func TestSyncAllProviderModelsRollsBackChannelModelsWhenAbilityRefreshFails(t *t
 			if len(abilities) != 1 || abilities[0].Model != "old-model" {
 				t.Fatalf("abilities = %+v, want original old-model ability", abilities)
 			}
+			dep, ok := CloneDeployment(depID)
+			if !ok {
+				t.Fatalf("expected deployment %s", depID)
+			}
+			if dep.RealModel != "old-model" {
+				t.Fatalf("deployment model = %q, want old-model after rollback", dep.RealModel)
+			}
+			catalog, ok := GetFreeProviderCatalogSnapshot(depID)
+			if !ok || catalog.LastError == "" {
+				t.Fatalf("failed channel transaction should publish diagnostics: %#v", catalog)
+			}
+			if len(catalog.Models) != 0 || !catalog.LastSuccessAt.IsZero() {
+				t.Fatalf("failed channel transaction must not publish a successful catalog: %#v", catalog)
+			}
 		})
+	}
+}
+
+func TestBuildDesiredFreeProviderResourcesRestoresPersistedDynamicCatalog(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	resetFreeProviderCatalogCacheForTest()
+	t.Cleanup(resetFreeProviderCatalogCacheForTest)
+
+	now := time.Now().UTC()
+	tools := true
+	jsonMode := true
+	depID := deploymentID("kilo", SafeKeyHash(""))
+	if err := saveFreeProviderCatalogSuccess(FreeProviderCatalogSnapshot{
+		DeploymentID: depID,
+		Provider:     "kilo",
+		Source:       ModelFetchKiloFree,
+		Models: []FreeModelCatalogEntry{
+			{ID: "kilo/model-a:free", SupportsTools: &tools, SupportsJSON: &jsonMode},
+			{ID: "kilo/model-b:free"},
+		},
+		SelectedModel: "kilo/model-a:free",
+		LastAttemptAt: now,
+		LastSuccessAt: now,
+	}); err != nil {
+		t.Fatalf("save catalog snapshot: %v", err)
+	}
+
+	resources, deployments := buildDesiredFreeProviderResources(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			"kilo": {Enabled: true},
+		},
+	})
+	if len(resources) != 1 {
+		t.Fatalf("resource count = %d, want 1", len(resources))
+	}
+	if got := resources[0].ch.Models; got != "kilo/model-a:free,kilo/model-b:free" {
+		t.Fatalf("restored channel models = %q", got)
+	}
+	dep := deployments[depID]
+	if dep.RealModel != "kilo/model-a:free" || !dep.SupportsTools || !dep.SupportsJSON {
+		t.Fatalf("restored deployment did not retain model capabilities: %#v", dep)
 	}
 }
 
@@ -722,6 +781,7 @@ func TestSyncAndRefreshFreePoolRuntimeRecordsDynamicModelRefreshFailure(t *testi
 	t.Cleanup(func() {
 		resetConfigForTest(nil)
 		resetRuntimeForTest()
+		resetFreeProviderCatalogCacheForTest()
 	})
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -754,15 +814,16 @@ func TestSyncAndRefreshFreePoolRuntimeRecordsDynamicModelRefreshFailure(t *testi
 		t.Fatalf("SyncAndRefreshFreePoolRuntime should keep config sync successful on model refresh failure: %v", err)
 	}
 
+	catalog, ok := GetFreeProviderCatalogSnapshot(depID)
+	if !ok || !strings.Contains(catalog.LastError, "status 500") {
+		t.Fatalf("expected independent catalog error with status 500, got %#v", catalog)
+	}
 	snap := SnapshotRuntimeState(depID)
-	if !strings.Contains(snap.LastError, "model sync failed") || !strings.Contains(snap.LastError, "status 500") {
-		t.Fatalf("expected runtime model sync error with status 500, got %q", snap.LastError)
+	if strings.Contains(snap.LastError, "model sync failed") || snap.FailureCount != 0 {
+		t.Fatalf("catalog failure must not pollute inference runtime state: %#v", snap)
 	}
-	if snap.FailureCount != 1 {
-		t.Fatalf("expected one recorded runtime failure, got %d", snap.FailureCount)
-	}
-	if got := GetHealthStatus(depID); got != HealthError {
-		t.Fatalf("expected health error after model sync failure, got %s", got)
+	if got := GetHealthStatus(depID); got == HealthError {
+		t.Fatalf("catalog failure must not mark inference health error, got %s", got)
 	}
 }
 
@@ -803,6 +864,76 @@ func TestSyncAllProviderModelsKeepsDeploymentRealModelOverride(t *testing.T) {
 	}
 	if dep.RealModel != "manual-real-model" {
 		t.Fatalf("expected dynamic model sync to preserve deployment real_model override, got %q", dep.RealModel)
+	}
+}
+
+func TestApplyValidatedCatalogAdvancesPreviousAutomaticSelection(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	resetFreeProviderCatalogCacheForTest()
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+		resetFreeProviderCatalogCacheForTest()
+	})
+
+	providerName := "nvidia"
+	key := "nvapi-auto-selection"
+	depID := deploymentID(providerName, SafeKeyHash(key))
+	meta := BuiltinFreeProviders[providerName]
+	channel := dbmodel.Channel{
+		Name:   channelName(providerName, SafeKeyHash(key)),
+		Type:   meta.ChannelType,
+		Key:    key,
+		Models: "old-auto-model",
+		Group:  "default",
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	if err := dbmodel.DB.Create(&dbmodel.Ability{
+		Group: "default", Model: "old-auto-model", ChannelId: channel.Id, Enabled: true,
+	}).Error; err != nil {
+		t.Fatalf("create old ability: %v", err)
+	}
+	now := time.Now().UTC()
+	if err := saveFreeProviderCatalogSuccess(FreeProviderCatalogSnapshot{
+		DeploymentID:  depID,
+		Provider:      providerName,
+		Source:        ModelFetchOpenAIModels,
+		Models:        []FreeModelCatalogEntry{{ID: "old-auto-model"}},
+		SelectedModel: "old-auto-model",
+		LastAttemptAt: now.Add(-time.Hour),
+		LastSuccessAt: now.Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("save previous catalog: %v", err)
+	}
+	resetConfigForTest(&Config{
+		Enabled: true,
+		Deployments: map[string]DeploymentConfig{
+			depID: {
+				ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "old-auto-model",
+				Pool: "free", SupportsStream: meta.SupportsStream,
+			},
+		},
+	})
+
+	tools := true
+	candidate := FreeProviderCatalogCandidate{
+		Source: ModelFetchOpenAIModels,
+		Models: []FreeModelCatalogEntry{{ID: "new-auto-model", SupportsTools: &tools}},
+	}
+	if err := applyValidatedFreeProviderCatalog(
+		depID, providerName, meta, &channel, candidate, "new-auto-model", now,
+	); err != nil {
+		t.Fatalf("applyValidatedFreeProviderCatalog: %v", err)
+	}
+	dep, ok := CloneDeployment(depID)
+	if !ok {
+		t.Fatalf("expected deployment %s", depID)
+	}
+	if dep.RealModel != "new-auto-model" || !dep.SupportsTools {
+		t.Fatalf("automatic selection did not advance with capabilities: %#v", dep)
 	}
 }
 
@@ -1476,7 +1607,7 @@ func TestBuiltinFreeProviderRegistry_OVH(t *testing.T) {
 	if meta.DefaultBaseURL != "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1" {
 		t.Errorf("unexpected base URL: %s", meta.DefaultBaseURL)
 	}
-	// OVH /v1/models 返回全量（含非 chat），用静态列表
+	// OVH keeps a static first-start fallback and dynamically filters chat models.
 	if len(meta.DefaultModels) != 14 {
 		t.Errorf("expected 14 current chat models, got %d: %v", len(meta.DefaultModels), meta.DefaultModels)
 	}
@@ -1490,6 +1621,9 @@ func TestBuiltinFreeProviderRegistry_OVH(t *testing.T) {
 	}
 	if meta.ContextLength != 262144 {
 		t.Errorf("expected ContextLength 262144, got %d", meta.ContextLength)
+	}
+	if meta.ModelFetchMode != ModelFetchOVHChat {
+		t.Fatalf("expected OVH model fetch mode %q, got %q", ModelFetchOVHChat, meta.ModelFetchMode)
 	}
 }
 

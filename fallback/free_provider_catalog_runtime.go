@@ -72,6 +72,46 @@ func cloneFreeModelCatalogEntry(src FreeModelCatalogEntry) FreeModelCatalogEntry
 	return dst
 }
 
+func applyFreeModelCapabilities(dep DeploymentConfig, entry FreeModelCatalogEntry) DeploymentConfig {
+	dep.RealModel = entry.ID
+	if entry.SupportsStream != nil {
+		dep.SupportsStream = *entry.SupportsStream
+	}
+	if entry.SupportsTools != nil {
+		dep.SupportsTools = *entry.SupportsTools
+	}
+	if entry.SupportsJSON != nil {
+		dep.SupportsJSON = *entry.SupportsJSON
+	}
+	if entry.SupportsVision != nil {
+		dep.SupportsVision = *entry.SupportsVision
+	}
+	if entry.ContextLength != nil && *entry.ContextLength > 0 {
+		dep.ContextLength = *entry.ContextLength
+	}
+	return dep
+}
+
+func freeProviderCatalogModelIDs(models []FreeModelCatalogEntry) []string {
+	ids := make([]string, 0, len(models))
+	for _, entry := range models {
+		if strings.TrimSpace(entry.ID) != "" {
+			ids = append(ids, entry.ID)
+		}
+	}
+	return ids
+}
+
+func findFreeModelCatalogEntry(models []FreeModelCatalogEntry, modelID string) (FreeModelCatalogEntry, bool) {
+	modelID = strings.TrimSpace(modelID)
+	for _, entry := range models {
+		if entry.ID == modelID {
+			return cloneFreeModelCatalogEntry(entry), true
+		}
+	}
+	return FreeModelCatalogEntry{}, false
+}
+
 func cloneBoolPtr(src *bool) *bool {
 	if src == nil {
 		return nil
