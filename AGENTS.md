@@ -50,7 +50,7 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 
 ## Current Handoff
 
-Last verified handoff: 2026-07-13.
+Last verified handoff: 2026-07-14.
 
 - Branch `main` is pushed to `origin/main`.
 - Latest smoke hardening commit: `36a6dc5 fix(smoke): wait for complete usage accounting`.
@@ -86,6 +86,12 @@ Last verified handoff: 2026-07-13.
 - Health checks no longer mark unexpected 4xx responses healthy. The stale OVH `Llama-3.1-8B-Instruct` default was removed, and Pollinations tool-call capability is represented in deployment metadata.
 - OpenRouter remained blocked by its external daily free quota during this acceptance. OVH used a current model after sync but public requests remained intermittently rate limited. These are recorded external gaps, not local acceptance passes.
 - Manual Kimi Code channel `#22` remains enabled and outside the generated free pool. No `verify-mp` or `verify-proto` token remains.
+- Dynamic provider catalog refresh is complete. Validated Kilo and OVH metadata is persisted atomically, restored on startup, exposed through the admin API/UI, and used for tools/JSON/vision-aware routing.
+- Catalog refresh outcomes are tied to the active config generation. Superseded successes and failures are skipped without changing the last good snapshot, and queued superseded work does not call upstream providers.
+- OpenRouter keeps the stable `openrouter/free` alias by default while preserving an explicitly selected concrete deployment model. Explicit provider-level `models` still takes precedence.
+- Catalog HTTP timeout is 15 seconds. The 2026-07-14 live sync passed for Kilo (11 models) and OVH (14 models): 2 providers succeeded, 0 failed, 0 skipped.
+- Current local runtime is the rebuilt `one-api.exe` on port `3008`; post-deploy Playwright acceptance passed 16/16 desktop/mobile checks.
+- Catalog refresh evidence: `docs/evidence/provider-catalog-refresh-2026-07-14.json`.
 
 Final verification from the Vite migration batch:
 
@@ -255,10 +261,17 @@ Completed backend alignment after UI acceptance:
 - Tool-call rescue compatibility. Structured tool-call argument repair is implemented in the relay/model boundary for OpenAI-compatible chat completions.
 - Admin UI/API display of real runtime failures rather than local-only sync errors. Runtime status now exposes persistent state, cooldown, exhausted, sticky route, and free-pool sync/health-check errors for the admin UI.
 
-Next backend task:
+Completed dynamic catalog work:
 
-- Replace static provider capability/model assumptions with a scheduled, validated catalog refresh where upstream metadata permits it. OVH model churn and per-model Kilo capability are the first concrete cases this should cover.
-- Before production traffic, run a paced soak with the intended provider credentials or paid quota. Do not use anonymous-provider burst behavior as a production capacity estimate.
+- Kilo, OVH, OpenAI-compatible, and OpenRouter catalog sources use validated response parsing with an 8 MiB response limit and a 15-second request timeout.
+- Successful snapshots update channel abilities and persistent catalog state in one transaction. Failed refreshes preserve the last successful model inventory and capabilities.
+- Per-model tools, JSON, vision, streaming, and context metadata is applied at the routing boundary without moving compatibility logic into controllers.
+- Admin sync reports aggregate provider/key outcomes without exposing keys, and partial failures or skips are never reported as full success.
+
+Remaining production work:
+
+- Before sustained production traffic, run a paced soak with the intended provider credentials or paid quota. Do not use anonymous-provider burst behavior as a production capacity estimate.
+- The catalog store is designed for the current single-process SQLite deployment. A future multi-instance deployment should add database-level compare-and-swap or leader ownership for catalog publication.
 
 ## Important Files
 

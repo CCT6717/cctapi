@@ -1,0 +1,66 @@
+{
+  "date": "2026-07-14",
+  "feature": "dynamic free-provider catalog refresh and capability routing",
+  "commits": {
+    "review_fixes": "fb2f008",
+    "catalog_timeout": "56ae44f"
+  },
+  "verification": {
+    "go_test_all": "passed",
+    "go_race_fallback_router": "passed",
+    "frontend_lint": "passed with 0 warnings",
+    "frontend_vitest": {
+      "files": 9,
+      "tests": 44,
+      "passed": 44
+    },
+    "frontend_build": "passed",
+    "storybook_build": "passed",
+    "playwright_e2e": {
+      "tests": 16,
+      "passed": 16,
+      "viewports": [
+        "desktop chromium",
+        "mobile chrome"
+      ]
+    }
+  },
+  "runtime": {
+    "base_url": "http://127.0.0.1:3008",
+    "pid_at_acceptance": 39940,
+    "home_status": 200,
+    "free_pool_status": 200
+  },
+  "live_catalog_sync": {
+    "success": true,
+    "providers_attempted": 2,
+    "providers_succeeded": 2,
+    "providers_failed": 0,
+    "providers_skipped": 0,
+    "results": [
+      {
+        "provider": "kilo",
+        "models": 11,
+        "succeeded": 1,
+        "failed": 0,
+        "skipped": 0
+      },
+      {
+        "provider": "ovh",
+        "models": 14,
+        "succeeded": 1,
+        "failed": 0,
+        "skipped": 0
+      }
+    ]
+  },
+  "security": {
+    "credentials_recorded": false,
+    "provider_keys_recorded": false,
+    "sync_error_count": 0
+  },
+  "known_residual": [
+    "multi-instance catalog publication needs database-level ownership or compare-and-swap",
+    "production capacity still requires a paced soak with intended provider quota"
+  ]
+}
