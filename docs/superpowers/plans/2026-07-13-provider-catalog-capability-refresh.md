@@ -6,9 +6,10 @@
 **Goal:** Refresh OVH/Kilo catalogs safely, apply model-level capabilities, and
 show refresh health in the free-pool admin UI.
 
-**Architecture:** Build and validate typed catalog candidates, then apply channel
-and deployment changes before publishing a deep-copied runtime snapshot. Failed
-refreshes preserve old routing data and only update stale/error diagnostics.
+**Architecture:** Build and validate typed catalog candidates, persist the last
+successful catalog with channel abilities in one transaction, then update the
+deployment and cache under the config lock. Failed refreshes preserve old
+routing data and only update stale/error diagnostics.
 
 **Tech stack:** Go 1.22, GORM, Gin, React, Semantic UI React, Vitest, Playwright.
 
@@ -35,9 +36,11 @@ refreshes preserve old routing data and only update stale/error diagnostics.
 ## Task 2: Atomic Refresh And Capability Application
 
 **Files:**
+- Create: `fallback/free_provider_catalog_store.go`
 - Modify: `fallback/config.go`
 - Modify: `fallback/free_provider_sync.go`
 - Modify: `fallback/free_provider_registry.go`
+- Modify: `fallback/state.go`
 - Test: `fallback/config_routing_test.go`
 - Test: `fallback/free_pool_test.go`
 
@@ -45,12 +48,16 @@ refreshes preserve old routing data and only update stale/error diagnostics.
    deployment model/capabilities, and successful snapshot.
 2. Add failing tests proving Kilo metadata updates the selected deployment while
    OVH inherits conservative defaults.
-3. Add one config-lock helper that updates real model and capabilities together.
-4. Apply a validated candidate only after the channel transaction succeeds,
-   publish snapshot last, and mark failures stale without clearing old data.
-5. Change OVH to dynamic `openai_models` mode while keeping static defaults as
-   fallback inventory.
-6. Run focused tests to green and commit.
+3. Add a persistent snapshot row keyed by automatic deployment and load its
+   cache during fallback state initialization.
+4. Add one config-lock helper that updates real model and capabilities together.
+5. Apply snapshot/channel/abilities in one database transaction, publish cache
+   last, and mark failures stale without clearing old data.
+6. Change OVH to a filtered dynamic catalog mode while keeping static defaults
+   as first-start fallback inventory.
+7. Add a refresh mutex so manual and scheduled refreshes cannot overwrite each
+   other out of order.
+8. Run focused tests to green and commit.
 
 ## Task 3: Gateway API Projection
 

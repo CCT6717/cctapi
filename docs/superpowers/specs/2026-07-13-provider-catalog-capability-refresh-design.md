@@ -35,17 +35,20 @@ This survives restarts, but mixes operator configuration with volatile upstream
 data and causes frequent file churn. It also makes manual edits and merge-back
 work harder.
 
-### 2. Add a catalog database table
+### 2. Add a small catalog database table
 
-This gives durable snapshots and history, but introduces migration and cleanup
-work that is larger than the current requirement.
+This is the selected approach after inspecting restart behavior. The existing
+channel row preserves model IDs, but it cannot preserve Kilo's model-level
+capabilities, and startup resource sync can otherwise replace a dynamic catalog
+with a placeholder before the first refresh. One snapshot row per automatic
+deployment keeps the last successful typed catalog without modifying
+`fallback.json`.
 
-### 3. Validated in-memory snapshot with existing runtime resources
+### 3. In-memory snapshot only
 
-This is the selected approach. The model channel and generated deployment stay
-the routing source of truth. A successful refresh atomically replaces the
-runtime catalog snapshot after the channel/deployment update succeeds. A failed
-refresh only changes diagnostic state and leaves routing data untouched.
+This has the smallest implementation, but loses model-level metadata across a
+restart exactly when the upstream catalog is unavailable. It is retained only
+as a read cache over the persisted snapshots.
 
 ## Data Model
 
@@ -61,8 +64,9 @@ explicit false value.
 - last attempt and last success timestamps
 - stale flag and last error
 
-Snapshots are guarded by a package-level read/write lock and returned as deep
-copies.
+Snapshots are persisted as JSON in a small table keyed by automatic deployment
+ID. A package-level read/write-locked cache is loaded during fallback state
+initialization and returned as deep copies.
 
 A dynamic catalog is stale when its latest attempt failed or when the last
 success is older than twelve hours (twice the six-hour schedule). Static,
@@ -89,9 +93,11 @@ For each enabled provider/key:
 1. Fetch and fully validate a candidate catalog.
 2. Select the routing model using the existing override rules.
 3. Resolve the selected model's capabilities over provider defaults.
-4. Update channel models and abilities in one database transaction.
-5. Update real model and capabilities together under the config lock.
-6. Publish the successful snapshot and clear only catalog-sync diagnostics.
+4. Under the config write lock, update the persisted snapshot, channel models,
+   and abilities in one database transaction.
+5. After that transaction succeeds, update real model and capabilities together
+   before releasing the config lock.
+6. Publish the successful cache snapshot and clear only catalog-sync diagnostics.
 
 Any failure before step 5 leaves the previous deployment and snapshot intact.
 Failures mark the provider catalog stale and record a runtime error without
