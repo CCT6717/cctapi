@@ -113,6 +113,107 @@ describe('freePoolUtils', () => {
     expect(rows[0].key_count).toBe(1);
   });
 
+  it('normalizes catalog fields and exposes all Chinese catalog states', () => {
+    const providerConfig = {
+      static: { enabled: true },
+      custom: { enabled: true, models: ['custom-model'] },
+      disabled: { enabled: false },
+      never: { enabled: true },
+      healthy: { enabled: true },
+      failed: { enabled: true },
+      stale: { enabled: true },
+    };
+    const catalog = [
+      {
+        name: 'static',
+        catalog_status: {
+          refreshable: false,
+          source: ' static ',
+          model_count: '2',
+        },
+      },
+      {
+        name: 'custom',
+        catalog_status: {
+          refreshable: false,
+          source: 'custom_models',
+        },
+      },
+      {
+        name: 'disabled',
+        catalog_status: {
+          refreshable: true,
+          source: 'openai_models',
+        },
+      },
+      {
+        name: 'never',
+        catalog_status: {
+          refreshable: true,
+          source: 'openai_models',
+        },
+      },
+      {
+        name: 'healthy',
+        catalog_status: {
+          refreshable: true,
+          source: 'kilo_free',
+          model_count: 12,
+          last_attempt_at: '2026-07-13T12:00:00Z',
+          last_success_at: '2026-07-13T12:00:00Z',
+          stale: false,
+        },
+      },
+      {
+        name: 'failed',
+        catalog_status: {
+          refreshable: true,
+          source: 'openai_models',
+          model_count: 4,
+          last_attempt_at: '2026-07-13T13:00:00Z',
+          last_success_at: '2026-07-13T12:00:00Z',
+          stale: true,
+          last_error: ' upstream unavailable ',
+        },
+      },
+      {
+        name: 'stale',
+        catalog_status: {
+          refreshable: true,
+          source: 'openrouter_free',
+          model_count: 8,
+          last_attempt_at: '2026-07-13T13:00:00Z',
+          last_success_at: '2026-07-12T00:00:00Z',
+          stale: true,
+        },
+      },
+    ];
+
+    const rows = buildFreeProviderRows(providerConfig, catalog);
+    const byName = Object.fromEntries(rows.map((row) => [row.name, row]));
+
+    expect(rows.map((row) => row.catalog_status_text)).toEqual([
+      '静态目录',
+      '自定义模型',
+      '未启用',
+      '从未刷新',
+      '目录正常',
+      '刷新失败',
+      '目录已过期',
+    ]);
+    expect(byName.static.catalog_status).toEqual({
+      refreshable: false,
+      source: 'static',
+      model_count: 2,
+      last_attempt_at: '',
+      last_success_at: '',
+      stale: false,
+      last_error: '',
+    });
+    expect(byName.custom.catalog_status.model_count).toBe(1);
+    expect(byName.failed.catalog_status.last_error).toBe('upstream unavailable');
+  });
+
   it('applies staged limit overrides to effective limits', () => {
     const rows = buildFreeProviderRows(
       {

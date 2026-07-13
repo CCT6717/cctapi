@@ -7,6 +7,7 @@ import {
   Input,
   Label,
   Message,
+  Popup,
   Table,
 } from 'semantic-ui-react';
 import {
@@ -50,6 +51,13 @@ const renderQuirkLabels = (quirks) => {
   ));
 };
 
+const formatCatalogTime = (value) => {
+  if (!value) return '-';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('zh-CN', { hour12: false });
+};
+
 const FreeProviderRow = ({
   provider,
   providerConfig,
@@ -65,6 +73,7 @@ const FreeProviderRow = ({
   const display = PROVIDER_DISPLAY[key] || { title: key, color: 'grey', icon: 'key' };
   const limits = provider.limits_override || {};
   const keyCount = provider.key_count || 0;
+  const catalogStatus = provider.catalog_status || {};
   const invalidLimits = !validateLimits(limits);
   const stagedKeys = providerConfig[key]?.keys || [];
   const rowClasses = [
@@ -189,6 +198,29 @@ const FreeProviderRow = ({
             </Label>
           </div>
         )}
+        <div className='free-provider-catalog-status' style={{ marginTop: 6 }}>
+          <Label basic color={provider.catalog_status_color || 'grey'} size='mini'>
+            {provider.catalog_status_text || '静态目录'}
+          </Label>
+          <Label basic size='mini'>{Number(catalogStatus.model_count || 0)} 个模型</Label>
+          {catalogStatus.last_error && (
+            <Popup
+              content={catalogStatus.last_error}
+              position='top right'
+              trigger={(
+                <Icon
+                  name='warning circle'
+                  color='red'
+                  aria-label='查看目录刷新错误'
+                  tabIndex={0}
+                />
+              )}
+            />
+          )}
+          <div style={{ marginTop: 3, color: '#666', fontSize: 12 }}>
+            最后成功 {formatCatalogTime(catalogStatus.last_success_at)}
+          </div>
+        </div>
       </Table.Cell>
     </Table.Row>
   );

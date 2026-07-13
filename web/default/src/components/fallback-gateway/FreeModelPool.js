@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button, Header, Icon, Label, Loader, Message, Table } from 'semantic-ui-react';
-import { showError, showSuccess } from '../../helpers';
+import { showError, showSuccess, showWarning } from '../../helpers';
 import {
   cleanupDryRun,
   getFreePoolUsage,
@@ -228,6 +228,34 @@ const FreeModelPool = () => {
     }
   };
 
+  const runFreePoolSync = async () => {
+    setActingAction('sync');
+    try {
+      const res = await syncFreePool();
+      if (res.data?.success === false) {
+        showError(res.data?.message || '免费池同步失败');
+        return;
+      }
+
+      const catalogSync = res.data?.data?.catalog_sync;
+      const attempted = Number(catalogSync?.attempted || 0);
+      const failed = Number(catalogSync?.failed || 0);
+      const succeeded = Number(catalogSync?.succeeded || 0);
+      if (failed > 0) {
+        showWarning(
+          `免费池同步完成：尝试刷新 ${attempted} 个目录，${succeeded} 个成功，${failed} 个目录刷新失败`,
+        );
+      } else {
+        showSuccess('免费池同步与目录刷新完成');
+      }
+      await loadAll(true);
+    } catch (e) {
+      showError(e.message || '免费池同步失败');
+    } finally {
+      setActingAction('');
+    }
+  };
+
   const runCleanupDryRun = async () => {
     setActingAction('dryrun');
     try {
@@ -320,11 +348,11 @@ const FreeModelPool = () => {
             basic
             icon
             labelPosition='left'
-            onClick={() => runAction('sync', syncFreePool, '免费池同步完成')}
+            onClick={runFreePoolSync}
             loading={actingAction === 'sync'}
             disabled={!!actingAction}
           >
-            <Icon name='lightning' /> 同步免费池
+            <Icon name='lightning' /> 同步并刷新目录
           </Button>
           <Button
             basic

@@ -37,6 +37,61 @@ const cloneArray = (value) => (Array.isArray(value) ? [...value] : []);
 
 const USAGE_UNAVAILABLE_MESSAGE = '用量数据不可用。';
 
+const CUSTOM_CATALOG_SOURCES = new Set([
+  'custom',
+  'custom_models',
+  'configured',
+  'configured_models',
+  'manual',
+  'operator_override',
+]);
+
+const normalizeCatalogText = (value) => String(value || '').trim();
+
+const normalizeCatalogStatus = ({
+  status,
+  enabled,
+  modelFetchMode,
+  models,
+  hasCustomModels,
+}) => {
+  const raw = status && typeof status === 'object' ? status : {};
+  const rawSource = normalizeCatalogText(raw.source).toLowerCase();
+  const source = rawSource
+    || (hasCustomModels ? 'custom_models' : normalizeCatalogText(modelFetchMode).toLowerCase());
+  const modelCount = Number(raw.model_count);
+  const customModels = hasCustomModels || CUSTOM_CATALOG_SOURCES.has(source);
+  const refreshable = typeof raw.refreshable === 'boolean'
+    ? raw.refreshable
+    : enabled === true && source !== 'static' && !customModels;
+
+  return {
+    refreshable,
+    source,
+    model_count: Number.isFinite(modelCount) && modelCount >= 0
+      ? Math.trunc(modelCount)
+      : models.length,
+    last_attempt_at: normalizeCatalogText(raw.last_attempt_at),
+    last_success_at: normalizeCatalogText(raw.last_success_at),
+    stale: raw.stale === true,
+    last_error: normalizeCatalogText(raw.last_error),
+  };
+};
+
+const describeCatalogStatus = (provider, catalogStatus) => {
+  if (provider.enabled !== true) return { text: '未启用', color: 'grey' };
+  if (CUSTOM_CATALOG_SOURCES.has(catalogStatus.source)) {
+    return { text: '自定义模型', color: 'blue' };
+  }
+  if (!catalogStatus.refreshable || catalogStatus.source === 'static') {
+    return { text: '静态目录', color: 'grey' };
+  }
+  if (catalogStatus.last_error) return { text: '刷新失败', color: 'red' };
+  if (catalogStatus.stale) return { text: '目录已过期', color: 'orange' };
+  if (!catalogStatus.last_success_at) return { text: '从未刷新', color: 'grey' };
+  return { text: '目录正常', color: 'green' };
+};
+
 const applyLimitOverride = (base, overrides, field) => {
   if (!overrides || overrides[field] === undefined || overrides[field] === null || overrides[field] === '') {
     return base;
@@ -58,16 +113,29 @@ export const buildFreeProviderRows = (freeProviders = {}, catalog = []) => {
     const tpmLimit = pickNumber(meta.tpm_limit, saved.default_tpm);
     const tpdLimit = pickNumber(meta.tpd_limit, saved.default_tpd);
 
+    const enabled = pickBoolean(saved.enabled, meta.enabled);
+    const savedModels = cloneArray(saved.models);
+    const models = savedModels.length > 0 ? savedModels : cloneArray(meta.models);
+    const modelFetchMode = saved.model_fetch_mode || meta.model_fetch_mode || '';
+    const catalogStatus = normalizeCatalogStatus({
+      status: saved.catalog_status ?? meta.catalog_status,
+      enabled,
+      modelFetchMode,
+      models,
+      hasCustomModels: savedModels.length > 0,
+    });
+    const catalogDescription = describeCatalogStatus({ enabled }, catalogStatus);
+
     return {
       ...meta,
       ...saved,
       name,
       configured,
-      enabled: pickBoolean(saved.enabled, meta.enabled),
+      enabled,
       key_count: cloneArray(saved.keys).length > 0
         ? cloneArray(saved.keys).length
         : pickNumber(saved.key_count, meta.key_count),
-      models: cloneArray(saved.models).length > 0 ? cloneArray(saved.models) : cloneArray(meta.models),
+      models,
       default_models: cloneArray(saved.default_models).length > 0
         ? cloneArray(saved.default_models)
         : cloneArray(meta.default_models),
@@ -83,9 +151,12 @@ export const buildFreeProviderRows = (freeProviders = {}, catalog = []) => {
       tpd_limit: applyLimitOverride(tpdLimit, limitsOverride, 'tpd_limit'),
       limits_override: limitsOverride,
       quirks: saved.quirks || meta.quirks || null,
-      model_fetch_mode: saved.model_fetch_mode || meta.model_fetch_mode || '',
+      model_fetch_mode: modelFetchMode,
       provider_id: saved.provider_id || meta.provider_id || name,
       default_base_url: saved.default_base_url || meta.default_base_url || '',
+      catalog_status: catalogStatus,
+      catalog_status_text: catalogDescription.text,
+      catalog_status_color: catalogDescription.color,
     };
   };
 

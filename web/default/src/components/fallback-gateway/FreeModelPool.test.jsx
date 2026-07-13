@@ -2,10 +2,12 @@ import { vi } from 'vitest';
 import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import FreeModelPool from './FreeModelPool';
+import { showSuccess, showWarning } from '../../helpers';
 import {
   getFreePoolUsage,
   getGatewayConfig,
   getRuntimeStatus,
+  syncFreePool,
 } from './gatewayConfigApi';
 
 /* global globalThis */
@@ -13,6 +15,7 @@ import {
 vi.mock('../../helpers', () => ({
   showError: vi.fn(),
   showSuccess: vi.fn(),
+  showWarning: vi.fn(),
 }));
 
 vi.mock('./gatewayConfigApi', () => ({
@@ -78,6 +81,7 @@ vi.mock('semantic-ui-react', () => {
         {children}
       </div>
     ),
+    Popup: ({ content, trigger }) => <span data-tooltip={content}>{trigger}</span>,
     Table,
   };
 });
@@ -185,6 +189,92 @@ describe('FreeModelPool', () => {
       '启用 cct/free 虚拟模型。',
       '同步免费池以生成部署。',
     ]));
+  });
+
+  test('renders catalog details in the existing provider status cell', async () => {
+    getGatewayConfig.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          free_providers: {
+            ovh: { enabled: true, keyless: true },
+          },
+          free_provider_catalog: [{
+            name: 'ovh',
+            keyless: true,
+            catalog_status: {
+              refreshable: true,
+              source: 'openai_models',
+              model_count: 12,
+              last_attempt_at: '2026-07-13T13:00:00Z',
+              last_success_at: '2026-07-13T12:00:00Z',
+              stale: true,
+              last_error: 'catalog endpoint unavailable',
+            },
+          }],
+          virtual_models: {
+            'cct/free': {
+              enabled: true,
+              pools: ['free'],
+              strategy: 'free_first',
+            },
+          },
+          deployments: {},
+        },
+      },
+    });
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: true, data: [] },
+    });
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    const providerRow = container.querySelector('tr.free-provider-row');
+    expect(providerRow).not.toBeNull();
+    expect(providerRow.textContent).toContain('刷新失败');
+    expect(providerRow.textContent).toContain('12 个模型');
+    expect(providerRow.textContent).toContain('最后成功');
+    expect(providerRow.textContent).toContain('2026');
+    expect(providerRow.querySelector('[data-tooltip="catalog endpoint unavailable"]')).not.toBeNull();
+  });
+
+  test('warns instead of reporting success when catalog sync is partially failed', async () => {
+    getFreePoolUsage.mockResolvedValue({
+      data: { success: true, data: [] },
+    });
+    syncFreePool.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          catalog_sync: {
+            attempted: 3,
+            succeeded: 2,
+            failed: 1,
+            results: [{ provider: 'ovh', success: false, error: 'upstream unavailable' }],
+          },
+        },
+      },
+    });
+
+    await act(async () => {
+      root.render(<FreeModelPool />);
+    });
+
+    const syncButton = findButtonByText(container, '同步并刷新目录');
+    expect(syncButton).toBeDefined();
+
+    await act(async () => {
+      syncButton.click();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    await vi.waitFor(() => {
+      expect(showWarning).toHaveBeenCalledWith(expect.stringContaining('1 个目录刷新失败'));
+    });
+    expect(showSuccess).not.toHaveBeenCalled();
   });
 
   test('filters provider rows and stages bulk disable for selected visible providers', async () => {
