@@ -197,6 +197,7 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		DefaultRPM:     5,
 		ContextLength:  131072,
 		SupportsStream: true,
+		SupportsTools:  true,
 		Keyless:        true,
 		ModelFetchMode: ModelFetchStatic,
 	},
@@ -231,7 +232,6 @@ var BuiltinFreeProviders = map[string]FreeProviderMeta{
 		ChannelType:    channeltype.OpenAICompatible,
 		DefaultBaseURL: "https://oai.endpoints.kepler.ai.cloud.ovh.net/v1",
 		DefaultModels: []string{
-			"Llama-3.1-8B-Instruct",
 			"Meta-Llama-3_3-70B-Instruct",
 			"Mistral-7B-Instruct-v0.3",
 			"Mistral-Nemo-Instruct-2407",

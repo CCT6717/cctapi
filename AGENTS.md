@@ -79,6 +79,13 @@ Last verified handoff: 2026-07-13.
 - Vite migration screenshots are verified under `screenshots/vite-migration/`: 7 pages at desktop (`1425x891`) and mobile (`360x640`) viewports, with distinct hashes and confirmed page content.
 - Final channel/settings responsive acceptance screenshots are under `screenshots/final-validation/`.
 - Post-review `openrouter/auto` smoke passed with non-stream, stream, usage, and fallback metric checks before the daily quota was exhausted; `pageContainsOpenRouterAuto` remains informational.
+- Multi-provider FreeLLMAPI acceptance is archived at `docs/evidence/freellmapi-multi-provider-acceptance-2026-07-13.json`.
+- The live free pool now has enabled OpenRouter, Kilo, OVH, and Pollinations deployments. OpenRouter retains one stored key; the other three providers are keyless.
+- Forced provider routing passed from Kilo to Pollinations with real non-stream and stream responses, runtime-observed sticky reuse, and complete cleanup.
+- Real protocol coverage passed: Chat Completions, Responses, and Anthropic Messages in non-stream and stream modes through Kilo; a structured tool call with nested array arguments passed through Pollinations.
+- Health checks no longer mark unexpected 4xx responses healthy. The stale OVH `Llama-3.1-8B-Instruct` default was removed, and Pollinations tool-call capability is represented in deployment metadata.
+- OpenRouter remained blocked by its external daily free quota during this acceptance. OVH used a current model after sync but public requests remained intermittently rate limited. These are recorded external gaps, not local acceptance passes.
+- Manual Kimi Code channel `#22` remains enabled and outside the generated free pool. No `verify-mp` or `verify-proto` token remains.
 
 Final verification from the Vite migration batch:
 
@@ -238,7 +245,7 @@ FreeLLMAPI is not just a thin proxy. Treat the target feature set as:
 - Timing-safe bearer or x-api-key auth behavior.
 - Admin visibility for real provider health, usage, sync, and runtime errors.
 
-Recommended next backend tasks after UI acceptance:
+Completed backend alignment after UI acceptance:
 
 - Real free-provider health checks and surfaced error reasons. Manual health checks now write runtime errors for channel, auth, rate-limit, timeout, and 5xx cases; provider JSON/text error bodies are parsed into runtime diagnostics and cooldown reasons.
 - Model sync/status refresh that updates admin-visible state. Admin `/free-pool/sync` now runs resource sync plus dynamic model and credit refresh; dynamic model refresh failures are surfaced through runtime diagnostics.
@@ -247,6 +254,11 @@ Recommended next backend tasks after UI acceptance:
 - Sticky routing and automatic route selection for free providers.
 - Tool-call rescue compatibility. Structured tool-call argument repair is implemented in the relay/model boundary for OpenAI-compatible chat completions.
 - Admin UI/API display of real runtime failures rather than local-only sync errors. Runtime status now exposes persistent state, cooldown, exhausted, sticky route, and free-pool sync/health-check errors for the admin UI.
+
+Next backend task:
+
+- Replace static provider capability/model assumptions with a scheduled, validated catalog refresh where upstream metadata permits it. OVH model churn and per-model Kilo capability are the first concrete cases this should cover.
+- Before production traffic, run a paced soak with the intended provider credentials or paid quota. Do not use anonymous-provider burst behavior as a production capacity estimate.
 
 ## Important Files
 

@@ -173,7 +173,9 @@ func checkOneDeployment(deploymentID string, dep DeploymentConfig, timeout time.
 		setHealthStatus(deploymentID, HealthError)
 		_ = MarkDeploymentCooldownForDuration(deploymentID, reason, 30*time.Second)
 	default:
-		setHealthStatus(deploymentID, HealthHealthy)
+		reason := healthProbeFailureReason("health check rejected", statusCode, responseBody)
+		RecordFailure(deploymentID, reason, false)
+		setHealthStatus(deploymentID, HealthError)
 	}
 }
 

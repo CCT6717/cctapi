@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "executedAt": "2026-07-13T21:14:02.8561399+08:00",
+  "environment": "local Windows acceptance host",
+  "branch": "main",
+  "testedSourceHead": "7182b528e7db572f1d5a9d4b06cb0f5af9f084e2",
+  "targetModel": "openrouter/auto",
+  "configuration": {
+    "baselineHash": "6DE9081FB7712D274ECB080FEDD3CCA845CA8E075B0FB39FBB1CD32C941C8580",
+    "kiloOvhHash": "027E36A54582D36561DD0F9D7E020AA65FF2D05AA924AEEAD5E3E6100352358B",
+    "finalHash": "91F2C3F163B93A43AA444298D817AB7A86F3DA83F2C5D0CDAA74FA4D571E6C0F",
+    "backups": [
+      "data\\backups\\fallback.20260713-203520-707514900.json",
+      "data\\backups\\fallback.20260713-205520-938487800.json"
+    ],
+    "providers": [
+      {"id": "openrouter", "enabled": true, "keyCount": 1},
+      {"id": "kilo", "enabled": true, "keyCount": 0},
+      {"id": "ovh", "enabled": true, "keyCount": 0},
+      {"id": "pollinations", "enabled": true, "keyCount": 0}
+    ],
+    "deployments": [
+      {"id": "free:openrouter-1f9cf7de", "channelId": 13, "model": "openrouter/free"},
+      {"id": "free:kilo-e3b0c442", "channelId": 16, "model": "cohere/north-mini-code:free"},
+      {"id": "free:ovh-e3b0c442", "channelId": 18, "model": "Meta-Llama-3_3-70B-Instruct"},
+      {"id": "free:pollinations-e3b0c442", "channelId": 17, "model": "openai-fast"}
+    ]
+  },
+  "manualChannelInvariant": {
+    "id": 22,
+    "name": "Kimi Code",
+    "channelType": 50,
+    "baseUrl": "https://api.kimi.com/coding/v1",
+    "models": "kimi-for-coding",
+    "enabled": true,
+    "unchanged": true
+  },
+  "healthAcceptance": {
+    "kilo": {"candidate": true, "healthProbe": "healthy", "responseTimeMs": 3603, "realGatewayRequest": true},
+    "pollinations": {"candidate": true, "healthProbe": "healthy", "responseTimeMs": 799, "realGatewayRequest": true},
+    "ovh": {
+      "candidate": false,
+      "staleModelRemoved": "Llama-3.1-8B-Instruct",
+      "currentModel": "Meta-Llama-3_3-70B-Instruct",
+      "healthProbe": "rate_limited",
+      "responseTimeMs": 6223,
+      "cooldownApplied": true,
+      "realGatewayRequest": false,
+      "externalGap": "public API rate limit"
+    },
+    "openrouter": {
+      "candidate": false,
+      "realGatewayRequest": false,
+      "externalGap": "daily free-model quota exhausted"
+    }
+  },
+  "forcedRouting": {
+    "pass": true,
+    "baseline": {
+      "provider": "kilo",
+      "deployment": "free:kilo-e3b0c442",
+      "responseModel": "cohere/north-mini-code:free",
+      "nonStream": true,
+      "stream": true,
+      "usageTokens": 53
+    },
+    "fallback": {
+      "provider": "pollinations",
+      "deployment": "free:pollinations-e3b0c442",
+      "responseModel": "gpt-oss-20b",
+      "nonStream": true,
+      "stream": true,
+      "usageTokens": 342,
+      "stickyReused": true
+    },
+    "transitionEvidence": "runtime sticky deployment changed from free:kilo-e3b0c442 to free:pollinations-e3b0c442",
+    "relatedSelectionEvent": {
+      "id": 3,
+      "from": "free:pollinations-e3b0c442",
+      "to": "free:kilo-e3b0c442",
+      "reasonCategory": "manual_cooldown",
+      "note": "This event records baseline selection after a cooled sticky route; it is not proof of the later Kilo-to-Pollinations transition."
+    }
+  },
+  "protocolMatrix": {
+    "chatCompletionsNonStream": {"pass": true, "provider": "kilo"},
+    "chatCompletionsStream": {"pass": true, "provider": "kilo", "terminalMarker": true},
+    "responsesNonStream": {"pass": true, "provider": "kilo", "status": "completed"},
+    "responsesStream": {"pass": true, "provider": "kilo", "completedEvent": true},
+    "anthropicMessagesNonStream": {"pass": true, "provider": "kilo", "stopReason": "end_turn"},
+    "anthropicMessagesStream": {"pass": true, "provider": "kilo", "messageStop": true},
+    "structuredToolCall": {
+      "pass": true,
+      "provider": "pollinations",
+      "name": "plan_trip",
+      "nestedArrayItems": 1,
+      "argumentsMatchedSchema": true
+    }
+  },
+  "defectFixes": [
+    {
+      "area": "health status mapping",
+      "before": "unexpected 4xx responses were marked healthy",
+      "after": "unexpected non-success responses record a runtime error and HealthError"
+    },
+    {
+      "area": "OVH model catalog",
+      "before": "the removed Llama-3.1-8B-Instruct model was selected first",
+      "after": "the stale model is excluded and Meta-Llama-3_3-70B-Instruct is synced"
+    },
+    {
+      "area": "provider capabilities",
+      "before": "Pollinations tool requests were filtered before relay",
+      "after": "real structured tool-call support is represented for Pollinations; Kilo remains conservative because its free model list is dynamic"
+    }
+  ],
+  "verification": {
+    "goTests": "all packages passed",
+    "goBuild": "passed",
+    "frontendLint": "0 errors, 0 warnings",
+    "frontendTests": "9 files, 36 tests passed",
+    "frontendBuild": "passed",
+    "storybookBuild": "passed with asset-size warnings only",
+    "playwright": "16 of 16 passed with configured local test credentials",
+    "gitDiffCheck": "passed with line-ending warnings only",
+    "rootHttpStatus": 200,
+    "freePoolHttpStatus": 200,
+    "servicePid": 16148
+  },
+  "cleanup": {
+    "temporaryRoutingTokensRemaining": 0,
+    "temporaryProtocolTokensRemaining": 0,
+    "acceptanceManualCooldownsRemaining": 0
+  },
+  "security": "No API key, token, password, cookie, raw provider response, or unsanitized prompt is stored in this evidence file."
+}

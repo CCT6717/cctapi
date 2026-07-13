@@ -1437,6 +1437,9 @@ func TestBuiltinFreeProviderRegistry_Kilo(t *testing.T) {
 	if meta.ContextLength != 256000 {
 		t.Errorf("expected ContextLength 256000, got %d", meta.ContextLength)
 	}
+	if meta.SupportsTools {
+		t.Fatal("dynamic Kilo free models must not advertise provider-wide tool support")
+	}
 }
 
 func TestBuiltinFreeProviderRegistry_Pollinations(t *testing.T) {
@@ -1457,6 +1460,9 @@ func TestBuiltinFreeProviderRegistry_Pollinations(t *testing.T) {
 	if meta.ContextLength != 131072 {
 		t.Errorf("expected ContextLength 131072, got %d", meta.ContextLength)
 	}
+	if !meta.SupportsTools {
+		t.Fatal("expected Pollinations openai-fast to advertise structured tool-call support")
+	}
 }
 
 func TestBuiltinFreeProviderRegistry_OVH(t *testing.T) {
@@ -1471,8 +1477,13 @@ func TestBuiltinFreeProviderRegistry_OVH(t *testing.T) {
 		t.Errorf("unexpected base URL: %s", meta.DefaultBaseURL)
 	}
 	// OVH /v1/models 返回全量（含非 chat），用静态列表
-	if len(meta.DefaultModels) != 15 {
-		t.Errorf("expected 15 chat models, got %d: %v", len(meta.DefaultModels), meta.DefaultModels)
+	if len(meta.DefaultModels) != 14 {
+		t.Errorf("expected 14 current chat models, got %d: %v", len(meta.DefaultModels), meta.DefaultModels)
+	}
+	for _, model := range meta.DefaultModels {
+		if model == "Llama-3.1-8B-Instruct" {
+			t.Fatal("deprecated OVH model Llama-3.1-8B-Instruct must not be in the default pool")
+		}
 	}
 	if meta.DefaultRPM != 2 {
 		t.Errorf("expected DefaultRPM 2, got %d", meta.DefaultRPM)

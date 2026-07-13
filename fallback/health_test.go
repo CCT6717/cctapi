@@ -300,3 +300,43 @@ func TestCheckOneDeploymentRecordsPlainTextProviderErrorBodyForServerError(t *te
 			cooldown.CooldownActive, cooldown.Reason)
 	}
 }
+
+func TestCheckOneDeploymentRejectsUnexpectedClientError(t *testing.T) {
+	cleanupDB := setupHealthCheckStateTestDB(t)
+	defer cleanupDB()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":{"message":"model not found","code":"model_not_found"}}`))
+	}))
+	defer server.Close()
+
+	baseURL := server.URL
+	channel := dbmodel.Channel{
+		Name:    "health-check-404",
+		Type:    channeltype.OpenAICompatible,
+		BaseURL: &baseURL,
+		Status:  dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("failed to create test channel: %v", err)
+	}
+
+	deploymentID := "free:missing-model-001122cc"
+	checkOneDeployment(deploymentID, DeploymentConfig{
+		ID:        deploymentID,
+		ChannelID: channel.Id,
+		RealModel: "missing-model",
+	}, time.Second)
+
+	if got := GetHealthStatus(deploymentID); got != HealthError {
+		t.Fatalf("expected error status for HTTP 404, got %s", got)
+	}
+	snap := SnapshotRuntimeState(deploymentID)
+	if !strings.Contains(snap.LastError, "HTTP 404") ||
+		!strings.Contains(snap.LastError, "model not found") ||
+		!strings.Contains(snap.LastError, "model_not_found") {
+		t.Fatalf("expected provider 404 body in runtime error, got %q", snap.LastError)
+	}
+}
