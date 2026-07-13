@@ -2,63 +2,71 @@ package middleware
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/go-redis/redis/v8"
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
+	"github.com/songquanpeng/one-api/common/logger"
 )
 
-var timeFormat = "2006-01-02T15:04:05.000Z"
-
 var inMemoryRateLimiter common.InMemoryRateLimiter
+
+var rateLimitScript = redis.NewScript(`
+local key = KEYS[1]
+local maxNum = tonumber(ARGV[1])
+local duration = tonumber(ARGV[2])
+local now = tonumber(ARGV[3])
+local expire = tonumber(ARGV[4])
+
+local len = redis.call('LLEN', key)
+
+if len < maxNum then
+    redis.call('LPUSH', key, now)
+    redis.call('EXPIRE', key, expire)
+    return 1
+end
+
+local old = redis.call('LINDEX', key, -1)
+if old == false then
+    redis.call('LPUSH', key, now)
+    redis.call('LTRIM', key, 0, maxNum - 1)
+    redis.call('EXPIRE', key, expire)
+    return 1
+end
+
+local oldNum = tonumber(old)
+if now - oldNum < duration then
+    redis.call('EXPIRE', key, expire)
+    return 0
+end
+
+redis.call('LPUSH', key, now)
+redis.call('LTRIM', key, 0, maxNum - 1)
+redis.call('EXPIRE', key, expire)
+return 1
+`)
 
 func redisRateLimiter(c *gin.Context, maxRequestNum int, duration int64, mark string) {
 	ctx := context.Background()
 	rdb := common.RDB
 	key := "rateLimit:" + mark + c.ClientIP()
-	listLength, err := rdb.LLen(ctx, key).Result()
+
+	result, err := rateLimitScript.Run(ctx, rdb, []string{key}, maxRequestNum, duration, time.Now().Unix(), int64(config.RateLimitKeyExpirationDuration.Seconds())).Int64()
 	if err != nil {
-		fmt.Println(err.Error())
+		logger.SysError("redis rate limit script failed: " + err.Error())
 		c.Status(http.StatusInternalServerError)
 		c.Abort()
 		return
 	}
-	if listLength < int64(maxRequestNum) {
-		rdb.LPush(ctx, key, time.Now().Format(timeFormat))
-		rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
-	} else {
-		oldTimeStr, _ := rdb.LIndex(ctx, key, -1).Result()
-		oldTime, err := time.Parse(timeFormat, oldTimeStr)
-		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
-			return
-		}
-		nowTimeStr := time.Now().Format(timeFormat)
-		nowTime, err := time.Parse(timeFormat, nowTimeStr)
-		if err != nil {
-			fmt.Println(err)
-			c.Status(http.StatusInternalServerError)
-			c.Abort()
-			return
-		}
-		// time.Since will return negative number!
-		// See: https://stackoverflow.com/questions/50970900/why-is-time-since-returning-negative-durations-on-windows
-		if int64(nowTime.Sub(oldTime).Seconds()) < duration {
-			rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
-			c.Status(http.StatusTooManyRequests)
-			c.Abort()
-			return
-		} else {
-			rdb.LPush(ctx, key, time.Now().Format(timeFormat))
-			rdb.LTrim(ctx, key, 0, int64(maxRequestNum-1))
-			rdb.Expire(ctx, key, config.RateLimitKeyExpirationDuration)
-		}
+
+	if result != 1 {
+		c.Status(http.StatusTooManyRequests)
+		c.Abort()
+		return
 	}
 }
 

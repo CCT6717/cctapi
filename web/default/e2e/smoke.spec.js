@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
 const username = process.env.CCT_E2E_USERNAME || 'root';
-const password = process.env.CCT_E2E_PASSWORD || '123456';
+const password = process.env.CCT_E2E_PASSWORD || 'ct66ct66';
 
 async function login(page) {
   await page.goto('/login');
