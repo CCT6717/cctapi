@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "executedAt": "2026-07-13T13:37:14.9180630+08:00",
+  "environment": "local Windows acceptance host",
+  "branch": "main",
+  "codeCommit": "36a6dc5",
+  "targetModel": "openrouter/auto",
+  "pacedSoak": {
+    "mode": "paced-no-retry",
+    "requestIntervalMs": 5200,
+    "attempts": 50,
+    "nonStreamAttempts": 25,
+    "streamAttempts": 25,
+    "successes": 50,
+    "failures": 0,
+    "successRate": 100.0,
+    "averageLatencyMs": 1737.01,
+    "p95LatencyMs": 3727.4,
+    "distinctResponseModels": 14,
+    "fallbackRequestsDelta": 50,
+    "usageRequestDeltaImmediate": 49,
+    "usageSuccessDeltaImmediate": 49,
+    "usageRequestDeltaFinal": 50,
+    "usageSuccessDeltaFinal": 50,
+    "accountingVisibilityLagMsApprox": 110,
+    "pass": true
+  },
+  "burstProbe": {
+    "mode": "burst-no-retry",
+    "attempts": 50,
+    "successes": 14,
+    "failures": 36,
+    "firstFailureRequest": 15,
+    "fallbackRequestsDelta": 50,
+    "upstreamFailure": "Rate limit exceeded: free-models-per-min.",
+    "gatewayCooldownSeconds": 60,
+    "pass": false,
+    "interpretation": "The unsupported burst rate reached OpenRouter's free-model per-minute limit; the gateway applied the configured cooldown."
+  },
+  "postSoak": {
+    "formalSmokeBeforeDailyQuotaExhaustion": {
+      "pass": true,
+      "nonStreamPass": true,
+      "streamPass": true,
+      "usageRequestDelta": 2,
+      "usageSuccessDelta": 2,
+      "fallbackRequestsDelta": 2,
+      "responseModel": "tencent/hy3:free"
+    },
+    "finalLiveRerun": {
+      "pass": false,
+      "externalBlocker": true,
+      "upstreamFailure": "Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day."
+    }
+  },
+  "cleanup": {
+    "historicalSmokeTokensRemoved": true,
+    "temporaryAcceptanceTokensRemaining": 0
+  },
+  "security": "No API key, token, password, cookie, or external hostname is stored in this evidence file."
+}

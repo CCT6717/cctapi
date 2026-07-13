@@ -53,7 +53,8 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 Last verified handoff: 2026-07-13.
 
 - Branch `main` is pushed to `origin/main`.
-- Prior verified baseline before the current CI/lazy-loading batch: `c5a0ed2 fix: harden Vite migration and release verification`.
+- Latest smoke hardening commit: `36a6dc5 fix(smoke): wait for complete usage accounting`.
+- Preview release tag for this handoff: `v0.1.0-freellmapi-preview`.
 - Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 10.5.0.
 - react-scripts and Webpack dependency chain fully removed.
 - All routed page components are loaded with `React.lazy` and `Suspense`; the production entry bundle is split into route chunks.
@@ -68,11 +69,16 @@ Last verified handoff: 2026-07-13.
   - `docs/openrouter-auto-final-submission-template.md`
   - `docs/openrouter-auto-stability-runbook.md`
   - `scripts/fallback-openrouter-auto-smoke.ps1`
-- OpenRouter stability work is complete with no remaining blockers; the latest smoke test and merge (`b5a8aa1`) are verified.
+- OpenRouter stability work is complete at the application boundary. The smoke script now waits until both non-stream and stream requests appear in the usage ledger, while enforcing a deadline before every poll.
+- The 2026-07-13 paced soak sent 50 requests at 5.2-second intervals with no retries: 50/50 succeeded, average latency was 1737.01 ms, p95 was 3727.4 ms, and 14 free response models were observed. Final usage and fallback deltas were all +50.
+- The separate burst probe succeeded for 14 requests before OpenRouter returned `free-models-per-min`; the gateway correctly applied a 60-second cooldown. This is an upstream free-tier rate limit, not a supported production traffic profile.
+- OpenRouter's daily free-model quota was exhausted after acceptance. A final live rerun is currently blocked by `free-models-per-day`; adding 10 OpenRouter credits unlocks the larger daily allowance. Do not diagnose this external quota response as a local regression.
+- Acceptance evidence: `docs/evidence/openrouter-auto-soak-2026-07-13.json`.
+- Historical and temporary smoke tokens were removed; no acceptance token remains in the local database.
 - Current runtime binary has been rebuilt with the latest `web/build/default` assets and restarted on port `3008`.
 - Vite migration screenshots are verified under `screenshots/vite-migration/`: 7 pages at desktop (`1425x891`) and mobile (`360x640`) viewports, with distinct hashes and confirmed page content.
 - Final channel/settings responsive acceptance screenshots are under `screenshots/final-validation/`.
-- Post-review `openrouter/auto` smoke passed with non-stream, stream, usage, and fallback metric checks; `pageContainsOpenRouterAuto` remains informational.
+- Post-review `openrouter/auto` smoke passed with non-stream, stream, usage, and fallback metric checks before the daily quota was exhausted; `pageContainsOpenRouterAuto` remains informational.
 
 Final verification from the Vite migration batch:
 
