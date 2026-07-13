@@ -42,6 +42,30 @@ func TestBackupFallbackEditorConfig(t *testing.T) {
 	}
 }
 
+func TestBuildFreePoolSyncResponseReportsPartialFailure(t *testing.T) {
+	report := fallback.FreeProviderCatalogSyncReport{
+		Attempted: 2,
+		Succeeded: 1,
+		Failed:    1,
+		Results: []fallback.FreeProviderCatalogSyncResult{
+			{Provider: "kilo", Attempted: 1, Succeeded: 1, Errors: []string{}},
+			{Provider: "ovh", Attempted: 1, Failed: 1, Errors: []string{"status 429"}},
+		},
+	}
+	payload := buildFreePoolSyncResponse(report)
+	if success, _ := payload["success"].(bool); success {
+		t.Fatalf("partial catalog failure must not report success: %#v", payload)
+	}
+	data, ok := payload["data"].(gin.H)
+	if !ok {
+		t.Fatalf("sync response missing data object: %#v", payload)
+	}
+	got, ok := data["catalog_sync"].(fallback.FreeProviderCatalogSyncReport)
+	if !ok || got.Failed != 1 {
+		t.Fatalf("sync response missing catalog report: %#v", payload)
+	}
+}
+
 func TestBackupFallbackEditorConfigCreatesUniquePaths(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "fallback.json")

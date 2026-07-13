@@ -19,6 +19,8 @@ type openRouterModelsResponse struct {
 	} `json:"data"`
 }
 
+const maxFreeProviderCatalogResponseBytes = 8 << 20
+
 type openRouterCreditsResponse struct {
 	Data struct {
 		TotalCredits float64 `json:"total_credits"`
@@ -98,7 +100,7 @@ func fetchOpenRouterCatalog(key string) (FreeProviderCatalogCandidate, error) {
 	if resp.StatusCode != http.StatusOK {
 		return FreeProviderCatalogCandidate{}, fmt.Errorf("openrouter /v1/models status %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := readFreeProviderCatalogResponseBody(resp)
 	if err != nil {
 		return FreeProviderCatalogCandidate{}, fmt.Errorf("read models body: %w", err)
 	}
@@ -182,7 +184,7 @@ func fetchKiloCatalog() (FreeProviderCatalogCandidate, error) {
 	if resp.StatusCode != http.StatusOK {
 		return FreeProviderCatalogCandidate{}, fmt.Errorf("kilo /models status %d", resp.StatusCode)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := readFreeProviderCatalogResponseBody(resp)
 	if err != nil {
 		return FreeProviderCatalogCandidate{}, fmt.Errorf("read kilo models body: %w", err)
 	}
@@ -310,9 +312,26 @@ func fetchOpenAICompatModelsBody(baseURL, key string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s status %d", modelsURL, resp.StatusCode)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := readFreeProviderCatalogResponseBody(resp)
 	if err != nil {
 		return nil, fmt.Errorf("read models body from %s: %w", modelsURL, err)
+	}
+	return body, nil
+}
+
+func readFreeProviderCatalogResponseBody(resp *http.Response) ([]byte, error) {
+	if resp == nil || resp.Body == nil {
+		return nil, fmt.Errorf("catalog response body is empty")
+	}
+	if resp.ContentLength > maxFreeProviderCatalogResponseBytes {
+		return nil, fmt.Errorf("catalog response exceeds %d bytes", maxFreeProviderCatalogResponseBytes)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxFreeProviderCatalogResponseBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxFreeProviderCatalogResponseBytes {
+		return nil, fmt.Errorf("catalog response exceeds %d bytes", maxFreeProviderCatalogResponseBytes)
 	}
 	return body, nil
 }

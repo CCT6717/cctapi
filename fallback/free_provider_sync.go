@@ -1,6 +1,7 @@
 package fallback
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -271,9 +272,14 @@ func SyncFreePool(cfg *Config) error {
 }
 
 func RefreshFreePoolRuntimeState() {
+	_ = RefreshFreePoolRuntimeStateWithReport()
+}
+
+func RefreshFreePoolRuntimeStateWithReport() FreeProviderCatalogSyncReport {
 	cfg := GetConfig()
-	syncAllProviderModels(cfg)
+	report := syncAllProviderModels(cfg)
 	syncOpenRouterCredits(cfg)
+	return report
 }
 
 func deploymentUsesAutoChannel(dep DeploymentConfig, autoChannelIDs map[int]bool) bool {
@@ -464,21 +470,33 @@ func DryRunCleanStale() (*StaleCleanupReport, error) {
 }
 
 type FreeProviderCatalogSyncResult struct {
-	Provider     string `json:"provider"`
-	DeploymentID string `json:"deployment_id"`
-	Success      bool   `json:"success"`
-	ModelCount   int    `json:"model_count"`
-	Error        string `json:"error,omitempty"`
+	Provider   string   `json:"provider"`
+	Attempted  int      `json:"attempted"`
+	Succeeded  int      `json:"succeeded"`
+	Failed     int      `json:"failed"`
+	Skipped    int      `json:"skipped"`
+	ModelCount int      `json:"model_count"`
+	Errors     []string `json:"errors"`
 }
 
 type FreeProviderCatalogSyncReport struct {
 	Attempted int                             `json:"attempted"`
 	Succeeded int                             `json:"succeeded"`
 	Failed    int                             `json:"failed"`
+	Skipped   int                             `json:"skipped"`
 	Results   []FreeProviderCatalogSyncResult `json:"results"`
 }
 
 var freeProviderCatalogRefreshMu sync.Mutex
+
+var errFreeProviderCatalogRefreshSuperseded = errors.New("free provider catalog refresh superseded by config change")
+
+type freeProviderCatalogAttemptResult struct {
+	success    bool
+	skipped    bool
+	modelCount int
+	errorText  string
+}
 
 // syncAllProviderModels serializes scheduled and manual refreshes so an older,
 // slower request cannot overwrite a newer catalog.
@@ -490,7 +508,13 @@ func syncAllProviderModels(cfg *Config) FreeProviderCatalogSyncReport {
 	freeProviderCatalogRefreshMu.Lock()
 	defer freeProviderCatalogRefreshMu.Unlock()
 
-	for providerName, fp := range cfg.FreeProviders {
+	providerNames := make([]string, 0, len(cfg.FreeProviders))
+	for providerName := range cfg.FreeProviders {
+		providerNames = append(providerNames, providerName)
+	}
+	sort.Strings(providerNames)
+	for _, providerName := range providerNames {
+		fp := cfg.FreeProviders[providerName]
 		if !fp.Enabled {
 			continue
 		}
@@ -507,19 +531,42 @@ func syncAllProviderModels(cfg *Config) FreeProviderCatalogSyncReport {
 		if len(keys) == 0 && meta.Keyless {
 			keys = []string{""}
 		}
+		providerResult := FreeProviderCatalogSyncResult{
+			Provider: providerName,
+			Errors:   []string{},
+		}
 		for _, key := range keys {
 			key = strings.TrimSpace(key)
 			if key == "" && !meta.Keyless {
 				continue
 			}
-			result := syncOneFreeProviderCatalog(providerName, key, meta)
-			report.Results = append(report.Results, result)
-			report.Attempted++
-			if result.Success {
-				report.Succeeded++
-			} else {
-				report.Failed++
+			attempt := syncOneFreeProviderCatalog(providerName, key, meta)
+			providerResult.Attempted++
+			if attempt.modelCount > providerResult.ModelCount {
+				providerResult.ModelCount = attempt.modelCount
 			}
+			if attempt.success {
+				providerResult.Succeeded++
+			} else if attempt.skipped {
+				providerResult.Skipped++
+			} else {
+				providerResult.Failed++
+				if attempt.errorText != "" {
+					providerResult.Errors = append(providerResult.Errors, attempt.errorText)
+				}
+			}
+		}
+		if providerResult.Attempted == 0 {
+			continue
+		}
+		report.Results = append(report.Results, providerResult)
+		report.Attempted++
+		if providerResult.Failed > 0 {
+			report.Failed++
+		} else if providerResult.Succeeded > 0 {
+			report.Succeeded++
+		} else {
+			report.Skipped++
 		}
 	}
 	return report
@@ -534,10 +581,10 @@ func isDynamicFreeProviderCatalog(fetchMode string) bool {
 	}
 }
 
-func syncOneFreeProviderCatalog(providerName, key string, meta FreeProviderMeta) FreeProviderCatalogSyncResult {
+func syncOneFreeProviderCatalog(providerName, key string, meta FreeProviderMeta) freeProviderCatalogAttemptResult {
 	keyHash := SafeKeyHash(key)
 	depID := deploymentID(providerName, keyHash)
-	result := FreeProviderCatalogSyncResult{Provider: providerName, DeploymentID: depID}
+	result := freeProviderCatalogAttemptResult{}
 	attemptedAt := time.Now().UTC()
 	candidate, err := fetchProviderCatalog(providerName, key)
 	if err == nil {
@@ -549,26 +596,49 @@ func syncOneFreeProviderCatalog(providerName, key string, meta FreeProviderMeta)
 		err = model.DB.Where("name = ?", name).First(&channel).Error
 		if err == nil {
 			routingModel := routingModelForFetchedModels(providerName, freeProviderCatalogModelIDs(candidate.Models))
-			err = applyValidatedFreeProviderCatalog(depID, providerName, meta, &channel, candidate, routingModel, attemptedAt)
+			err = applyValidatedFreeProviderCatalog(depID, providerName, key, meta, &channel, candidate, routingModel, attemptedAt)
 		}
 	}
 	if err != nil {
-		result.Error = err.Error()
-		if storeErr := markFreeProviderCatalogFailure(depID, providerName, meta.ModelFetchMode, attemptedAt, err); storeErr != nil {
+		if errors.Is(err, errFreeProviderCatalogRefreshSuperseded) {
+			result.skipped = true
+			logger.SysLog(fmt.Sprintf("[free-pool] skipped superseded catalog refresh for %s", depID))
+			return result
+		}
+		result.errorText = sanitizeFreeProviderCatalogError(err, key)
+		safeErr := errors.New(result.errorText)
+		if storeErr := markFreeProviderCatalogFailure(depID, providerName, meta.ModelFetchMode, attemptedAt, safeErr); storeErr != nil {
 			logger.SysError(fmt.Sprintf("[free-pool] failed to persist catalog error for %s: %v", depID, storeErr))
 		}
-		logger.SysWarn(fmt.Sprintf("[free-pool] %s catalog refresh failed for %s: %v (keeping last successful snapshot)", providerName, depID, err))
+		logger.SysWarn(fmt.Sprintf("[free-pool] %s catalog refresh failed for %s: %s (keeping last successful snapshot)", providerName, depID, result.errorText))
 		return result
 	}
-	result.Success = true
-	result.ModelCount = len(candidate.Models)
-	logger.SysLog(fmt.Sprintf("[free-pool] %s %s catalog synced: %d models", providerName, depID, result.ModelCount))
+	result.success = true
+	result.modelCount = len(candidate.Models)
+	logger.SysLog(fmt.Sprintf("[free-pool] %s %s catalog synced: %d models", providerName, depID, result.modelCount))
 	return result
+}
+
+func sanitizeFreeProviderCatalogError(err error, key string) string {
+	if err == nil {
+		return ""
+	}
+	message := err.Error()
+	if key = strings.TrimSpace(key); key != "" {
+		message = strings.ReplaceAll(message, key, "[redacted]")
+	}
+	message = strings.Join(strings.Fields(message), " ")
+	const maxErrorLength = 512
+	if len(message) > maxErrorLength {
+		message = message[:maxErrorLength]
+	}
+	return message
 }
 
 func applyValidatedFreeProviderCatalog(
 	deploymentID string,
 	providerName string,
+	key string,
 	meta FreeProviderMeta,
 	channel *model.Channel,
 	candidate FreeProviderCatalogCandidate,
@@ -587,15 +657,23 @@ func applyValidatedFreeProviderCatalog(
 	newModels := strings.Join(freeProviderCatalogModelIDs(candidate.Models), ",")
 	previousSnapshot, hasPreviousSnapshot := GetFreeProviderCatalogSnapshot(deploymentID)
 
-	configLock.Lock()
+	freePoolMutationMu.Lock()
+	defer freePoolMutationMu.Unlock()
+
+	configLock.RLock()
 	if config == nil || config.Deployments == nil {
-		configLock.Unlock()
+		configLock.RUnlock()
 		return fmt.Errorf("fallback config is not initialized")
 	}
 	current, ok := config.Deployments[deploymentID]
 	if !ok {
-		configLock.Unlock()
+		configLock.RUnlock()
 		return fmt.Errorf("deployment %s is not initialized", deploymentID)
+	}
+	providerConfig, providerConfigured := config.FreeProviders[providerName]
+	if !providerConfigured || !freeProviderConfigAllowsCatalogRefresh(providerConfig, meta, key) || current.ChannelID != channel.Id {
+		configLock.RUnlock()
+		return errFreeProviderCatalogRefreshSuperseded
 	}
 	target := current
 	previousAutomaticSelection := hasPreviousSnapshot &&
@@ -614,6 +692,7 @@ func applyValidatedFreeProviderCatalog(
 	} else if entry, found := findFreeModelCatalogEntry(candidate.Models, current.RealModel); found {
 		target = applyFreeModelCapabilities(target, entry)
 	}
+	configLock.RUnlock()
 
 	snapshot := FreeProviderCatalogSnapshot{
 		DeploymentID:  deploymentID,
@@ -633,13 +712,37 @@ func applyValidatedFreeProviderCatalog(
 		return saveFreeProviderCatalogSuccessWithDB(tx, snapshot)
 	})
 	if err == nil {
-		config.Deployments[deploymentID] = target
+		configLock.Lock()
+		latest := config.Deployments[deploymentID]
+		latest.RealModel = target.RealModel
+		latest.SupportsVision = target.SupportsVision
+		latest.SupportsStream = target.SupportsStream
+		latest.SupportsTools = target.SupportsTools
+		latest.SupportsJSON = target.SupportsJSON
+		latest.ContextLength = target.ContextLength
+		config.Deployments[deploymentID] = latest
+		configLock.Unlock()
 	}
-	configLock.Unlock()
 	if err != nil {
 		return err
 	}
 	channel.Models = newModels
 	cacheFreeProviderCatalogSnapshot(snapshot)
 	return nil
+}
+
+func freeProviderConfigAllowsCatalogRefresh(fp FreeProviderConfig, meta FreeProviderMeta, key string) bool {
+	if !fp.Enabled || len(fp.Models) > 0 || !isDynamicFreeProviderCatalog(meta.ModelFetchMode) {
+		return false
+	}
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return meta.Keyless && len(fp.Keys) == 0
+	}
+	for _, configuredKey := range fp.Keys {
+		if strings.TrimSpace(configuredKey) == key {
+			return true
+		}
+	}
+	return false
 }

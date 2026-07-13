@@ -210,11 +210,12 @@ func SetFallbackRouter(router *gin.Engine) {
 				c.JSON(http.StatusOK, gin.H{"success": false, "message": "fallback not enabled"})
 				return
 			}
-			if err := fallback.SyncAndRefreshFreePoolRuntime(); err != nil {
+			report, err := fallback.SyncAndRefreshFreePoolRuntimeWithReport()
+			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"success": false, "message": err.Error()})
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"success": true, "message": "free pool synced successfully"})
+			c.JSON(http.StatusOK, buildFreePoolSyncResponse(report))
 		})
 
 		adminGroup.GET("/free-pool/usage", getFreePoolUsage)
@@ -458,6 +459,21 @@ func SetFallbackRouter(router *gin.Engine) {
 	router.GET("/fallback/dashboard", func(c *gin.Context) {
 		c.Redirect(http.StatusTemporaryRedirect, "/fallback/status")
 	})
+}
+
+func buildFreePoolSyncResponse(report fallback.FreeProviderCatalogSyncReport) gin.H {
+	success := report.Failed == 0
+	message := "free pool synced successfully"
+	if !success {
+		message = "free pool synced with catalog refresh failures"
+	}
+	return gin.H{
+		"success": success,
+		"message": message,
+		"data": gin.H{
+			"catalog_sync": report,
+		},
+	}
 }
 
 func buildFallbackRuntimeStatusRows(cfg *fallback.Config) []map[string]interface{} {

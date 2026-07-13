@@ -1,6 +1,8 @@
 package fallback
 
 import (
+	"io"
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -227,5 +229,15 @@ func TestApplyFreeModelCapabilitiesOverridesDeploymentDefaults(t *testing.T) {
 	}
 	if got.ContextLength != contextLength {
 		t.Fatalf("context length = %d, want %d", got.ContextLength, contextLength)
+	}
+}
+
+func TestReadFreeProviderCatalogResponseBodyRejectsOversizedPayload(t *testing.T) {
+	response := &http.Response{
+		Body: io.NopCloser(strings.NewReader(strings.Repeat("x", maxFreeProviderCatalogResponseBytes+1))),
+	}
+	_, err := readFreeProviderCatalogResponseBody(response)
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("error = %v, want oversized catalog rejection", err)
 	}
 }

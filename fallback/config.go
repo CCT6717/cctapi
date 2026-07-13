@@ -81,8 +81,9 @@ type DeploymentConfig struct {
 }
 
 var (
-	config     *Config
-	configLock sync.RWMutex
+	config             *Config
+	configLock         sync.RWMutex
+	freePoolMutationMu sync.Mutex
 )
 
 const (
@@ -688,6 +689,9 @@ func ValidateConfig() error {
 }
 
 func SyncFreePoolRuntime() error {
+	freePoolMutationMu.Lock()
+	defer freePoolMutationMu.Unlock()
+
 	configLock.RLock()
 	newCfg := cloneConfig(config)
 	configLock.RUnlock()
@@ -709,11 +713,15 @@ func SyncFreePoolRuntime() error {
 }
 
 func SyncAndRefreshFreePoolRuntime() error {
+	_, err := SyncAndRefreshFreePoolRuntimeWithReport()
+	return err
+}
+
+func SyncAndRefreshFreePoolRuntimeWithReport() (FreeProviderCatalogSyncReport, error) {
 	if err := SyncFreePoolRuntime(); err != nil {
-		return err
+		return FreeProviderCatalogSyncReport{}, err
 	}
-	RefreshFreePoolRuntimeState()
-	return nil
+	return RefreshFreePoolRuntimeStateWithReport(), nil
 }
 
 func ReloadConfig(path string) error {
@@ -730,6 +738,9 @@ func ReloadConfig(path string) error {
 		logger.SysError(fmt.Sprintf("[config] failed to parse config file %s: %v", path, err))
 		return fmt.Errorf("failed to parse config: %w", err)
 	}
+
+	freePoolMutationMu.Lock()
+	defer freePoolMutationMu.Unlock()
 
 	// Step 3: Sync free pool BEFORE validation — auto-deployments must exist
 	// for pool-based virtual models (e.g. cct/free with pools=["free"]) to

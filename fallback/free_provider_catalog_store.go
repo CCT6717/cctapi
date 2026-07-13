@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/songquanpeng/one-api/common/logger"
 	dbmodel "github.com/songquanpeng/one-api/model"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -46,6 +47,7 @@ var freeProviderCatalogStore = struct {
 }{snapshots: map[string]FreeProviderCatalogSnapshot{}}
 
 var freeProviderCatalogWriteMu sync.Mutex
+var freeProviderCatalogInitMu sync.Mutex
 
 func InitFreeProviderCatalogStore() error {
 	db := dbmodel.DB
@@ -53,11 +55,21 @@ func InitFreeProviderCatalogStore() error {
 		return fmt.Errorf("database is not initialized")
 	}
 
-	freeProviderCatalogStore.Lock()
-	defer freeProviderCatalogStore.Unlock()
+	freeProviderCatalogStore.RLock()
 	if freeProviderCatalogStore.activeDB == db {
+		freeProviderCatalogStore.RUnlock()
 		return nil
 	}
+	freeProviderCatalogStore.RUnlock()
+
+	freeProviderCatalogInitMu.Lock()
+	defer freeProviderCatalogInitMu.Unlock()
+	freeProviderCatalogStore.RLock()
+	if freeProviderCatalogStore.activeDB == db {
+		freeProviderCatalogStore.RUnlock()
+		return nil
+	}
+	freeProviderCatalogStore.RUnlock()
 	if err := db.AutoMigrate(&freeProviderCatalogRecord{}); err != nil {
 		return err
 	}
@@ -70,12 +82,15 @@ func InitFreeProviderCatalogStore() error {
 	for _, record := range records {
 		snapshot, err := catalogSnapshotFromRecord(record)
 		if err != nil {
-			return fmt.Errorf("decode catalog snapshot %s: %w", record.DeploymentID, err)
+			logger.SysWarn(fmt.Sprintf("[free-pool] quarantined invalid catalog snapshot %s: %v", record.DeploymentID, err))
+			continue
 		}
 		snapshots[record.DeploymentID] = snapshot
 	}
+	freeProviderCatalogStore.Lock()
 	freeProviderCatalogStore.activeDB = db
 	freeProviderCatalogStore.snapshots = snapshots
+	freeProviderCatalogStore.Unlock()
 	return nil
 }
 
@@ -262,6 +277,22 @@ func catalogSnapshotFromRecord(record freeProviderCatalogRecord) (FreeProviderCa
 	}
 	if record.LastSuccessAt != nil {
 		snapshot.LastSuccessAt = record.LastSuccessAt.UTC()
+	}
+	if !snapshot.LastSuccessAt.IsZero() {
+		validated, err := validateFreeProviderCatalog(FreeProviderCatalogCandidate{
+			Source: snapshot.Source,
+			Models: snapshot.Models,
+		})
+		if err != nil {
+			return FreeProviderCatalogSnapshot{}, err
+		}
+		if snapshot.SelectedModel == "" {
+			return FreeProviderCatalogSnapshot{}, fmt.Errorf("successful catalog snapshot has no selected model")
+		}
+		snapshot.Source = validated.Source
+		snapshot.Models = validated.Models
+	} else if len(snapshot.Models) > 0 {
+		return FreeProviderCatalogSnapshot{}, fmt.Errorf("catalog snapshot has models without a successful refresh")
 	}
 	return snapshot, nil
 }

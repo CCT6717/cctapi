@@ -1,6 +1,8 @@
 package fallback
 
 import (
+	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -753,8 +755,12 @@ func TestSyncAndRefreshFreePoolRuntimeRefreshesDynamicModelsImmediately(t *testi
 		Deployments: map[string]DeploymentConfig{},
 	})
 
-	if err := SyncAndRefreshFreePoolRuntime(); err != nil {
+	report, err := SyncAndRefreshFreePoolRuntimeWithReport()
+	if err != nil {
 		t.Fatalf("SyncAndRefreshFreePoolRuntime failed: %v", err)
+	}
+	if report.Attempted != 1 || report.Succeeded != 1 || report.Failed != 0 {
+		t.Fatalf("unexpected successful catalog report: %#v", report)
 	}
 
 	dep, ok := CloneDeployment(depID)
@@ -810,8 +816,12 @@ func TestSyncAndRefreshFreePoolRuntimeRecordsDynamicModelRefreshFailure(t *testi
 		Deployments: map[string]DeploymentConfig{},
 	})
 
-	if err := SyncAndRefreshFreePoolRuntime(); err != nil {
+	report, err := SyncAndRefreshFreePoolRuntimeWithReport()
+	if err != nil {
 		t.Fatalf("SyncAndRefreshFreePoolRuntime should keep config sync successful on model refresh failure: %v", err)
+	}
+	if report.Attempted != 1 || report.Succeeded != 0 || report.Failed != 1 {
+		t.Fatalf("unexpected failed catalog report: %#v", report)
 	}
 
 	catalog, ok := GetFreeProviderCatalogSnapshot(depID)
@@ -824,6 +834,66 @@ func TestSyncAndRefreshFreePoolRuntimeRecordsDynamicModelRefreshFailure(t *testi
 	}
 	if got := GetHealthStatus(depID); got == HealthError {
 		t.Fatalf("catalog failure must not mark inference health error, got %s", got)
+	}
+}
+
+func TestSyncAndRefreshFreePoolRuntimeAggregatesMultipleKeysByProvider(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+		resetFreeProviderCatalogCacheForTest()
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.Header.Get("Authorization"), "failing-secret-key") {
+			http.Error(w, "failing-secret-key upstream unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"nvidia/free-model"}]}`))
+	}))
+	defer server.Close()
+
+	originalMeta := BuiltinFreeProviders["nvidia"]
+	meta := originalMeta
+	meta.DefaultBaseURL = server.URL + "/v1"
+	meta.DefaultModels = nil
+	meta.ModelFetchMode = ModelFetchOpenAIModels
+	BuiltinFreeProviders["nvidia"] = meta
+	t.Cleanup(func() { BuiltinFreeProviders["nvidia"] = originalMeta })
+
+	resetConfigForTest(&Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/free": {Enabled: true, Pools: []string{"free"}, Strategy: StrategyFreeFirst},
+		},
+		FreeProviders: map[string]FreeProviderConfig{
+			"nvidia": {Enabled: true, Keys: []string{"working-secret-key", "failing-secret-key"}},
+		},
+		Deployments: map[string]DeploymentConfig{},
+	})
+
+	report, err := SyncAndRefreshFreePoolRuntimeWithReport()
+	if err != nil {
+		t.Fatalf("SyncAndRefreshFreePoolRuntimeWithReport: %v", err)
+	}
+	if report.Attempted != 1 || report.Succeeded != 0 || report.Failed != 1 {
+		t.Fatalf("top-level report must count providers: %#v", report)
+	}
+	if len(report.Results) != 1 {
+		t.Fatalf("provider result count = %d, want 1", len(report.Results))
+	}
+	result := report.Results[0]
+	if result.Provider != "nvidia" || result.Attempted != 2 || result.Succeeded != 1 || result.Failed != 1 {
+		t.Fatalf("unexpected provider key aggregation: %#v", result)
+	}
+	encoded, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal report: %v", err)
+	}
+	if strings.Contains(string(encoded), "failing-secret-key") || strings.Contains(string(encoded), "working-secret-key") {
+		t.Fatalf("sync report leaked provider key: %s", encoded)
 	}
 }
 
@@ -910,6 +980,9 @@ func TestApplyValidatedCatalogAdvancesPreviousAutomaticSelection(t *testing.T) {
 	}
 	resetConfigForTest(&Config{
 		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			providerName: {Enabled: true, Keys: []string{key}},
+		},
 		Deployments: map[string]DeploymentConfig{
 			depID: {
 				ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "old-auto-model",
@@ -924,7 +997,7 @@ func TestApplyValidatedCatalogAdvancesPreviousAutomaticSelection(t *testing.T) {
 		Models: []FreeModelCatalogEntry{{ID: "new-auto-model", SupportsTools: &tools}},
 	}
 	if err := applyValidatedFreeProviderCatalog(
-		depID, providerName, meta, &channel, candidate, "new-auto-model", now,
+		depID, providerName, key, meta, &channel, candidate, "new-auto-model", now,
 	); err != nil {
 		t.Fatalf("applyValidatedFreeProviderCatalog: %v", err)
 	}
@@ -934,6 +1007,65 @@ func TestApplyValidatedCatalogAdvancesPreviousAutomaticSelection(t *testing.T) {
 	}
 	if dep.RealModel != "new-auto-model" || !dep.SupportsTools {
 		t.Fatalf("automatic selection did not advance with capabilities: %#v", dep)
+	}
+}
+
+func TestApplyValidatedCatalogRejectsSupersededConfiguredModels(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	resetFreeProviderCatalogCacheForTest()
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+		resetFreeProviderCatalogCacheForTest()
+	})
+
+	providerName := "nvidia"
+	key := "nvapi-superseded-refresh"
+	depID := deploymentID(providerName, SafeKeyHash(key))
+	meta := BuiltinFreeProviders[providerName]
+	channel := dbmodel.Channel{
+		Name:   channelName(providerName, SafeKeyHash(key)),
+		Type:   meta.ChannelType,
+		Key:    key,
+		Models: "configured-model",
+		Group:  "default",
+		Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	resetConfigForTest(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			providerName: {Enabled: true, Keys: []string{key}, Models: []string{"configured-model"}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "configured-model", Pool: "free"},
+		},
+	})
+
+	err := applyValidatedFreeProviderCatalog(
+		depID,
+		providerName,
+		key,
+		meta,
+		&channel,
+		FreeProviderCatalogCandidate{
+			Source: ModelFetchOpenAIModels,
+			Models: []FreeModelCatalogEntry{{ID: "stale-fetched-model"}},
+		},
+		"stale-fetched-model",
+		time.Now().UTC(),
+	)
+	if !errors.Is(err, errFreeProviderCatalogRefreshSuperseded) {
+		t.Fatalf("error = %v, want superseded refresh", err)
+	}
+	var refreshed dbmodel.Channel
+	if err := dbmodel.DB.First(&refreshed, channel.Id).Error; err != nil {
+		t.Fatalf("reload channel: %v", err)
+	}
+	if refreshed.Models != "configured-model" {
+		t.Fatalf("stale refresh overwrote configured models: %q", refreshed.Models)
 	}
 }
 
