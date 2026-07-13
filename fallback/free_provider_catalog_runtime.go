@@ -42,12 +42,10 @@ func validateFreeProviderCatalog(candidate FreeProviderCatalogCandidate) (FreePr
 	}
 	seen := make(map[string]struct{}, len(candidate.Models))
 	for _, entry := range candidate.Models {
-		entry.ID = strings.TrimSpace(entry.ID)
-		if entry.ID == "" {
-			return FreeProviderCatalogCandidate{}, fmt.Errorf("catalog contains empty model id")
-		}
-		if strings.IndexFunc(entry.ID, unicode.IsControl) >= 0 {
-			return FreeProviderCatalogCandidate{}, fmt.Errorf("model id %q contains a control character", entry.ID)
+		var err error
+		entry.ID, err = normalizeFreeProviderCatalogModelID(entry.ID)
+		if err != nil {
+			return FreeProviderCatalogCandidate{}, err
 		}
 		if _, ok := seen[entry.ID]; ok {
 			return FreeProviderCatalogCandidate{}, fmt.Errorf("catalog contains duplicate model id %q", entry.ID)
@@ -60,6 +58,20 @@ func validateFreeProviderCatalog(candidate FreeProviderCatalogCandidate) (FreePr
 		return validated.Models[i].ID < validated.Models[j].ID
 	})
 	return validated, nil
+}
+
+func normalizeFreeProviderCatalogModelID(modelID string) (string, error) {
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return "", fmt.Errorf("catalog contains empty model id")
+	}
+	if strings.IndexFunc(modelID, unicode.IsControl) >= 0 {
+		return "", fmt.Errorf("model id %q contains a control character", modelID)
+	}
+	if strings.Contains(modelID, ",") {
+		return "", fmt.Errorf("model id %q contains a comma delimiter", modelID)
+	}
+	return modelID, nil
 }
 
 func cloneFreeModelCatalogEntry(src FreeModelCatalogEntry) FreeModelCatalogEntry {

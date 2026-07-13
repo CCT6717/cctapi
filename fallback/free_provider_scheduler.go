@@ -35,13 +35,13 @@ func StartFreeSync(stopCh chan struct{}) {
 
 func runFreeSyncModels() {
 	// warm-up 一次,再进 6h ticker
-	syncAllProviderModels(GetConfig())
+	refreshFreeProviderCatalogsWithCurrentConfig()
 	ticker := time.NewTicker(6 * time.Hour)
 	defer ticker.Stop()
 	for {
 		select {
 		case <-ticker.C:
-			syncAllProviderModels(GetConfig())
+			refreshFreeProviderCatalogsWithCurrentConfig()
 		case <-freeSyncStopSignal():
 			return
 		}

@@ -194,6 +194,39 @@ func TestBuildFreeProviderCatalogProjectsLatestRefreshFailureWithoutKeys(t *test
 	}
 }
 
+func TestBuildFreeProviderCatalogCountsLatestOutcomeOncePerDeployment(t *testing.T) {
+	cleanup := setupFreeProviderCatalogStoreTestDB(t)
+	defer cleanup()
+
+	now := time.Date(2026, 7, 13, 12, 0, 0, 0, time.UTC)
+	key := "count-latest-outcome"
+	depID := deploymentID("nvidia", SafeKeyHash(key))
+	if err := saveFreeProviderCatalogSuccess(FreeProviderCatalogSnapshot{
+		DeploymentID: depID, Provider: "nvidia", Source: ModelFetchOpenAIModels,
+		Models: []FreeModelCatalogEntry{{ID: "model-a"}}, SelectedModel: "model-a",
+		LastAttemptAt: now.Add(-time.Hour), LastSuccessAt: now.Add(-time.Hour),
+	}); err != nil {
+		t.Fatalf("save success: %v", err)
+	}
+	if err := markFreeProviderCatalogFailure(depID, "nvidia", ModelFetchOpenAIModels, now, errors.New("latest failed")); err != nil {
+		t.Fatalf("mark failure: %v", err)
+	}
+
+	catalog := buildFreeProviderCatalogAt(&Config{FreeProviders: map[string]FreeProviderConfig{
+		"nvidia": {Enabled: true, Keys: []string{key}},
+	}}, now)
+	var status FreeProviderCatalogStatus
+	for _, entry := range catalog {
+		if entry.Name == "nvidia" {
+			status = entry.CatalogStatus
+			break
+		}
+	}
+	if status.DeploymentCount != 1 || status.SucceededCount != 0 || status.FailedCount != 1 {
+		t.Fatalf("latest outcome counts must be mutually exclusive: %#v", status)
+	}
+}
+
 func TestBuildFreeProviderCatalogDistinguishesNotRefreshedFromStale(t *testing.T) {
 	cleanup := setupFreeProviderCatalogStoreTestDB(t)
 	defer cleanup()

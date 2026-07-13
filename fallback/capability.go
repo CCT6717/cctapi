@@ -69,8 +69,10 @@ func hasImageContent(content any) bool {
 		if !ok {
 			continue
 		}
-		if typ, ok := m["type"].(string); ok && strings.EqualFold(typ, "image_url") {
-			return true
+		if typ, ok := m["type"].(string); ok {
+			if strings.EqualFold(typ, "image_url") || strings.EqualFold(typ, "image") {
+				return true
+			}
 		}
 	}
 	return false
@@ -134,10 +136,14 @@ func resolveFreeProviderCatalogModel(dep DeploymentConfig, caps RequestCapabilit
 		return dep, DeploymentSupports(dep, caps)
 	}
 
-	ordered := make([]FreeModelCatalogEntry, 0, len(snapshot.Models))
-	if selected, found := findFreeModelCatalogEntry(snapshot.Models, dep.RealModel); found {
-		ordered = append(ordered, selected)
+	selected, found := findFreeModelCatalogEntry(snapshot.Models, dep.RealModel)
+	if !found {
+		// Stable provider aliases such as openrouter/free are intentionally not
+		// concrete catalog entries and must remain under provider-side routing.
+		return dep, DeploymentSupports(dep, caps)
 	}
+	ordered := make([]FreeModelCatalogEntry, 0, len(snapshot.Models))
+	ordered = append(ordered, selected)
 	for _, entry := range snapshot.Models {
 		if entry.ID != dep.RealModel {
 			ordered = append(ordered, entry)

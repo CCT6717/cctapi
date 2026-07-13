@@ -276,10 +276,28 @@ func RefreshFreePoolRuntimeState() {
 }
 
 func RefreshFreePoolRuntimeStateWithReport() FreeProviderCatalogSyncReport {
-	cfg := GetConfig()
-	report := syncAllProviderModels(cfg)
-	syncOpenRouterCredits(cfg)
+	report := refreshFreeProviderCatalogsWithCurrentConfig()
+	syncOpenRouterCredits(GetConfig())
 	return report
+}
+
+func refreshFreeProviderCatalogsWithCurrentConfig() FreeProviderCatalogSyncReport {
+	cfg, generation := snapshotFreePoolCatalogRefreshConfig()
+	return syncAllProviderModelsAtGeneration(cfg, generation)
+}
+
+func snapshotFreePoolCatalogRefreshConfig() (*Config, uint64) {
+	freePoolMutationMu.Lock()
+	defer freePoolMutationMu.Unlock()
+	configLock.RLock()
+	defer configLock.RUnlock()
+	return cloneConfig(config), freePoolGeneration
+}
+
+func currentFreePoolGeneration() uint64 {
+	freePoolMutationMu.Lock()
+	defer freePoolMutationMu.Unlock()
+	return freePoolGeneration
 }
 
 func deploymentUsesAutoChannel(dep DeploymentConfig, autoChannelIDs map[int]bool) bool {
@@ -501,6 +519,10 @@ type freeProviderCatalogAttemptResult struct {
 // syncAllProviderModels serializes scheduled and manual refreshes so an older,
 // slower request cannot overwrite a newer catalog.
 func syncAllProviderModels(cfg *Config) FreeProviderCatalogSyncReport {
+	return syncAllProviderModelsAtGeneration(cfg, currentFreePoolGeneration())
+}
+
+func syncAllProviderModelsAtGeneration(cfg *Config, generation uint64) FreeProviderCatalogSyncReport {
 	report := FreeProviderCatalogSyncReport{}
 	if cfg == nil || cfg.FreeProviders == nil {
 		return report
@@ -540,7 +562,7 @@ func syncAllProviderModels(cfg *Config) FreeProviderCatalogSyncReport {
 			if key == "" && !meta.Keyless {
 				continue
 			}
-			attempt := syncOneFreeProviderCatalog(providerName, key, meta)
+			attempt := syncOneFreeProviderCatalog(providerName, key, meta, generation)
 			providerResult.Attempted++
 			if attempt.modelCount > providerResult.ModelCount {
 				providerResult.ModelCount = attempt.modelCount
@@ -581,7 +603,7 @@ func isDynamicFreeProviderCatalog(fetchMode string) bool {
 	}
 }
 
-func syncOneFreeProviderCatalog(providerName, key string, meta FreeProviderMeta) freeProviderCatalogAttemptResult {
+func syncOneFreeProviderCatalog(providerName, key string, meta FreeProviderMeta, generation uint64) freeProviderCatalogAttemptResult {
 	keyHash := SafeKeyHash(key)
 	depID := deploymentID(providerName, keyHash)
 	result := freeProviderCatalogAttemptResult{}
@@ -596,7 +618,7 @@ func syncOneFreeProviderCatalog(providerName, key string, meta FreeProviderMeta)
 		err = model.DB.Where("name = ?", name).First(&channel).Error
 		if err == nil {
 			routingModel := routingModelForFetchedModels(providerName, freeProviderCatalogModelIDs(candidate.Models))
-			err = applyValidatedFreeProviderCatalog(depID, providerName, key, meta, &channel, candidate, routingModel, attemptedAt)
+			err = applyValidatedFreeProviderCatalog(depID, providerName, key, meta, &channel, candidate, routingModel, attemptedAt, generation)
 		}
 	}
 	if err != nil {
@@ -645,6 +667,7 @@ func applyValidatedFreeProviderCatalog(
 	candidate FreeProviderCatalogCandidate,
 	routingModel string,
 	attemptedAt time.Time,
+	generation uint64,
 ) error {
 	if channel == nil {
 		return fmt.Errorf("channel is nil")
@@ -660,6 +683,9 @@ func applyValidatedFreeProviderCatalog(
 
 	freePoolMutationMu.Lock()
 	defer freePoolMutationMu.Unlock()
+	if generation != freePoolGeneration {
+		return errFreeProviderCatalogRefreshSuperseded
+	}
 
 	configLock.RLock()
 	if config == nil || config.Deployments == nil {
@@ -700,7 +726,7 @@ func applyValidatedFreeProviderCatalog(
 		Provider:      providerName,
 		Source:        candidate.Source,
 		Models:        candidate.Models,
-		SelectedModel: target.RealModel,
+		SelectedModel: routingModel,
 		LastAttemptAt: attemptedAt,
 		LastSuccessAt: attemptedAt,
 	}

@@ -165,15 +165,14 @@ func buildFreeProviderCatalogRuntimeView(
 		} else if oldestSuccess.IsZero() || snapshot.LastSuccessAt.Before(oldestSuccess) {
 			oldestSuccess = snapshot.LastSuccessAt
 		}
-		if !snapshot.LastSuccessAt.IsZero() {
-			status.SucceededCount++
-		}
 		if snapshot.LastError != "" && (latestErrorAt.IsZero() || snapshot.LastAttemptAt.After(latestErrorAt)) {
 			latestErrorAt = snapshot.LastAttemptAt
 			status.LastError = snapshot.LastError
 		}
 		if snapshot.LastError != "" {
 			status.FailedCount++
+		} else if !snapshot.LastSuccessAt.IsZero() {
+			status.SucceededCount++
 		}
 		for _, entry := range snapshot.Models {
 			if existing, exists := modelsByID[entry.ID]; exists {

@@ -131,11 +131,12 @@ func parseOpenRouterFreeCatalog(body []byte) (FreeProviderCatalogCandidate, erro
 	seen := make(map[string]struct{}, len(respData.Data))
 	var free []FreeModelCatalogEntry
 	for _, m := range respData.Data {
-		if strings.HasSuffix(m.ID, ":free") {
-			if _, ok := seen[m.ID]; !ok {
-				seen[m.ID] = struct{}{}
-				free = append(free, FreeModelCatalogEntry{ID: m.ID})
-			}
+		modelID, err := validateUpstreamCatalogModelID(m.ID, seen)
+		if err != nil {
+			return FreeProviderCatalogCandidate{}, err
+		}
+		if strings.HasSuffix(modelID, ":free") {
+			free = append(free, FreeModelCatalogEntry{ID: modelID})
 		}
 	}
 	sort.Slice(free, func(i, j int) bool { return free[i].ID < free[j].ID })
@@ -215,13 +216,13 @@ func parseKiloFreeCatalog(body []byte) (FreeProviderCatalogCandidate, error) {
 	seen := make(map[string]struct{}, len(respData.Data))
 	models := make([]FreeModelCatalogEntry, 0, len(respData.Data))
 	for _, m := range respData.Data {
-		if !m.IsFree || strings.TrimSpace(m.ID) == "" {
+		modelID, err := validateUpstreamCatalogModelID(m.ID, seen)
+		if err != nil {
+			return FreeProviderCatalogCandidate{}, err
+		}
+		if !m.IsFree {
 			continue
 		}
-		if _, ok := seen[m.ID]; ok {
-			continue
-		}
-		seen[m.ID] = struct{}{}
 		parameters := make(map[string]struct{}, len(m.SupportedParameters))
 		for _, parameter := range m.SupportedParameters {
 			parameters[strings.ToLower(strings.TrimSpace(parameter))] = struct{}{}
@@ -246,7 +247,7 @@ func parseKiloFreeCatalog(body []byte) (FreeProviderCatalogCandidate, error) {
 			contextLength = m.TopProvider.ContextLength
 		}
 		models = append(models, FreeModelCatalogEntry{
-			ID:             m.ID,
+			ID:             modelID,
 			SupportsTools:  boolPtr(supportsTools),
 			SupportsJSON:   boolPtr(supportsJSON),
 			SupportsVision: boolPtr(supportsVision),
@@ -364,13 +365,11 @@ func parseOpenAICompatCatalog(body []byte) (FreeProviderCatalogCandidate, error)
 	seen := make(map[string]struct{}, len(respData.Data))
 	var models []FreeModelCatalogEntry
 	for _, m := range respData.Data {
-		if m.ID == "" {
-			continue
+		modelID, err := validateUpstreamCatalogModelID(m.ID, seen)
+		if err != nil {
+			return FreeProviderCatalogCandidate{}, err
 		}
-		if _, ok := seen[m.ID]; !ok {
-			seen[m.ID] = struct{}{}
-			models = append(models, FreeModelCatalogEntry{ID: m.ID})
-		}
+		models = append(models, FreeModelCatalogEntry{ID: modelID})
 	}
 	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
 	return FreeProviderCatalogCandidate{Source: ModelFetchOpenAIModels, Models: models}, nil
@@ -384,21 +383,32 @@ func parseOVHChatCatalog(body []byte) (FreeProviderCatalogCandidate, error) {
 	seen := make(map[string]struct{}, len(respData.Data))
 	models := make([]FreeModelCatalogEntry, 0, len(respData.Data))
 	for _, model := range respData.Data {
-		model.ID = strings.TrimSpace(model.ID)
-		if model.ID == "" || model.MaxCompletionTokens <= 0 {
+		modelID, err := validateUpstreamCatalogModelID(model.ID, seen)
+		if err != nil {
+			return FreeProviderCatalogCandidate{}, err
+		}
+		if model.MaxCompletionTokens <= 0 {
 			continue
 		}
-		if _, ok := seen[model.ID]; ok {
-			continue
-		}
-		seen[model.ID] = struct{}{}
 		models = append(models, FreeModelCatalogEntry{
-			ID:            model.ID,
+			ID:            modelID,
 			ContextLength: catalogIntPtr(model.ContextLength),
 		})
 	}
 	sort.Slice(models, func(i, j int) bool { return models[i].ID < models[j].ID })
 	return FreeProviderCatalogCandidate{Source: ModelFetchOVHChat, Models: models}, nil
+}
+
+func validateUpstreamCatalogModelID(rawID string, seen map[string]struct{}) (string, error) {
+	modelID, err := normalizeFreeProviderCatalogModelID(rawID)
+	if err != nil {
+		return "", err
+	}
+	if _, ok := seen[modelID]; ok {
+		return "", fmt.Errorf("catalog contains duplicate model id %q", modelID)
+	}
+	seen[modelID] = struct{}{}
+	return modelID, nil
 }
 
 func queryOpenRouterCredits(key string) (float64, error) {

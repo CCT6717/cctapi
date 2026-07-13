@@ -107,6 +107,14 @@ func TestValidateFreeProviderCatalogRejectsUnsafeCandidates(t *testing.T) {
 			},
 			wantError: "duplicate model id",
 		},
+		{
+			name: "comma delimiter",
+			candidate: FreeProviderCatalogCandidate{
+				Source: ModelFetchOpenAIModels,
+				Models: []FreeModelCatalogEntry{{ID: "bad,model"}},
+			},
+			wantError: "comma",
+		},
 	}
 
 	for _, tt := range tests {
@@ -114,6 +122,43 @@ func TestValidateFreeProviderCatalogRejectsUnsafeCandidates(t *testing.T) {
 			_, err := validateFreeProviderCatalog(tt.candidate)
 			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
 				t.Fatalf("error = %v, want substring %q", err, tt.wantError)
+			}
+		})
+	}
+}
+
+func TestCatalogParsersRejectMalformedUpstreamModelIDs(t *testing.T) {
+	tests := []struct {
+		name  string
+		parse func([]byte) (FreeProviderCatalogCandidate, error)
+		body  string
+	}{
+		{
+			name:  "openrouter duplicate",
+			parse: parseOpenRouterFreeCatalog,
+			body:  `{"data":[{"id":"same:free"},{"id":"same:free"}]}`,
+		},
+		{
+			name:  "kilo empty id",
+			parse: parseKiloFreeCatalog,
+			body:  `{"data":[{"id":"","isFree":true},{"id":"good","isFree":true}]}`,
+		},
+		{
+			name:  "openai compatible duplicate",
+			parse: parseOpenAICompatCatalog,
+			body:  `{"data":[{"id":"same"},{"id":"same"}]}`,
+		},
+		{
+			name:  "ovh empty id",
+			parse: parseOVHChatCatalog,
+			body:  `{"data":[{"id":"","max_completion_tokens":1},{"id":"good","max_completion_tokens":1}]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := tt.parse([]byte(tt.body)); err == nil {
+				t.Fatal("malformed upstream catalog should be rejected")
 			}
 		})
 	}

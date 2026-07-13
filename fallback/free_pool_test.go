@@ -998,6 +998,7 @@ func TestApplyValidatedCatalogAdvancesPreviousAutomaticSelection(t *testing.T) {
 	}
 	if err := applyValidatedFreeProviderCatalog(
 		depID, providerName, key, meta, &channel, candidate, "new-auto-model", now,
+		currentFreePoolGeneration(),
 	); err != nil {
 		t.Fatalf("applyValidatedFreeProviderCatalog: %v", err)
 	}
@@ -1056,6 +1057,7 @@ func TestApplyValidatedCatalogRejectsSupersededConfiguredModels(t *testing.T) {
 		},
 		"stale-fetched-model",
 		time.Now().UTC(),
+		currentFreePoolGeneration(),
 	)
 	if !errors.Is(err, errFreeProviderCatalogRefreshSuperseded) {
 		t.Fatalf("error = %v, want superseded refresh", err)
@@ -1066,6 +1068,58 @@ func TestApplyValidatedCatalogRejectsSupersededConfiguredModels(t *testing.T) {
 	}
 	if refreshed.Models != "configured-model" {
 		t.Fatalf("stale refresh overwrote configured models: %q", refreshed.Models)
+	}
+}
+
+func TestApplyValidatedCatalogRejectsEarlierConfigGeneration(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	resetFreeProviderCatalogCacheForTest()
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+		resetFreeProviderCatalogCacheForTest()
+	})
+
+	providerName := "nvidia"
+	key := "nvapi-generation"
+	depID := deploymentID(providerName, SafeKeyHash(key))
+	meta := BuiltinFreeProviders[providerName]
+	channel := dbmodel.Channel{
+		Name: channelName(providerName, SafeKeyHash(key)), Type: meta.ChannelType,
+		Key: key, Models: "old-model", Group: "default", Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	resetConfigForTest(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			providerName: {Enabled: true, Keys: []string{key}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "old-model", Pool: "free"},
+		},
+	})
+
+	refreshGeneration := currentFreePoolGeneration()
+	freePoolMutationMu.Lock()
+	freePoolGeneration++
+	freePoolMutationMu.Unlock()
+
+	err := applyValidatedFreeProviderCatalog(
+		depID, providerName, key, meta, &channel,
+		FreeProviderCatalogCandidate{Source: ModelFetchOpenAIModels, Models: []FreeModelCatalogEntry{{ID: "new-model"}}},
+		"new-model", time.Now().UTC(), refreshGeneration,
+	)
+	if !errors.Is(err, errFreeProviderCatalogRefreshSuperseded) {
+		t.Fatalf("older config generation must be rejected, got %v", err)
+	}
+	var stored dbmodel.Channel
+	if err := dbmodel.DB.First(&stored, channel.Id).Error; err != nil {
+		t.Fatalf("reload channel: %v", err)
+	}
+	if stored.Models != "old-model" {
+		t.Fatalf("superseded generation changed channel inventory: %q", stored.Models)
 	}
 }
 
@@ -1558,7 +1612,6 @@ func TestParseFreeModels_OpenRouterFreeFilter(t *testing.T) {
 		{"id":"meta-llama/llama-3-8b-instruct:free"},
 		{"id":"deepseek/deepseek-chat:free"},
 		{"id":"openai/gpt-4"},
-		{"id":"meta-llama/llama-3-8b-instruct:free"},
 		{"id":"google/gemini-2.0-flash-exp:free"},
 		{"id":"anthropic/claude-3-opus"}
 	]}`)
@@ -1637,8 +1690,7 @@ func TestParseKiloFreeModels_FilterIsFree(t *testing.T) {
 		{"id":"stepfun/step-3.7-flash:free","isFree":true,"name":"Step 3.7 Flash"},
 		{"id":"nvidia/nemotron-3-ultra-550b-a55b:free","isFree":true,"name":"Nemotron 3 Ultra"},
 		{"id":"openai/gpt-4","isFree":false,"name":"GPT-4"},
-		{"id":"anthropic/claude-3","isFree":false,"name":"Claude 3"},
-		{"id":"kilo-auto/free","isFree":true,"name":"Auto Free (duplicate)"}
+		{"id":"anthropic/claude-3","isFree":false,"name":"Claude 3"}
 	]}`)
 	free, err := parseKiloFreeModels(body)
 	if err != nil {
@@ -1893,7 +1945,6 @@ func TestParseOpenAICompatModels_Basic(t *testing.T) {
 	body := []byte(`{"data":[
 		{"id":"gpt-oss-20b","object":"model"},
 		{"id":"Qwen3.5-397B-A17B","object":"model"},
-		{"id":"gpt-oss-20b","object":"model"},
 		{"id":"Meta-Llama-3_3-70B-Instruct","object":"model"}
 	]}`)
 	models, err := parseOpenAICompatModels(body)
@@ -1924,12 +1975,62 @@ func TestParseOpenAICompatModels_EmptyAndEmptyID(t *testing.T) {
 	if len(models) != 0 {
 		t.Errorf("expected 0, got %v", models)
 	}
-	// 包含空 id 应跳过
+	// 包含空 id 是结构错误，不能用清洗后的部分目录覆盖旧快照。
 	models, err = parseOpenAICompatModels([]byte(`{"data":[{"id":""},{"id":"good-model"}]}`))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err == nil {
+		t.Fatalf("expected structural error, got models %v", models)
 	}
-	if len(models) != 1 || models[0] != "good-model" {
-		t.Errorf("expected [good-model], got %v", models)
+}
+
+func TestApplyValidatedCatalogKeepsManualOverrideOutOfAutomaticSelection(t *testing.T) {
+	cleanupDB := setupFreePoolTestDB(t)
+	defer cleanupDB()
+	resetFreeProviderCatalogCacheForTest()
+	t.Cleanup(func() {
+		resetConfigForTest(nil)
+		resetFreeProviderCatalogCacheForTest()
+	})
+
+	providerName := "nvidia"
+	key := "nvapi-manual-selection"
+	depID := deploymentID(providerName, SafeKeyHash(key))
+	meta := BuiltinFreeProviders[providerName]
+	channel := dbmodel.Channel{
+		Name: channelName(providerName, SafeKeyHash(key)), Type: meta.ChannelType,
+		Key: key, Models: "manual-model", Group: "default", Status: dbmodel.ChannelStatusEnabled,
+	}
+	if err := dbmodel.DB.Create(&channel).Error; err != nil {
+		t.Fatalf("create channel: %v", err)
+	}
+	resetConfigForTest(&Config{
+		Enabled: true,
+		FreeProviders: map[string]FreeProviderConfig{
+			providerName: {Enabled: true, Keys: []string{key}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, ChannelID: channel.Id, RealModel: "manual-model", Pool: "free"},
+		},
+	})
+
+	tools := true
+	now := time.Now().UTC()
+	if err := applyValidatedFreeProviderCatalog(
+		depID, providerName, key, meta, &channel,
+		FreeProviderCatalogCandidate{Source: ModelFetchOpenAIModels, Models: []FreeModelCatalogEntry{{ID: "auto-tools", SupportsTools: &tools}}},
+		"auto-tools", now, currentFreePoolGeneration(),
+	); err != nil {
+		t.Fatalf("applyValidatedFreeProviderCatalog: %v", err)
+	}
+
+	snapshot, ok := GetFreeProviderCatalogSnapshot(depID)
+	if !ok || snapshot.SelectedModel != "auto-tools" {
+		t.Fatalf("snapshot must retain automatic selection provenance: %#v", snapshot)
+	}
+	dep, _ := CloneDeployment(depID)
+	if dep.RealModel != "manual-model" {
+		t.Fatalf("manual model was overwritten: %#v", dep)
+	}
+	if got := FilterByCapability([]DeploymentConfig{*dep}, RequestCapabilities{Tools: true}); len(got) != 0 {
+		t.Fatalf("manual model must not be replaced during capability routing: %#v", got)
 	}
 }

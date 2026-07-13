@@ -84,6 +84,7 @@ var (
 	config             *Config
 	configLock         sync.RWMutex
 	freePoolMutationMu sync.Mutex
+	freePoolGeneration uint64
 )
 
 const (
@@ -709,6 +710,7 @@ func SyncFreePoolRuntime() error {
 	configLock.Lock()
 	config = newCfg
 	configLock.Unlock()
+	freePoolGeneration++
 	return nil
 }
 
@@ -760,6 +762,7 @@ func ReloadConfig(path string) error {
 	configLock.Lock()
 	config = newCfg
 	configLock.Unlock()
+	freePoolGeneration++
 
 	logger.SysLog(fmt.Sprintf("[config] configuration reloaded successfully from %s", path))
 	return nil

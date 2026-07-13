@@ -66,6 +66,23 @@ func TestBuildFreePoolSyncResponseReportsPartialFailure(t *testing.T) {
 	}
 }
 
+func TestBuildFreePoolSyncResponseDoesNotReportSkippedRefreshAsComplete(t *testing.T) {
+	report := fallback.FreeProviderCatalogSyncReport{
+		Attempted: 1,
+		Skipped:   1,
+		Results: []fallback.FreeProviderCatalogSyncResult{
+			{Provider: "kilo", Attempted: 1, Skipped: 1, Errors: []string{}},
+		},
+	}
+	payload := buildFreePoolSyncResponse(report)
+	if success, _ := payload["success"].(bool); success {
+		t.Fatalf("skipped catalog refresh must not report complete success: %#v", payload)
+	}
+	if message, _ := payload["message"].(string); !strings.Contains(message, "skipped") {
+		t.Fatalf("skipped sync response should explain the outcome: %#v", payload)
+	}
+}
+
 func TestBackupFallbackEditorConfigCreatesUniquePaths(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "fallback.json")

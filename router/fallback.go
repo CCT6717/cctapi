@@ -462,10 +462,12 @@ func SetFallbackRouter(router *gin.Engine) {
 }
 
 func buildFreePoolSyncResponse(report fallback.FreeProviderCatalogSyncReport) gin.H {
-	success := report.Failed == 0
+	success := report.Failed == 0 && report.Skipped == 0
 	message := "free pool synced successfully"
-	if !success {
+	if report.Failed > 0 {
 		message = "free pool synced with catalog refresh failures"
+	} else if report.Skipped > 0 {
+		message = "free pool synced with catalog refreshes skipped"
 	}
 	return gin.H{
 		"success": success,
