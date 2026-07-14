@@ -87,14 +87,15 @@ npm run build-storybook (web/default) PASS
 
 ```text
 git log -5 --oneline --decorate
-63235c0 (HEAD -> main, origin/main, origin/HEAD, fix/kilo-provider-rate-limit-score) fix(fallback): gate rate-limit score on HTTP 429
+141b5ca (HEAD -> main, origin/main, origin/HEAD) docs: append Kilo 429 rotation verification report
+63235c0 (fix/kilo-provider-rate-limit-score) fix(fallback): gate rate-limit score on HTTP 429
 25bac32 docs: record Kilo model rotation acceptance
 1542875 (feature/kilo-model-rate-limit-rotation) feat(fallback): show Kilo model cooldowns
 2def385 feat(fallback): rotate Kilo models after rate limits
 b3f84b4 fix(fallback): use provider defaults for Kilo catalog models
 
-git rev-parse main          63235c0d0a89021069f63f9539b7c626f96d64a3
-git rev-parse origin/main   63235c0d0a89021069f63f9539b7c626f96d64a3
+git rev-parse main          141b5ca...
+git rev-parse origin/main   141b5ca...
 git diff --check            (no whitespace errors)
 git status --short          ?? .workbuddy/  ?? delivery/
 ```
