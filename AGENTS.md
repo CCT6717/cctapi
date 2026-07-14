@@ -349,14 +349,6 @@ Do not hardcode real tokens in repo files.
 - 用户界面保持中文。
 - 保留提供商品牌名和技术缩写（RPM、RPD、TPM、TPD、JSON、API key、token）。
 
-## Footer Attribution
-
-`.github/workflows/ci.yml` includes:
-
-- Frontend install, ESLint, Vitest, Vite production build, and Storybook build.
-- Full Go tests and Go binary build.
-- Repository whitespace/conflict checks.
-- Playwright desktop/mobile E2E against a CI-built frontend and Go server.
 
 ## Footer Attribution
 
