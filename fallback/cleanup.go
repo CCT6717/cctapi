@@ -67,4 +67,12 @@ func runCleanup() {
 			logger.SysLogf("[fallback] cleanup: deleted %d score snapshots older than %d days", result.RowsAffected, ScoreSnapshotRetentionDays)
 		}
 	}
+
+	// Clean structured upstream-attempt events using the same lifecycle as the
+	// existing fallback history tables.
+	if model.DB.Migrator().HasTable(&AttemptEvent{}) {
+		if _, err := CleanupAttemptEvents(); err != nil {
+			logger.SysError("[fallback] cleanup attempt events failed: " + err.Error())
+		}
+	}
 }

@@ -184,6 +184,26 @@ func ClassifyRelayError(info RelayErrorInfo) ErrorClassification {
 	return ErrorClassification{Category: ErrorCategoryNone, ShouldFallback: false}
 }
 
+// String returns the human-readable name of an ErrorCategory.
+func (c ErrorCategory) String() string {
+	switch c {
+	case ErrorCategoryNone:
+		return "none"
+	case ErrorCategoryClient:
+		return "client"
+	case ErrorCategoryQuota:
+		return "quota"
+	case ErrorCategoryRateLimit:
+		return "rate_limit"
+	case ErrorCategoryTemporary:
+		return "temporary"
+	case ErrorCategoryModelAccess:
+		return "model_access"
+	default:
+		return "unknown"
+	}
+}
+
 // ClassifyRelayErrorWithConfig extends ClassifyRelayError with config-driven
 // error code overrides. If a blocked error code is configured in the fallback
 // config and matches the relay error's ErrCode, the classification is overridden

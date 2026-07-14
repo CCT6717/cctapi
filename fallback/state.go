@@ -1,5 +1,14 @@
 package fallback
 
+// 部署/供应商级持久化状态核心（Deployment / Provider Level）
+//
+// 本文件管理部署级持久化状态，属于三层状态模型中的部署/供应商级：
+//   - DeploymentState：日配额使用量、请求/成功/错误计数、ExhaustedUntil、CooldownUntil
+//   - DeploymentCooldownState：持久化冷却状态
+//   - stickyDep：虚拟模型到部署的粘性路由映射
+//
+// 不管理模型级状态（见 free_provider_model_runtime.go）或渠道级状态（见 controller/relay.go）。
+
 import (
 	"errors"
 	"fmt"
@@ -90,6 +99,9 @@ func InitStateStore() error {
 	}
 	if err := InitFreeProviderCatalogStore(); err != nil {
 		return err
+	}
+	if err := InitAttemptEventStore(); err != nil {
+		logger.SysError(fmt.Sprintf("attempt event store init failed: %v", err))
 	}
 	return InitFreeProviderLedgerStore()
 }
