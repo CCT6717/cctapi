@@ -1,0 +1,143 @@
+package fallback
+
+import (
+	"net/http"
+	"sync"
+	"testing"
+	"time"
+)
+
+func resetFreeProviderModelRuntimeForTest() {
+	freeProviderModelRuntimeMu.Lock()
+	freeProviderModelRuntime = make(map[string]map[string]*freeProviderModelRuntimeEntry)
+	freeProviderModelRuntimeMu.Unlock()
+	freeProviderModelRuntimeNow = time.Now
+}
+
+func TestFreeProviderModelRuntimeRateLimitDurations(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	freeProviderModelRuntimeNow = func() time.Time { return now }
+
+	tests := []struct {
+		name       string
+		retryAfter *int
+		want       time.Duration
+	}{
+		{name: "retry after", retryAfter: runtimeIntPtr(120), want: 120 * time.Second},
+		{name: "retry after is clamped", retryAfter: runtimeIntPtr(301), want: 300 * time.Second},
+		{name: "default cooldown", want: 60 * time.Second},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resetFreeProviderModelRuntimeForTest()
+			got := MarkFreeProviderModelRateLimited("free:kilo-test", tc.name, "rate limited", RelayCooldownInput{
+				Category: ErrorCategoryRateLimit, StatusCode: http.StatusTooManyRequests,
+				RetryAfterSeconds: tc.retryAfter, Attempt: 1,
+			})
+			if got != tc.want {
+				t.Fatalf("cooldown = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestFreeProviderModelRuntimeRateLimitExpires(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	freeProviderModelRuntimeNow = func() time.Time { return now }
+
+	retryAfter := 120
+	got := MarkFreeProviderModelRateLimited("free:kilo-test", "model-a", "rate limited", RelayCooldownInput{
+		Category: ErrorCategoryRateLimit, StatusCode: http.StatusTooManyRequests,
+		RetryAfterSeconds: &retryAfter, Attempt: 1,
+	})
+	if got != 120*time.Second || !IsFreeProviderModelCooling("free:kilo-test", "model-a") {
+		t.Fatalf("unexpected cooldown: %s", got)
+	}
+	now = now.Add(121 * time.Second)
+	if IsFreeProviderModelCooling("free:kilo-test", "model-a") {
+		t.Fatal("expired model cooldown remained active")
+	}
+}
+
+func TestFreeProviderModelRuntimeSuccessResetsCooldown(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	MarkFreeProviderModelRateLimited("free:kilo-test", "model-a", "rate limited", RelayCooldownInput{})
+	RecordFreeProviderModelSuccess("free:kilo-test", "model-a")
+
+	snapshot := SnapshotFreeProviderModelRuntime("free:kilo-test")
+	if len(snapshot.Models) != 1 || snapshot.Models[0].CooldownActive {
+		t.Fatalf("success did not reset cooldown: %+v", snapshot)
+	}
+	if snapshot.Models[0].Consecutive429Count != 0 || snapshot.Models[0].SuccessCount != 1 || snapshot.Models[0].FailureCount != 1 {
+		t.Fatalf("unexpected counters: %+v", snapshot.Models[0])
+	}
+	if snapshot.LastSuccessfulModel != "model-a" {
+		t.Fatalf("last successful model = %q", snapshot.LastSuccessfulModel)
+	}
+}
+
+func TestFreeProviderModelRuntimeSnapshotIsSortedAndDeepCopied(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	freeProviderModelRuntimeNow = func() time.Time { return now }
+	MarkFreeProviderModelRateLimited("free:kilo-test", "model-b", "first", RelayCooldownInput{})
+	MarkFreeProviderModelRateLimited("free:kilo-test", "model-a", "second", RelayCooldownInput{})
+
+	snapshot := SnapshotFreeProviderModelRuntime("free:kilo-test")
+	if len(snapshot.Models) != 2 || snapshot.Models[0].ModelID != "model-a" || snapshot.Models[1].ModelID != "model-b" {
+		t.Fatalf("models are not sorted: %+v", snapshot.Models)
+	}
+	*snapshot.Models[0].CooldownUntil = now.Add(24 * time.Hour)
+	snapshot.Models[0].Reason = "mutated"
+	snapshot.Models = snapshot.Models[:1]
+
+	again := SnapshotFreeProviderModelRuntime("free:kilo-test")
+	if len(again.Models) != 2 || again.Models[0].Reason == "mutated" || again.Models[0].CooldownUntil.Equal(now.Add(24*time.Hour)) {
+		t.Fatalf("snapshot leaked mutable state: %+v", again)
+	}
+}
+
+func TestFreeProviderModelRuntimeDeploymentReset(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	MarkFreeProviderModelRateLimited("free:kilo-test", "model-a", "rate limited", RelayCooldownInput{})
+	MarkFreeProviderModelRateLimited("free:other", "model-b", "rate limited", RelayCooldownInput{})
+
+	ResetFreeProviderModelRuntime("free:kilo-test")
+	if got := SnapshotFreeProviderModelRuntime("free:kilo-test"); len(got.Models) != 0 {
+		t.Fatalf("deployment runtime was not reset: %+v", got)
+	}
+	if !IsFreeProviderModelCooling("free:other", "model-b") {
+		t.Fatal("reset affected another deployment")
+	}
+}
+
+func TestFreeProviderModelRuntimeConcurrentReadersAndWriters(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	freeProviderModelRuntimeNow = func() time.Time { return time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC) }
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			modelID := "model-" + string(rune('a'+i%3))
+			for j := 0; j < 100; j++ {
+				MarkFreeProviderModelRateLimited("free:kilo-test", modelID, "rate limited", RelayCooldownInput{})
+				RecordFreeProviderModelSuccess("free:kilo-test", modelID)
+				_ = IsFreeProviderModelCooling("free:kilo-test", modelID)
+				_ = SnapshotFreeProviderModelRuntime("free:kilo-test")
+			}
+		}(i)
+	}
+	wg.Wait()
+}
+
+func runtimeIntPtr(value int) *int { return &value }
