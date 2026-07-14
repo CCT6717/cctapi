@@ -1,6 +1,9 @@
 package fallback
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func resetFallbackPlanningStateForTest(t *testing.T, cfg *Config) {
 	t.Helper()
@@ -114,6 +117,41 @@ func TestPrepareDeploymentsKeepsAIHordeForStreamRequests(t *testing.T) {
 	}
 	if len(plan.Deployments) != 1 || plan.Deployments[0].ID != "free:aihorde-001122ff" {
 		t.Fatalf("expected aihorde deployment candidate, got %#v", plan.Deployments)
+	}
+}
+
+func TestPrepareDeploymentsKeepsKiloAlternativeForCapabilityRequest(t *testing.T) {
+	depID := "free:kilo-001122ff"
+	resetFallbackPlanningStateForTest(t, &Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			"cct/free": {Enabled: true, Strategy: StrategyFreeFirst, Pools: []string{"free"}},
+		},
+		Deployments: map[string]DeploymentConfig{
+			depID: {ID: depID, Enabled: true, Pool: "free", RealModel: "kilo/text:free", SupportsTools: false},
+		},
+	})
+	cleanupCatalog := setupFreeProviderCatalogStoreTestDB(t)
+	t.Cleanup(cleanupCatalog)
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	tools := true
+	if err := saveFreeProviderCatalogSuccess(FreeProviderCatalogSnapshot{
+		DeploymentID: depID, Provider: "kilo", Source: ModelFetchKiloFree,
+		Models: []FreeModelCatalogEntry{
+			{ID: "kilo/text:free", SupportsTools: boolPtr(false)},
+			{ID: "kilo/tools:free", SupportsTools: &tools},
+		},
+		SelectedModel: "kilo/text:free", LastAttemptAt: now, LastSuccessAt: now,
+	}); err != nil {
+		t.Fatalf("saveFreeProviderCatalogSuccess: %v", err)
+	}
+
+	plan, err := PrepareDeploymentPlanForRequest("cct/free", RequestCapabilities{Tools: true})
+	if err != nil {
+		t.Fatalf("PrepareDeploymentPlanForRequest failed: %v", err)
+	}
+	if plan.CapabilityBefore != 1 || plan.CapabilityAfter != 1 || len(plan.Deployments) != 1 || plan.Deployments[0].ID != depID {
+		t.Fatalf("Kilo alternative was dropped from deployment plan: %#v", plan)
 	}
 }
 

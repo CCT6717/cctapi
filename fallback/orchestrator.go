@@ -43,7 +43,7 @@ func PrepareDeploymentPlanForRequest(virtualModel string, caps RequestCapabiliti
 	plan.StickyDeploymentID = GetStickyDeployment(virtualModel)
 
 	plan.CapabilityBefore = len(deployments)
-	deployments = FilterByCapability(deployments, caps)
+	deployments = filterDeploymentsWithModelCapabilities(deployments, caps)
 	plan.CapabilityAfter = len(deployments)
 
 	plan.HealthBefore = len(deployments)
@@ -62,6 +62,16 @@ func PrepareDeploymentPlanForRequest(virtualModel string, caps RequestCapabiliti
 
 	plan.Deployments = deployments
 	return plan, nil
+}
+
+func filterDeploymentsWithModelCapabilities(deployments []DeploymentConfig, caps RequestCapabilities) []DeploymentConfig {
+	out := make([]DeploymentConfig, 0, len(deployments))
+	for _, dep := range deployments {
+		if PrepareDeploymentModelPlan(dep, caps).CompatibleCount > 0 {
+			out = append(out, dep)
+		}
+	}
+	return out
 }
 
 // FilterHealthyDeployments drops deployments that the background health checker
