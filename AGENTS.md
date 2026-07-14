@@ -306,6 +306,29 @@ Remaining production work:
 - The next resilience slice should rotate Kilo catalog models on model-specific 429 responses and lower the automatic-routing score of providers that remain rate-limited across cooldown windows.
 - The catalog store is designed for the current single-process SQLite deployment. A future multi-instance deployment should add database-level compare-and-swap or leader ownership for catalog publication.
 
+## Completed Architecture Phase 1 (2026-07-14)
+
+Status markers (`CURRENT` / `TARGET` / `DEFERRED` / `UNVERIFIED`) have been added to all delivery documents under `delivery/`:
+
+| Document | Markers Added | CURRENT | TARGET | DEFERRED | UNVERIFIED |
+|----------|--------------|---------|--------|----------|------------|
+| `INDEX.md` | 8 | 8 | 0 | 0 | 0 |
+| `高层架构设计.md` | 125 | 104 | 5 | 16 | 0 |
+| `系统设计.md` | 225 | 161 | 61 | 3 | 0 |
+| `部署设计.md` | 318 | 33 | 268 | 17 | 0 |
+| `安全设计.md` | 403 | 202 | 201 | 0 | 0 |
+
+Commit: `93f119a` — `docs: add CURRENT/TARGET/DEFERRED/UNVERIFIED status markers to delivery docs`
+
+Key reclassifications:
+- Single-instance SQLite, Kilo model-level 429 rotation, existing fallback panels → `CURRENT`
+- WAF, cloud VPC, KMS/Vault, SSM, CI/CD Stage 7~8, Prometheus/Grafana surplus check → `TARGET`
+- Redis, multi-instance, multi-region, elastic scaling → `DEFERRED`
+- RPO ≤ 24h / RTO ≤ 30min, log retention ≥ 180 days, cloud vendor selection → `TARGET` (not yet acceptance-tested)
+- Fixed public egress IP → `UNVERIFIED` (depends on upstream whitelist requirements)
+
+These markers distinguish what is already running from what is planned but not yet implemented, preventing future sessions from mistaking architecture targets for deployed capabilities.
+
 ## Important Files
 
 ```text
