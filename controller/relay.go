@@ -374,6 +374,12 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 		errInfo := fallback.FormatRelayErrorInfo(bizErr.StatusCode, getRelayErrorMessage(bizErr), bizErr.Error.Type, bizErr.Error.Code)
 		errClass := fallback.ClassifyRelayError(errInfo)
 
+		// Only HTTP 429 responses are treated as confirmed rate limits for model rotation
+		// and provider-level rate-limit score accounting. Other statuses with rate-limit-like
+		// messages are handled as ordinary provider failures.
+		isConfirmedHTTPRateLimit := errClass.Category == fallback.ErrorCategoryRateLimit &&
+			bizErr.StatusCode == http.StatusTooManyRequests
+
 		// Once any response bytes are written, replaying the request is unsafe.
 		if c.Writer.Written() {
 			logger.Infof(ctx, "[fallback] response already written for deployment %s, stopping attempts",
@@ -381,7 +387,7 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			return
 		}
 
-		if attempt.ProviderName == "kilo" && attempt.Rotatable && errClass.Category == fallback.ErrorCategoryRateLimit && bizErr.StatusCode == http.StatusTooManyRequests {
+		if attempt.ProviderName == "kilo" && attempt.Rotatable && isConfirmedHTTPRateLimit {
 			modelCooldown := fallback.MarkFreeProviderModelRateLimited(
 				dep.ID, dep.RealModel, getRelayErrorMessage(bizErr), fallback.RelayCooldownInput{
 					Category: errClass.Category, StatusCode: bizErr.StatusCode,
@@ -397,7 +403,7 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 
 		// Record provider error state only after model-level rotation is exhausted.
 		fallback.RecordDeploymentError(dep.ID, relayErr)
-		fallback.RecordFailure(dep.ID, getRelayErrorMessage(bizErr), errClass.Category == fallback.ErrorCategoryRateLimit)
+		fallback.RecordFailure(dep.ID, getRelayErrorMessage(bizErr), isConfirmedHTTPRateLimit)
 
 		shouldFallback := errClass.ShouldFallback
 		if shouldFallback {
@@ -445,7 +451,7 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			}
 		}
 
-		if attempt.ProviderName == "kilo" && errClass.Category != fallback.ErrorCategoryRateLimit {
+		if attempt.ProviderName == "kilo" && !isConfirmedHTTPRateLimit {
 			i += attempt.RemainingModelAttempts()
 		}
 

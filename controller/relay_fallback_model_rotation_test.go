@@ -205,6 +205,13 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		if !reflect.DeepEqual(attempted, wantAttempts) {
 			t.Fatalf("attempted models = %v, want %v", attempted, wantAttempts)
 		}
+		providerRuntime := fallback.SnapshotRuntimeState(kiloID)
+		if providerRuntime.FailureCount != 1 || providerRuntime.RateLimitScore != 0 {
+			t.Fatalf(
+				"non-429 rate-limit-shaped failure accounting = %+v, want one ordinary failure and zero rate-limit score",
+				providerRuntime,
+			)
+		}
 		if modelRuntime := fallback.SnapshotFreeProviderModelRuntime(kiloID); len(modelRuntime.Models) != 0 {
 			t.Fatalf("non-429 rate-limit-shaped failure changed model cooldowns: %+v", modelRuntime)
 		}
