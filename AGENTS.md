@@ -315,6 +315,49 @@ Do not hardcode real tokens in repo files.
 - Repository whitespace/conflict checks.
 - Playwright desktop/mobile E2E against a CI-built frontend and Go server.
 
+## PR 检查清单
+
+合并前必须通过以下检查：
+
+### 并发 / 数据一致性
+- 对共享可变状态（map、计数器、缓存）必须使用 `sync.Mutex` / `RWMutex` 或 `atomic`。
+- 对数据库行的数值累加（如 token 用量、请求计数）优先使用原子 `UPDATE ... SET col = col + ?`，避免在应用层读-改-写后 `Save`。
+- 多步 Redis 操作（限流、窗口判断 + 写入）应合并为 Lua 脚本，消除 TOCTOU。
+- 修改 `fallback/state.go` 后，本地运行 `go test -race ./fallback -count=5` 必须全部通过。
+
+### 错误处理契约
+- 禁止在生产代码中使用 `fmt.Println` 输出错误；统一使用 `common.SysLog` / `common.SysError` 或返回结构化 JSON 错误。
+- HTTP 错误响应必须返回结构化 JSON（`{success:false, message: "..."}`），尤其 429 / 500 / 503 等网关错误。
+- 不要吞掉 upstream 错误信息；如需脱敏，保留错误类别和可追踪 ID。
+
+### 测试与 CI
+- 新增并发或状态相关代码必须附带回归测试。
+- CI 中的 `go test -race` 不得跳过；若新增包需要纳入 race 检查，同步更新 `ci.yml` 的 scoped 包列表。
+- 前端改动需通过 `npm run lint`、`npm test`、`npm run build` 和 Playwright E2E。
+
+### 分支与提交
+- 使用 conventional commits 格式（`fix:`、`feat:`、`docs:`、`test:`、`refactor:`）。
+- 功能分支合并后立即删除远端分支。
+- 禁止直接向 `main` 提交未经 review 的代码；所有改动通过 PR / 独立功能分支合并。
+
+### 结构关注点
+- 控制器只负责编排（请求捕获、转换、调用 relay、返回响应），不重复实现路由、计费、重试、熔断逻辑。
+- 协议翻译和兼容性代码放在 `relay/model` 边界，不渗入 controller。
+- 不要在 dashboard / overview 添加独立的 connectivity-test 面板；扩展现有虚拟模型配置模块。
+
+### Free Pool 文案规范
+- 用户界面保持中文。
+- 保留提供商品牌名和技术缩写（RPM、RPD、TPM、TPD、JSON、API key、token）。
+
+## Footer Attribution
+
+`.github/workflows/ci.yml` includes:
+
+- Frontend install, ESLint, Vitest, Vite production build, and Storybook build.
+- Full Go tests and Go binary build.
+- Repository whitespace/conflict checks.
+- Playwright desktop/mobile E2E against a CI-built frontend and Go server.
+
 ## Footer Attribution
 
 Default footer should preserve upstream attribution and add CCT fork attribution:
