@@ -2,6 +2,7 @@ package fallback
 
 import (
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -61,7 +62,7 @@ func MarkFreeProviderModelRateLimited(deploymentID, modelID, reason string, inpu
 		models[modelID] = entry
 	}
 	entry.cooldownUntil = cloneTime(&until)
-	entry.reason = reason
+	entry.reason = sanitizeFreeProviderModelRuntimeReason(reason)
 	entry.lastRateLimitedAt = cloneTime(&now)
 	entry.lastAttemptedAt = cloneTime(&now)
 	entry.consecutive429Count++
@@ -111,6 +112,10 @@ func SnapshotFreeProviderModelRuntime(deploymentID string) FreeProviderModelRunt
 	var latestSuccessfulAt *time.Time
 	for modelID, entry := range models {
 		if entry.cooldownUntil != nil && !entry.cooldownUntil.After(now) {
+			if entry.lastSuccessAt == nil && entry.successCount == 0 {
+				delete(models, modelID)
+				continue
+			}
 			entry.cooldownUntil = nil
 			entry.reason = ""
 		}
@@ -140,6 +145,9 @@ func SnapshotFreeProviderModelRuntime(deploymentID string) FreeProviderModelRunt
 		}
 		summary.Models = append(summary.Models, copy)
 	}
+	if len(models) == 0 {
+		delete(freeProviderModelRuntime, deploymentID)
+	}
 	sort.Slice(summary.Models, func(i, j int) bool { return summary.Models[i].ModelID < summary.Models[j].ModelID })
 	return summary
 }
@@ -156,4 +164,47 @@ func cloneTime(value *time.Time) *time.Time {
 	}
 	copy := *value
 	return &copy
+}
+
+const freeProviderModelRuntimeReasonMaxLength = 128
+
+func sanitizeFreeProviderModelRuntimeReason(reason string) string {
+	fields := strings.Fields(reason)
+	parts := make([]string, 0, len(fields))
+	for i := 0; i < len(fields); i++ {
+		field := fields[i]
+		if strings.EqualFold(field, "bearer") {
+			parts = append(parts, "Bearer [REDACTED]")
+			if i+1 < len(fields) {
+				i++
+			}
+			continue
+		}
+		parts = append(parts, redactFreeProviderModelRuntimeToken(field))
+	}
+
+	sanitized := strings.Join(parts, " ")
+	if sanitized == "" {
+		return "rate limited"
+	}
+	if !strings.Contains(strings.ToLower(sanitized), "rate") {
+		sanitized = "rate limited: " + sanitized
+	}
+	runes := []rune(sanitized)
+	if len(runes) > freeProviderModelRuntimeReasonMaxLength {
+		sanitized = string(runes[:freeProviderModelRuntimeReasonMaxLength])
+	}
+	return sanitized
+}
+
+func redactFreeProviderModelRuntimeToken(token string) string {
+	lower := strings.ToLower(token)
+	for _, key := range []string{
+		"api_key=", "api-key=", "access_token=", "access-token=", "authorization=", "token=",
+	} {
+		if index := strings.Index(lower, key); index >= 0 {
+			return token[:index+len(key)] + "[REDACTED]"
+		}
+	}
+	return token
 }

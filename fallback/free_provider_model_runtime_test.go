@@ -2,6 +2,7 @@ package fallback
 
 import (
 	"net/http"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -60,6 +61,78 @@ func TestFreeProviderModelRuntimeRateLimitExpires(t *testing.T) {
 	now = now.Add(121 * time.Second)
 	if IsFreeProviderModelCooling("free:kilo-test", "model-a") {
 		t.Fatal("expired model cooldown remained active")
+	}
+}
+
+func TestFreeProviderModelRuntimeSanitizesRateLimitReason(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+
+	tests := []string{
+		"  upstream\t429   Bearer sk-secret-token-value  ",
+		"api_key=secret-value; retry after 30 seconds",
+	}
+	for _, reason := range tests {
+		MarkFreeProviderModelRateLimited("free:kilo-test", "model-a", reason, RelayCooldownInput{})
+		snapshot := SnapshotFreeProviderModelRuntime("free:kilo-test")
+		if len(snapshot.Models) != 1 {
+			t.Fatalf("unexpected snapshot: %+v", snapshot)
+		}
+		got := snapshot.Models[0].Reason
+		if strings.Contains(got, "sk-secret-token-value") || strings.Contains(got, "secret-value") {
+			t.Fatalf("rate-limit reason leaked secret: %q", got)
+		}
+		if len(got) > 128 || !strings.Contains(got, "rate") {
+			t.Fatalf("rate-limit reason was not bounded/useful: %q", got)
+		}
+		resetFreeProviderModelRuntimeForTest()
+	}
+
+	longReason := strings.Repeat(" noisy reason ", 32)
+	MarkFreeProviderModelRateLimited("free:kilo-test", "model-a", longReason, RelayCooldownInput{})
+	got := SnapshotFreeProviderModelRuntime("free:kilo-test").Models[0].Reason
+	if len(got) > 128 || strings.Contains(got, "  ") {
+		t.Fatalf("rate-limit reason was not normalized/bounded: %q", got)
+	}
+}
+
+func TestFreeProviderModelRuntimeSnapshotPrunesExpiredUnsuccessfulModels(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	freeProviderModelRuntimeNow = func() time.Time { return now }
+
+	MarkFreeProviderModelRateLimited("free:kilo-test", "model-expired", "rate limited", RelayCooldownInput{})
+	MarkFreeProviderModelRateLimited("free:kilo-test", "model-success", "rate limited", RelayCooldownInput{})
+	RecordFreeProviderModelSuccess("free:kilo-test", "model-success")
+	now = now.Add(61 * time.Second)
+
+	snapshot := SnapshotFreeProviderModelRuntime("free:kilo-test")
+	if len(snapshot.Models) != 1 || snapshot.Models[0].ModelID != "model-success" {
+		t.Fatalf("unexpected pruned snapshot: %+v", snapshot)
+	}
+	if snapshot.LastSuccessfulModel != "model-success" || snapshot.Models[0].SuccessCount != 1 {
+		t.Fatalf("successful model history was not preserved: %+v", snapshot)
+	}
+}
+
+func TestFreeProviderModelRuntimeSnapshotRemovesEmptyDeploymentAfterPruning(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	now := time.Date(2026, 7, 14, 12, 0, 0, 0, time.UTC)
+	freeProviderModelRuntimeNow = func() time.Time { return now }
+	MarkFreeProviderModelRateLimited("free:kilo-test", "model-expired", "rate limited", RelayCooldownInput{})
+	now = now.Add(61 * time.Second)
+
+	snapshot := SnapshotFreeProviderModelRuntime("free:kilo-test")
+	if len(snapshot.Models) != 0 {
+		t.Fatalf("expired model remained in snapshot: %+v", snapshot)
+	}
+	freeProviderModelRuntimeMu.RLock()
+	_, exists := freeProviderModelRuntime["free:kilo-test"]
+	freeProviderModelRuntimeMu.RUnlock()
+	if exists {
+		t.Fatal("empty deployment runtime was not removed")
 	}
 }
 
