@@ -16,6 +16,9 @@ services:
       - SQL_DSN=oneapi:123456@tcp(db:3306)/one-api  # 修改此行，或注释掉以使用 SQLite 作为数据�?
       - REDIS_CONN_STRING=redis://redis
       - SESSION_SECRET=random_string  # 修改为随机字符串
+      - INITIAL_ROOT_PASSWORD=${INITIAL_ROOT_PASSWORD:-}  # 新数据库首次启动必须设置至少 12 位的随机密码
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-auto}  # HTTPS 反向代理部署请设为 true
+      - SERVER_ADDRESS=${SERVER_ADDRESS:-http://localhost:3007}
       - TZ=Asia/Shanghai
       - PORT=3007
       - FALLBACK_CONFIG_PATH=data/fallback.json

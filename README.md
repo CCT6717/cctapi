@@ -69,7 +69,12 @@ services:
     environment:
       - TZ=Asia/Shanghai
       - SESSION_SECRET=your-secret
+      - INITIAL_ROOT_PASSWORD=${INITIAL_ROOT_PASSWORD}
+      - SESSION_COOKIE_SECURE=${SESSION_COOKIE_SECURE:-auto}
+      - SERVER_ADDRESS=${SERVER_ADDRESS:-http://localhost:3008}
 ```
+
+首次使用空数据库启动前，必须把 `INITIAL_ROOT_PASSWORD` 设置为至少 12 位的独立随机密码；已有用户数据库不受影响。公网 HTTPS 在反向代理处终止时，必须设置 `SESSION_COOKIE_SECURE=true`，并将 `SERVER_ADDRESS` 设为外部 HTTPS 地址。仅本机 HTTP 调试可保留 `auto`。
 
 ```bash
 docker compose up -d

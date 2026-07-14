@@ -339,7 +339,7 @@ Expected: PASS with zero lint errors or warnings.
 
 - [ ] **Step 3: Build the Windows binary with patched Go and CGO**
 
-Set `CGO_ENABLED=1`, put `D:\ct\tools\w64devkit\bin` on PATH, and build `one-api.exe` with the patched Go toolchain. Confirm `go version -m one-api.exe` reports the expected Go and dependency versions.
+Set `CGO_ENABLED=1`, put `D:\ct\tools\w64devkit-1.23.0\bin` on PATH, and build `one-api.exe` with the patched Go toolchain. Confirm `go version -m one-api.exe` reports the expected Go and dependency versions. The unversioned `w64devkit` directory currently contains GCC 16 and is not compatible with this build.
 
 - [ ] **Step 4: Start an isolated acceptance server**
 

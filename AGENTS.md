@@ -48,6 +48,14 @@ cd D:\ct\project\web\default; npm run build
 
 The frontend build currently has zero ESLint warnings. A clean build is expected.
 
+## Security Startup Requirements
+
+- A new empty database no longer creates `root/123456`. Set `INITIAL_ROOT_PASSWORD` to a unique value of at least 12 characters before first startup. Existing databases and existing root credentials are unchanged.
+- `SESSION_COOKIE_SECURE` accepts `true`, `false`, or `auto` and defaults to `auto`. Use `true` whenever public HTTPS terminates at a reverse proxy; also set `SERVER_ADDRESS` to the public HTTPS address and preserve the original `Host` header when possible.
+- Browser session APIs are same-origin and protected by CSRF origin checks. OpenAI-compatible token routes retain credential-free CORS and must never advertise `Access-Control-Allow-Credentials`.
+- Build and release with Go 1.26.5 or newer on the same patched release line. On this machine, CGO/SQLite builds must use `D:\ct\tools\w64devkit-1.23.0\bin`; the newer `D:\ct\tools\w64devkit` GCC 16 installation is incompatible with the current Go COFF parser.
+- CI pins `govulncheck` v1.6.0. A clean security gate reports zero reachable vulnerabilities; imported but unreachable findings are informational unless call paths change.
+
 ## Current Handoff
 
 Last verified handoff: 2026-07-14.
