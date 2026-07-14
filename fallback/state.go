@@ -251,11 +251,11 @@ func RecordDeploymentUsage(deploymentID string, usage UsageInfo) error {
 	return model.DB.Model(&DeploymentState{}).
 		Where("deployment_id = ? AND date = ?", deploymentID, date).
 		UpdateColumns(map[string]interface{}{
-			"used_prompt_tokens":       gorm.Expr("used_prompt_tokens + ?", usage.PromptTokens),
-			"used_completion_tokens":   gorm.Expr("used_completion_tokens + ?", usage.CompletionTokens),
-			"used_total_tokens":        gorm.Expr("used_total_tokens + ?", int64(usage.TotalTokens)),
-			"request_count":            gorm.Expr("request_count + ?", 1),
-			"updated_at":               time.Now().UTC(),
+			"used_prompt_tokens":     gorm.Expr("used_prompt_tokens + ?", usage.PromptTokens),
+			"used_completion_tokens": gorm.Expr("used_completion_tokens + ?", usage.CompletionTokens),
+			"used_total_tokens":      gorm.Expr("used_total_tokens + ?", int64(usage.TotalTokens)),
+			"request_count":          gorm.Expr("request_count + ?", 1),
+			"updated_at":             time.Now().UTC(),
 		}).Error
 }
 
@@ -508,7 +508,11 @@ func ResetDeploymentState(deploymentID string) error {
 	if err := model.DB.Save(state).Error; err != nil {
 		return err
 	}
-	return clearDeploymentCooldownState(deploymentID)
+	if err := clearDeploymentCooldownState(deploymentID); err != nil {
+		return err
+	}
+	ResetFreeProviderModelRuntime(deploymentID)
+	return nil
 }
 
 // ClearDeploymentExhausted clears only the exhausted_until field

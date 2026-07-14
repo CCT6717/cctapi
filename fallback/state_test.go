@@ -1,8 +1,12 @@
 package fallback
 
 import (
+	"errors"
 	"testing"
 	"time"
+
+	dbmodel "github.com/songquanpeng/one-api/model"
+	"gorm.io/gorm"
 )
 
 func TestQuotaPeriodDateRefreshesAtNoonUTC8(t *testing.T) {
@@ -105,6 +109,69 @@ func TestResetDeploymentStateClearsPersistentCooldown(t *testing.T) {
 	}
 	if cooldownUntil != nil || reason != "" {
 		t.Fatalf("expected reset to clear persistent cooldown, until=%v reason=%q", cooldownUntil, reason)
+	}
+}
+
+func TestResetDeploymentStateClearsOnlyTargetModelRuntime(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+
+	if err := InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	targetDeploymentID := "free:kilo-001122ff"
+	otherDeploymentID := "free:kilo-aabbccdd"
+	MarkFreeProviderModelRateLimited(targetDeploymentID, "model-a", "rate limited", RelayCooldownInput{})
+	MarkFreeProviderModelRateLimited(otherDeploymentID, "model-b", "rate limited", RelayCooldownInput{})
+
+	if err := ResetDeploymentState(targetDeploymentID); err != nil {
+		t.Fatalf("ResetDeploymentState failed: %v", err)
+	}
+
+	if got := SnapshotFreeProviderModelRuntime(targetDeploymentID); got.ActiveCooldownCount != 0 || len(got.Models) != 0 {
+		t.Fatalf("target model runtime was not reset: %+v", got)
+	}
+	if !IsFreeProviderModelCooling(otherDeploymentID, "model-b") {
+		t.Fatal("reset affected another deployment model runtime")
+	}
+}
+
+func TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+
+	if err := InitStateStore(); err != nil {
+		t.Fatalf("InitStateStore failed: %v", err)
+	}
+
+	deploymentID := "free:kilo-reset-failure"
+	MarkFreeProviderModelRateLimited(deploymentID, "model-a", "rate limited", RelayCooldownInput{})
+	if _, err := EnsureDeploymentState(deploymentID, todayString()); err != nil {
+		t.Fatalf("EnsureDeploymentState failed: %v", err)
+	}
+	if _, err := EnsureDeploymentCooldownState(deploymentID); err != nil {
+		t.Fatalf("EnsureDeploymentCooldownState failed: %v", err)
+	}
+
+	callbackName := "test:fail_deployment_cooldown_reset"
+	if err := dbmodel.DB.Callback().Update().Before("gorm:update").Register(callbackName, func(tx *gorm.DB) {
+		if tx.Statement != nil && tx.Statement.Table == "deployment_cooldown_states" {
+			tx.AddError(errors.New("forced persistent cooldown reset failure"))
+		}
+	}); err != nil {
+		t.Fatalf("register update callback: %v", err)
+	}
+
+	if err := ResetDeploymentState(deploymentID); err == nil {
+		t.Fatal("ResetDeploymentState succeeded despite forced persistent failure")
+	}
+	if !IsFreeProviderModelCooling(deploymentID, "model-a") {
+		t.Fatal("failed persistent reset cleared model runtime")
 	}
 }
 

@@ -209,3 +209,40 @@ func TestPrepareDeploymentModelPlanFallsBackToConfiguredKiloModelWithoutCatalog(
 		t.Fatalf("unexpected catalog-less attempt: %#v", attempt)
 	}
 }
+
+func TestDeploymentModelAttemptReportsRemainingModels(t *testing.T) {
+	tests := []struct {
+		name      string
+		attempt   DeploymentModelAttempt
+		hasNext   bool
+		remaining int
+	}{
+		{
+			name:      "first of three rotatable models",
+			attempt:   DeploymentModelAttempt{Rotatable: true, ModelIndex: 0, ModelCount: 3},
+			hasNext:   true,
+			remaining: 2,
+		},
+		{
+			name:      "last rotatable model",
+			attempt:   DeploymentModelAttempt{Rotatable: true, ModelIndex: 2, ModelCount: 3},
+			remaining: 0,
+		},
+		{
+			name:      "single non-rotatable model",
+			attempt:   DeploymentModelAttempt{ModelIndex: 0, ModelCount: 1},
+			remaining: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.attempt.HasNextModel(); got != tc.hasNext {
+				t.Fatalf("HasNextModel() = %v, want %v", got, tc.hasNext)
+			}
+			if got := tc.attempt.RemainingModelAttempts(); got != tc.remaining {
+				t.Fatalf("RemainingModelAttempts() = %d, want %d", got, tc.remaining)
+			}
+		})
+	}
+}

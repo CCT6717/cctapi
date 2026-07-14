@@ -14,6 +14,18 @@ type DeploymentModelAttempt struct {
 	Rotatable       bool
 }
 
+func (attempt DeploymentModelAttempt) HasNextModel() bool {
+	return attempt.Rotatable && attempt.RemainingModelAttempts() > 0
+}
+
+func (attempt DeploymentModelAttempt) RemainingModelAttempts() int {
+	remaining := attempt.ModelCount - attempt.ModelIndex - 1
+	if !attempt.Rotatable || remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
 // DeploymentModelPlan groups the model candidates for one deployment.
 type DeploymentModelPlan struct {
 	Attempts        []DeploymentModelAttempt

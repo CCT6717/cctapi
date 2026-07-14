@@ -97,7 +97,13 @@ func fallbackSwitchLog(ctx context.Context, virtualModel, fromDeployment, toDepl
 	}
 }
 
+type fallbackRelayExecutor func(*gin.Context, int) *model.ErrorWithStatusCode
+
 func relayWithFallback(c *gin.Context) {
+	relayWithFallbackUsing(c, relayHelper)
+}
+
+func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 	ctx := c.Request.Context()
 	requestId := c.GetString(helper.RequestIdKey)
 	requestModelValue, exists := c.Get(ctxkey.RequestModel)
@@ -141,6 +147,11 @@ func relayWithFallback(c *gin.Context) {
 		return
 	}
 	deployments := plan.Deployments
+	modelAttempts := fallback.PrepareDeploymentModelAttempts(deployments, caps)
+	deploymentIndexes := make(map[string]int, len(deployments))
+	for index, dep := range deployments {
+		deploymentIndexes[dep.ID] = index
+	}
 
 	if plan.CapabilityAfter < plan.CapabilityBefore {
 		logger.Infof(ctx, "[fallback] capability filter: %d -> %d deployments (vision=%v tools=%v json=%v stream=%v)",
@@ -162,13 +173,15 @@ func relayWithFallback(c *gin.Context) {
 
 	relayMode := relaymode.GetByPath(c.Request.URL.Path)
 	var lastBizErr *model.ErrorWithStatusCode
-	var attempts int
+	var upstreamAttemptCount int
 	var prevDeployment string // track previous deployment for switch log
 	var prevDurationMs int64
-	deployCount := len(deployments)
+	deploymentCount := len(deployments)
 
-	for i, dep := range deployments {
-		attempts = i + 1
+	for i := 0; i < len(modelAttempts); i++ {
+		attempt := modelAttempts[i]
+		dep := attempt.Deployment
+		deploymentIndex := deploymentIndexes[dep.ID]
 
 		// Check if deployment is available (with state filtering)
 		available, reason := fallback.IsDeploymentAvailable(dep)
@@ -270,9 +283,10 @@ func relayWithFallback(c *gin.Context) {
 			logger.Infof(ctx, "[fallback] deployment %s concurrency slot acquired: %d/%d",
 				dep.ID, inFlight, dep.MaxConcurrentRequests)
 		}
+		upstreamAttemptCount++
 
 		// Log switch if this is not the first attempt
-		if prevDeployment != "" {
+		if prevDeployment != "" && prevDeployment != dep.ID {
 			fallbackSwitchLog(ctx, virtualModel, prevDeployment, dep.ID,
 				getRelayErrorMessage(lastBizErr), lastBizErr.StatusCode, prevDurationMs)
 			common.IncFallbackSwitch()
@@ -290,8 +304,8 @@ func relayWithFallback(c *gin.Context) {
 			c.Set(ctxkey.FallbackFreeProviderName, "")
 		}
 		c.Set(ctxkey.FallbackChannelID, dep.ChannelID)
-		c.Set(ctxkey.FallbackDeploymentIndex, i)
-		c.Set(ctxkey.FallbackAttemptCount, attempts)
+		c.Set(ctxkey.FallbackDeploymentIndex, deploymentIndex)
+		c.Set(ctxkey.FallbackAttemptCount, upstreamAttemptCount)
 		// Refresh all channel-specific context for this deployment
 		middleware.SetupContextForSelectedChannel(c, channel, virtualModel)
 
@@ -306,8 +320,8 @@ func relayWithFallback(c *gin.Context) {
 			newCtx = context.WithValue(newCtx, ctxkey.FallbackFreeProviderName, freeProviderName)
 		}
 		newCtx = context.WithValue(newCtx, ctxkey.FallbackChannelID, dep.ChannelID)
-		newCtx = context.WithValue(newCtx, ctxkey.FallbackDeploymentIndex, i)
-		newCtx = context.WithValue(newCtx, ctxkey.FallbackAttemptCount, attempts)
+		newCtx = context.WithValue(newCtx, ctxkey.FallbackDeploymentIndex, deploymentIndex)
+		newCtx = context.WithValue(newCtx, ctxkey.FallbackAttemptCount, upstreamAttemptCount)
 		c.Request = c.Request.WithContext(newCtx)
 
 		// Reset request body for this attempt
@@ -315,23 +329,26 @@ func relayWithFallback(c *gin.Context) {
 
 		attemptStart := time.Now()
 		logger.Infof(ctx, "[fallback] attempt %d/%d virtual model %s deployment %s channel %d real model %s",
-			attempts, deployCount, virtualModel, dep.ID, dep.ChannelID, dep.RealModel)
+			upstreamAttemptCount, len(modelAttempts), virtualModel, dep.ID, dep.ChannelID, dep.RealModel)
 
 		// Execute the relay helper
-		bizErr := relayHelper(c, relayMode)
+		bizErr := execute(c, relayMode)
 		durationMs := time.Since(attemptStart).Milliseconds()
 		releaseDeploymentSlot()
 		// Debug: log full attempt details to help diagnose fallback behaviour
 		if bizErr != nil {
 			errInfo := fallback.FormatRelayErrorInfo(bizErr.StatusCode, getRelayErrorMessage(bizErr), bizErr.Error.Type, bizErr.Error.Code)
 			errClass := fallback.ClassifyRelayError(errInfo)
-			logger.Debugf(newCtx, "[fallback] attempt_result attempt=%d/%d deployment=%s status=%d msg=%q code=%q category=%v should_fallback=%v", attempts, deployCount, dep.ID, bizErr.StatusCode, bizErr.Error.Message, bizErr.Error.Code, errClass.Category, errClass.ShouldFallback)
+			logger.Debugf(newCtx, "[fallback] attempt_result attempt=%d/%d deployment=%s status=%d msg=%q code=%q category=%v should_fallback=%v", upstreamAttemptCount, len(modelAttempts), dep.ID, bizErr.StatusCode, bizErr.Error.Message, bizErr.Error.Code, errClass.Category, errClass.ShouldFallback)
 		} else {
-			logger.Debugf(newCtx, "[fallback] attempt_result attempt=%d/%d deployment=%s status=success duration=%dms", attempts, deployCount, dep.ID, durationMs)
+			logger.Debugf(newCtx, "[fallback] attempt_result attempt=%d/%d deployment=%s status=success duration=%dms", upstreamAttemptCount, len(modelAttempts), dep.ID, durationMs)
 		}
 
 		if bizErr == nil {
 			fallback.SetStickyDeployment(virtualModel, dep.ID)
+			if attempt.ProviderName == "kilo" {
+				fallback.RecordFreeProviderModelSuccess(dep.ID, dep.RealModel)
+			}
 			// Success - report to monitor and record for smart sorting
 			monitor.Emit(dep.ChannelID, true)
 			if !relayModeRecordsFallbackUsage(relayMode) {
@@ -351,13 +368,34 @@ func relayWithFallback(c *gin.Context) {
 		prevDurationMs = durationMs
 		relayErr := errors.New(getRelayErrorMessage(bizErr))
 		logger.Infof(ctx, "[fallback] deployment %s failed (attempt %d/%d, %dms): %v",
-			dep.ID, attempts, deployCount, durationMs, getRelayErrorMessage(bizErr))
+			dep.ID, upstreamAttemptCount, len(modelAttempts), durationMs, getRelayErrorMessage(bizErr))
 
 		// Classify error using structured info (single-pass, replaces 4 separate string scans)
 		errInfo := fallback.FormatRelayErrorInfo(bizErr.StatusCode, getRelayErrorMessage(bizErr), bizErr.Error.Type, bizErr.Error.Code)
 		errClass := fallback.ClassifyRelayError(errInfo)
 
-		// Record error state
+		// Once any response bytes are written, replaying the request is unsafe.
+		if c.Writer.Written() {
+			logger.Infof(ctx, "[fallback] response already written for deployment %s, stopping attempts",
+				dep.ID)
+			return
+		}
+
+		if attempt.ProviderName == "kilo" && attempt.Rotatable && errClass.Category == fallback.ErrorCategoryRateLimit && bizErr.StatusCode == http.StatusTooManyRequests {
+			modelCooldown := fallback.MarkFreeProviderModelRateLimited(
+				dep.ID, dep.RealModel, getRelayErrorMessage(bizErr), fallback.RelayCooldownInput{
+					Category: errClass.Category, StatusCode: bizErr.StatusCode,
+					RetryAfterSeconds: bizErr.RetryAfterSeconds, Attempt: 1,
+				},
+			)
+			if attempt.HasNextModel() {
+				logger.Infof(ctx, "[fallback] Kilo model %s cooling down for %.0fs; rotating within deployment %s",
+					dep.RealModel, modelCooldown.Seconds(), dep.ID)
+				continue
+			}
+		}
+
+		// Record provider error state only after model-level rotation is exhausted.
 		fallback.RecordDeploymentError(dep.ID, relayErr)
 		fallback.RecordFailure(dep.ID, getRelayErrorMessage(bizErr), errClass.Category == fallback.ErrorCategoryRateLimit)
 
@@ -375,14 +413,6 @@ func relayWithFallback(c *gin.Context) {
 			claudeutil.WriteClaudeOrOpenAIError(c, errCopy.StatusCode, errCopy.Error.Type, errCopy.Error.Message)
 			return
 		}
-
-		// If this is a stream response that has already started writing to client,
-		// we cannot fallback anymore.
-		if bizErr.StatusCode == http.StatusOK && c.Writer.Written() {
-			logger.Infof(ctx, "[fallback] response already written for deployment %s, stopping attempts",
-				dep.ID)
-			return
-		}
 		// Report channel status to monitor for auto-disable tracking
 		if monitor.ShouldDisableChannel(&bizErr.Error, bizErr.StatusCode) {
 			monitor.DisableChannel(dep.ChannelID, channel.Name, getRelayErrorMessage(bizErr))
@@ -395,7 +425,7 @@ func relayWithFallback(c *gin.Context) {
 			Category:          errClass.Category,
 			StatusCode:        bizErr.StatusCode,
 			RetryAfterSeconds: bizErr.RetryAfterSeconds,
-			Attempt:           attempts,
+			Attempt:           upstreamAttemptCount,
 		})
 		if cooldownErr != nil {
 			logger.SysError(fmt.Sprintf("[fallback] failed to apply cooldown state for %s: %v", dep.ID, cooldownErr))
@@ -415,6 +445,10 @@ func relayWithFallback(c *gin.Context) {
 			}
 		}
 
+		if attempt.ProviderName == "kilo" && errClass.Category != fallback.ErrorCategoryRateLimit {
+			i += attempt.RemainingModelAttempts()
+		}
+
 		// Continue to next deployment
 		continue
 	}
@@ -424,14 +458,14 @@ func relayWithFallback(c *gin.Context) {
 	// Clear sticky since all deployments failed
 	fallback.ClearStickyDeployment(virtualModel)
 	logger.Infof(ctx, "[fallback] all %d deployments failed for virtual model %s",
-		deployCount, virtualModel)
+		deploymentCount, virtualModel)
 
 	// Fire a critical alert for total failure
 	fallback.GlobalAlertManager.FireAlert(fallback.AlertEvent{
 		DeploymentID: virtualModel,
 		Level:        fallback.AlertCritical,
 		Type:         fallback.AlertAllFailed,
-		Message:      fmt.Sprintf("all %d deployments failed for virtual model %s", deployCount, virtualModel),
+		Message:      fmt.Sprintf("all %d deployments failed for virtual model %s", deploymentCount, virtualModel),
 		CreatedAt:    time.Now(),
 	})
 
