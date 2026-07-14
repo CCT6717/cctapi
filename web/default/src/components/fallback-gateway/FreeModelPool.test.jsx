@@ -549,6 +549,17 @@ describe('FreeModelPool', () => {
           state_last_error_message: 'daily quota exceeded',
           is_sticky: true,
           sticky_virtual_models: ['cct/free'],
+          model_runtime: {
+            active_cooldown_count: 1,
+            last_attempted_model: 'kilo/model-a:free',
+            last_successful_model: 'kilo/model-b:free',
+            models: [{
+              model_id: 'kilo/model-a:free',
+              cooldown_active: true,
+              reason: 'rate limited',
+              consecutive_429_count: 2,
+            }],
+          },
         }],
       },
     });
@@ -566,5 +577,9 @@ describe('FreeModelPool', () => {
     expect(container.textContent).toContain('rate limited by provider');
     expect(container.textContent).toContain('Exhausted');
     expect(container.textContent).toContain('daily quota exceeded');
+    expect(container.textContent).toContain('1 个 Kilo 模型冷却中');
+    expect(container.textContent).toContain('kilo/model-a:free');
+    expect(container.textContent).toContain('kilo/model-b:free');
+    expect(container.textContent).toContain('连续 429：2');
   });
 });

@@ -107,10 +107,13 @@ const renderRuntimeDiagnostics = (runtime = {}) => {
     ? runtime.sticky_virtual_models
     : [];
   const issues = getRuntimeIssues(runtime);
+  const modelRuntime = runtime.model_runtime || {};
+  const activeModels = (modelRuntime.models || []).filter((m) => m.cooldown_active);
   const hasDiagnostics = runtime.is_sticky
     || runtime.cooldown_active
     || runtime.exhausted_active
-    || issues.length > 0;
+    || issues.length > 0
+    || activeModels.length > 0;
 
   if (!hasDiagnostics) return null;
 
@@ -128,12 +131,34 @@ const renderRuntimeDiagnostics = (runtime = {}) => {
         {runtime.exhausted_active && (
           <Label basic color='red' size='mini'>Exhausted</Label>
         )}
+        {activeModels.length > 0 && (
+          <Label basic color='yellow' size='mini'>
+            {activeModels.length} 个 Kilo 模型冷却中
+          </Label>
+        )}
       </div>
       {issues.length > 0 && (
         <div className='free-deployment-runtime-issues'>
           {issues.map((issue) => (
             <div className='free-deployment-runtime-issue' key={issue}>
               {issue}
+            </div>
+          ))}
+        </div>
+      )}
+      {activeModels.length > 0 && (
+        <div className='free-deployment-model-runtime'>
+          {modelRuntime.last_attempted_model && (
+            <div>最近尝试：{modelRuntime.last_attempted_model}</div>
+          )}
+          {modelRuntime.last_successful_model && (
+            <div>最近成功：{modelRuntime.last_successful_model}</div>
+          )}
+          {activeModels.map((m) => (
+            <div key={m.model_id} className='free-deployment-model-runtime-entry'>
+              <code>{m.model_id}</code>
+              <span>连续 429：{m.consecutive_429_count}</span>
+              <span>{m.reason}</span>
             </div>
           ))}
         </div>

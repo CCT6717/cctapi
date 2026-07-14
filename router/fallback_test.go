@@ -1,6 +1,7 @@
 package router
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -635,6 +636,45 @@ func TestBuildFallbackEditorChannel_NoFullKey(t *testing.T) {
 	}
 	if !strings.Contains(result.KeyMasked, "****") {
 		t.Fatal("key_masked must contain masking asterisks")
+	}
+}
+
+func TestBuildFallbackRuntimeStatusRowsIncludesModelRuntime(t *testing.T) {
+	deploymentID := "free:kilo-model-runtime"
+	t.Cleanup(func() { fallback.ResetFreeProviderModelRuntime(deploymentID) })
+
+	retryAfter := 120
+	fallback.MarkFreeProviderModelRateLimited(deploymentID, "kilo/model-a:free", "rate limited", fallback.RelayCooldownInput{
+		Category: fallback.ErrorCategoryRateLimit, StatusCode: http.StatusTooManyRequests,
+		RetryAfterSeconds: &retryAfter, Attempt: 1,
+	})
+
+	rows := buildFallbackRuntimeStatusRows(&fallback.Config{
+		Enabled: true,
+		Deployments: map[string]fallback.DeploymentConfig{
+			deploymentID: {
+				Enabled:   true,
+				Pool:      "free",
+				RealModel: "kilo/model-a:free",
+			},
+		},
+	})
+
+	row := findRuntimeStatusRow(t, rows, deploymentID)
+	modelRuntime, ok := row["model_runtime"].(fallback.FreeProviderModelRuntimeSummary)
+	if !ok {
+		t.Fatalf("expected model_runtime field, got %#v", row["model_runtime"])
+	}
+	if modelRuntime.ActiveCooldownCount != 1 || len(modelRuntime.Models) != 1 {
+		t.Fatalf("unexpected model runtime: %#v", modelRuntime)
+	}
+
+	raw, err := json.Marshal(row)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	if strings.Contains(string(raw), "sk-secret") || strings.Contains(string(raw), "Bearer") || strings.Contains(string(raw), "raw_upstream_body") {
+		t.Fatalf("runtime row leaked sensitive material: %s", string(raw))
 	}
 }
 
