@@ -1,0 +1,324 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="tcloud-arch-diagram" version="21.0.0">
+  <diagram id="cctapi-deployment" name="cctapi-deployment">
+    <mxGraphModel dx="1422" dy="762" grid="1" gridSize="10" guides="1"
+      tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1"
+      pageWidth="1654" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+
+        <!-- 外部用户层 -->
+        <mxCell id="layer0" value="外部用户"
+          style="swimlane;startSize=30;fillColor=#F5F5F5;strokeColor=#9E9E9E;
+          fontColor=#333333;fontStyle=1;fontSize=13;html=0;"
+          vertex="1" parent="1">
+          <mxGeometry x="30" y="30" width="1594" height="120" as="geometry"/>
+        </mxCell>
+        <mxCell id="client" value="客户端应用&#xa;API 消费者"
+          style="tcloud-icon:user;html=0;"
+          vertex="1" parent="layer0">
+          <mxGeometry x="747" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- DMZ / 接入层 -->
+        <mxCell id="layer1" value="接入层（安全 &amp; 分发）"
+          style="swimlane;startSize=30;fillColor=#FCE8E6;strokeColor=#C62828;
+          fontColor=#C62828;fontStyle=1;fontSize=13;html=0;"
+          vertex="1" parent="1">
+          <mxGeometry x="30" y="190" width="1594" height="180" as="geometry"/>
+        </mxCell>
+        <mxCell id="dns" value="DNS"
+          style="tcloud-icon:internet;html=0;"
+          vertex="1" parent="layer1">
+          <mxGeometry x="297" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="lb" value="可选 LB&#xa;TLS 终结"
+          style="tcloud-icon:clb;html=0;"
+          vertex="1" parent="layer1">
+          <mxGeometry x="617" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="waf" value="可选 WAF&#xa;待安全确认"
+          style="tcloud-icon:waf;html=0;"
+          vertex="1" parent="layer1">
+          <mxGeometry x="937" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 应用层（单实例宿主机） -->
+        <mxCell id="layer2" value="应用层：单实例宿主机"
+          style="swimlane;startSize=30;fillColor=#E6F4EA;strokeColor=#00875A;
+          fontColor=#00875A;fontStyle=1;fontSize=13;html=0;"
+          vertex="1" parent="1">
+          <mxGeometry x="30" y="400" width="1594" height="280" as="geometry"/>
+        </mxCell>
+        <mxCell id="cvm" value="cctapi 宿主机&#xa;2C8G"
+          style="tcloud-icon:cvm;html=0;"
+          vertex="1" parent="layer2">
+          <mxGeometry x="120" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="app" value="cctapi 单进程&#xa;端口 3008"
+          style="rounded=1;arcSize=15;fillColor=#E8F0FE;strokeColor=#0052D9;
+          fontSize=11;fontColor=#333333;html=0;"
+          vertex="1" parent="layer2">
+          <mxGeometry x="300" y="40" width="120" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="sqlite" value="SQLite&#xa;one-api.db"
+          style="tcloud-icon:cbs;html=0;"
+          vertex="1" parent="layer2">
+          <mxGeometry x="520" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="logs" value="日志目录"
+          style="tcloud-icon:cfs;html=0;"
+          vertex="1" parent="layer2">
+          <mxGeometry x="700" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="env" value="环境变量&#xa;密钥文件"
+          style="rounded=1;arcSize=15;fillColor=#FFF3E0;strokeColor=#EF6C00;
+          fontSize=11;fontColor=#333333;html=0;"
+          vertex="1" parent="layer2">
+          <mxGeometry x="860" y="40" width="120" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="healthz" value="/healthz&#xa;/readyz&#xa;/metrics"
+          style="rounded=1;arcSize=15;fillColor=#E8F0FE;strokeColor=#0052D9;
+          fontSize=11;fontColor=#333333;html=0;"
+          vertex="1" parent="layer2">
+          <mxGeometry x="1060" y="40" width="120" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- 可选外部组件 -->
+        <mxCell id="layer3" value="可选外部组件"
+          style="swimlane;startSize=30;fillColor=#E3F2FD;strokeColor=#1565C0;
+          fontColor=#1565C0;fontStyle=1;fontSize=13;html=0;"
+          vertex="1" parent="1">
+          <mxGeometry x="30" y="700" width="800" height="180" as="geometry"/>
+        </mxCell>
+        <mxCell id="redis" value="Redis 限流&#xa;可选"
+          style="tcloud-icon:redis;html=0;"
+          vertex="1" parent="layer3">
+          <mxGeometry x="200" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="prometheus" value="Prometheus&#xa;指标拉取"
+          style="tcloud-icon:cm;html=0;"
+          vertex="1" parent="layer3">
+          <mxGeometry x="400" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="grafana" value="Grafana&#xa;Dashboard"
+          style="tcloud-icon:cm;html=0;"
+          vertex="1" parent="layer3">
+          <mxGeometry x="600" y="40" width="60" height="60" as="geometry"/>
+        </mxCell>
+
+        <!-- 上游供应商 -->
+        <mxCell id="layer4" value="上游 LLM 供应商"
+          style="swimlane;startSize=30;fillColor=#EDE7F6;strokeColor=#7B2FA0;
+          fontColor=#7B2FA0;fontStyle=1;fontSize=13;html=0;"
+          vertex="1" parent="1">
+          <mxGeometry x="870" y="700" width="754" height="180" as="geometry"/>
+        </mxCell>
+        <mxCell id="openrouter" value="OpenRouter"
+          style="rounded=1;arcSize=15;fillColor=#E8F0FE;strokeColor=#0052D9;
+          fontSize=11;fontColor=#333333;html=0;"
+          vertex="1" parent="layer4">
+          <mxGeometry x="80" y="40" width="120" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="kilo" value="Kilo"
+          style="rounded=1;arcSize=15;fillColor=#E8F0FE;strokeColor=#0052D9;
+          fontSize=11;fontColor=#333333;html=0;"
+          vertex="1" parent="layer4">
+          <mxGeometry x="250" y="40" width="120" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="ovh" value="OVH"
+          style="rounded=1;arcSize=15;fillColor=#E8F0FE;strokeColor=#0052D9;
+          fontSize=11;fontColor=#333333;html=0;"
+          vertex="1" parent="layer4">
+          <mxGeometry x="420" y="40" width="120" height="50" as="geometry"/>
+        </mxCell>
+        <mxCell id="pollinations" value="Pollinations"
+          style="rounded=1;arcSize=15;fillColor=#E8F0FE;strokeColor=#0052D9;
+          fontSize=11;fontColor=#333333;html=0;"
+          vertex="1" parent="layer4">
+          <mxGeometry x="590" y="40" width="120" height="50" as="geometry"/>
+        </mxCell>
+
+        <!-- 连线：外部 → DNS -->
+        <mxCell id="e1"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=2;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="client" target="dns">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="777" y="160"/>
+              <mxPoint x="327" y="160"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：DNS → LB -->
+        <mxCell id="e2"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=2;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="dns" target="lb">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="327" y="370"/>
+              <mxPoint x="647" y="370"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：LB → WAF -->
+        <mxCell id="e3"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=2;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="lb" target="waf">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="647" y="370"/>
+              <mxPoint x="967" y="370"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：WAF → cctapi 进程 -->
+        <mxCell id="e4"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=2;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="waf" target="app">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="967" y="580"/>
+              <mxPoint x="360" y="580"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：cctapi 进程 → SQLite -->
+        <mxCell id="e5"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;strokeColor=#00875A;strokeWidth=1.5;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="app" target="sqlite">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="420" y="525"/>
+              <mxPoint x="520" y="525"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：cctapi 进程 → 日志 -->
+        <mxCell id="e6"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#00875A;strokeWidth=1.5;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="app" target="logs">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="360" y="670"/>
+              <mxPoint x="730" y="670"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：cctapi 进程 → 环境变量 -->
+        <mxCell id="e7"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#7B2FA0;strokeWidth=1;endArrow=block;endFill=1;dashed=1;"
+          edge="1" parent="1" source="app" target="env">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="360" y="480"/>
+              <mxPoint x="920" y="480"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：cctapi 进程 → 可选 Redis -->
+        <mxCell id="e8"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9E9E9E;strokeWidth=1;endArrow=block;endFill=1;dashed=1;"
+          edge="1" parent="1" source="app" target="redis">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="525"/>
+              <mxPoint x="230" y="525"/>
+              <mxPoint x="230" y="740"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：cctapi 进程 → Prometheus -->
+        <mxCell id="e9"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.2;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9E9E9E;strokeWidth=1;endArrow=block;endFill=1;dashed=1;"
+          edge="1" parent="1" source="app" target="prometheus">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="324" y="670"/>
+              <mxPoint x="430" y="670"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：Prometheus → Grafana -->
+        <mxCell id="e10"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#9E9E9E;strokeWidth=1;endArrow=block;endFill=1;dashed=1;"
+          edge="1" parent="1" source="prometheus" target="grafana">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="430" y="890"/>
+              <mxPoint x="630" y="890"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 连线：cctapi 进程 → 上游供应商（Bus 汇聚） -->
+        <mxCell id="bus1" value=""
+          style="ellipse;fillColor=#000000;strokeColor=none;html=0;"
+          vertex="1" parent="1">
+          <mxGeometry x="823" y="880" width="8" height="8" as="geometry"/>
+        </mxCell>
+        <mxCell id="e11"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.8;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=2;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="app" target="bus1">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="396" y="670"/>
+              <mxPoint x="827" y="670"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e12"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=1.5;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="bus1" target="openrouter">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="827" y="880"/>
+              <mxPoint x="140" y="880"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e13"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=1.5;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="bus1" target="kilo">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="827" y="880"/>
+              <mxPoint x="310" y="880"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e14"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=1.5;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="bus1" target="ovh">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="827" y="880"/>
+              <mxPoint x="480" y="880"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e15"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;strokeColor=#0052D9;strokeWidth=1.5;endArrow=block;endFill=1;"
+          edge="1" parent="1" source="bus1" target="pollinations">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="827" y="880"/>
+              <mxPoint x="650" y="880"/>
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

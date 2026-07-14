@@ -178,6 +178,17 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 	var prevDurationMs int64
 	deploymentCount := len(deployments)
 
+	// =========================================================================
+	// Phase 2: 记账契约总览
+	// =========================================================================
+	// 本循环遵循三级状态边界和五条核心记账契约：
+	// 1. 中间模型 429 只更新模型级状态（MarkFreeProviderModelRateLimited），不触发部署级处罚。
+	// 2. 所有模型 429 耗尽后，供应商失败和限流分只增加一次（RecordDeploymentError + RecordFailure）。
+	// 3. 非 429 错误（500、认证失败等）直接跳过剩余 Kilo 模型（i += RemainingModelAttempts）。
+	// 4. 只有 deployment 变化才记录供应商切换事件（fallbackSwitchLog），模型级轮换不触发。
+	// 5. 响应已写出后（c.Writer.Written()），立即终止，不再轮换或回退。
+	// 详见 fallback/state_model.go 的完整文档。
+	// =========================================================================
 	for i := 0; i < len(modelAttempts); i++ {
 		attempt := modelAttempts[i]
 		dep := attempt.Deployment
@@ -207,6 +218,8 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			}
 			prevDeployment = dep.ID
 			prevDurationMs = 0
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeSkippedUnavailable,
+				http.StatusServiceUnavailable, fallback.ErrorCategoryTemporary, 0, false, i+1, 0)
 			continue
 		}
 
@@ -225,6 +238,8 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			fallback.MarkDeploymentCooldown(dep.ID, "channel not found", time.Now().Add(60*time.Second))
 			prevDeployment = dep.ID
 			prevDurationMs = 0
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeSkippedChannel,
+				http.StatusServiceUnavailable, fallback.ErrorCategoryTemporary, 0, false, i+1, 0)
 			continue
 		}
 
@@ -241,6 +256,8 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			}
 			prevDeployment = dep.ID
 			prevDurationMs = 0
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeSkippedChannel,
+				http.StatusForbidden, fallback.ErrorCategoryModelAccess, 0, false, i+1, 0)
 			continue
 		}
 
@@ -260,6 +277,8 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			}
 			prevDeployment = dep.ID
 			prevDurationMs = 0
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeSkippedQuota,
+				http.StatusTooManyRequests, fallback.ErrorCategoryRateLimit, 0, false, i+1, 0)
 			continue
 		}
 
@@ -277,6 +296,8 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			}
 			prevDeployment = dep.ID
 			prevDurationMs = 0
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeSkippedConcurrency,
+				http.StatusTooManyRequests, fallback.ErrorCategoryRateLimit, 0, false, i+1, 0)
 			continue
 		}
 		if dep.MaxConcurrentRequests > 0 {
@@ -285,6 +306,7 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 		}
 		upstreamAttemptCount++
 
+		// 契约 4：只有 deployment 发生变化才记录供应商切换事件（fallbackSwitchLog），模型级轮换不触发。
 		// Log switch if this is not the first attempt
 		if prevDeployment != "" && prevDeployment != dep.ID {
 			fallbackSwitchLog(ctx, virtualModel, prevDeployment, dep.ID,
@@ -360,6 +382,8 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			fallback.RecordSuccess(dep.ID)
 			common.IncFallbackSuccess()
 			logger.Infof(ctx, "[fallback] deployment %s succeeded in %dms", dep.ID, durationMs)
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeSuccess,
+				0, fallback.ErrorCategoryNone, durationMs, c.Writer.Written(), i+1, upstreamAttemptCount)
 			return
 		}
 
@@ -374,33 +398,45 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 		errInfo := fallback.FormatRelayErrorInfo(bizErr.StatusCode, getRelayErrorMessage(bizErr), bizErr.Error.Type, bizErr.Error.Code)
 		errClass := fallback.ClassifyRelayError(errInfo)
 
-		// Only HTTP 429 responses are treated as confirmed rate limits for model rotation
-		// and provider-level rate-limit score accounting. Other statuses with rate-limit-like
-		// messages are handled as ordinary provider failures.
-		isConfirmedHTTPRateLimit := errClass.Category == fallback.ErrorCategoryRateLimit &&
-			bizErr.StatusCode == http.StatusTooManyRequests
-
+		// 契约 5：响应已写出后停止。一旦 c.Writer.Written() 返回 true，立即 return，不再尝试轮换或回退。
 		// Once any response bytes are written, replaying the request is unsafe.
 		if c.Writer.Written() {
 			logger.Infof(ctx, "[fallback] response already written for deployment %s, stopping attempts",
 				dep.ID)
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeNonFallbackable,
+				bizErr.StatusCode, errClass.Category, durationMs, true, i+1, upstreamAttemptCount)
 			return
 		}
 
-		if attempt.ProviderName == "kilo" && attempt.Rotatable && isConfirmedHTTPRateLimit {
+		attemptDecision := fallback.DecideDeploymentModelAttempt(
+			attempt,
+			bizErr.StatusCode,
+			errClass.Category == fallback.ErrorCategoryRateLimit,
+		)
+		isConfirmedHTTPRateLimit := attemptDecision.ConfirmedHTTPRateLimit
+
+		// 契约 1：中间模型 429 只更新模型级状态（MarkFreeProviderModelRateLimited），不处罚部署级。
+		if attemptDecision.RecordModelRateLimit {
 			modelCooldown := fallback.MarkFreeProviderModelRateLimited(
 				dep.ID, dep.RealModel, getRelayErrorMessage(bizErr), fallback.RelayCooldownInput{
 					Category: errClass.Category, StatusCode: bizErr.StatusCode,
 					RetryAfterSeconds: bizErr.RetryAfterSeconds, Attempt: 1,
 				},
 			)
-			if attempt.HasNextModel() {
+			if attemptDecision.Action == fallback.DeploymentModelActionRotate {
 				logger.Infof(ctx, "[fallback] Kilo model %s cooling down for %.0fs; rotating within deployment %s",
 					dep.RealModel, modelCooldown.Seconds(), dep.ID)
+				recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeModelRateLimited,
+					bizErr.StatusCode, fallback.ErrorCategoryRateLimit, durationMs, false, i+1, upstreamAttemptCount)
+				// Model-level 429: record attempt failure and category counter,
+				// but do NOT call RecordDeploymentError or RecordFailure (supplier-level).
+				fallback.RecordAttemptFailure(attempt.Deployment.ID, durationMs)
+				fallback.RecordErrorCategoryCounter(fallback.ErrorCategoryRateLimit)
 				continue
 			}
 		}
 
+		// 契约 2：所有模型 429 耗尽后，供应商失败和限流分只增加一次（RecordDeploymentError + RecordFailure）。
 		// Record provider error state only after model-level rotation is exhausted.
 		fallback.RecordDeploymentError(dep.ID, relayErr)
 		fallback.RecordFailure(dep.ID, getRelayErrorMessage(bizErr), isConfirmedHTTPRateLimit)
@@ -414,6 +450,8 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 				errClass.Category, getRelayErrorMessage(bizErr))
 			logger.Infof(ctx, "[fallback] deployment %s returned non-fallback error, stopping attempts: %v",
 				dep.ID, getRelayErrorMessage(bizErr))
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeNonFallbackable,
+				bizErr.StatusCode, errClass.Category, durationMs, false, i+1, upstreamAttemptCount)
 			errCopy := *bizErr
 			errCopy.Error.Message = helper.MessageWithRequestId(errCopy.Error.Message, requestId)
 			claudeutil.WriteClaudeOrOpenAIError(c, errCopy.StatusCode, errCopy.Error.Type, errCopy.Error.Message)
@@ -451,7 +489,11 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			}
 		}
 
-		if attempt.ProviderName == "kilo" && !isConfirmedHTTPRateLimit {
+		recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeFailure,
+			bizErr.StatusCode, errClass.Category, durationMs, false, i+1, upstreamAttemptCount)
+
+		// 契约 3：非 429 错误（500、认证失败等）直接跳过剩余 Kilo 模型（i += attempt.RemainingModelAttempts()）。
+		if attemptDecision.Action == fallback.DeploymentModelActionSkipRemaining {
 			i += attempt.RemainingModelAttempts()
 		}
 
@@ -602,6 +644,55 @@ func RelayNotFound(c *gin.Context) {
 	c.JSON(http.StatusNotFound, gin.H{
 		"error": err,
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4: Structured attempt event recording
+// ---------------------------------------------------------------------------
+
+// recordFallbackAttempt builds and emits a structured AttemptEvent.
+// Success events update in-memory metrics only (to avoid SQLite growth).
+// Failure / skip / switch events are persisted for post-mortem analysis.
+func recordFallbackAttempt(
+	ctx context.Context,
+	requestID, virtualModel string,
+	attempt fallback.DeploymentModelAttempt,
+	outcome fallback.AttemptOutcome,
+	statusCode int,
+	errCat fallback.ErrorCategory,
+	durationMs int64,
+	streamWritten bool,
+	planIndex, upstreamAttemptIndex int,
+) {
+	event := fallback.AttemptEvent{
+		RequestID:            requestID,
+		VirtualModel:         virtualModel,
+		Provider:             attempt.ProviderName,
+		DeploymentID:         attempt.Deployment.ID,
+		RealModel:            attempt.Deployment.RealModel,
+		Outcome:              outcome,
+		StatusCode:           statusCode,
+		ErrorCategory:        errCat.String(),
+		DurationMs:           durationMs,
+		StreamWritten:        streamWritten,
+		PlanIndex:            planIndex,
+		UpstreamAttemptIndex: upstreamAttemptIndex,
+	}
+	switch outcome {
+	case fallback.AttemptOutcomeSuccess:
+		fallback.RecordAttemptSuccess(attempt.Deployment.ID, durationMs)
+	default:
+		fallback.RecordAttemptEventIfWorthy(event)
+		if outcome == fallback.AttemptOutcomeFailure {
+			fallback.RecordAttemptFailure(attempt.Deployment.ID, durationMs)
+			fallback.RecordErrorCategoryCounter(errCat)
+		} else if outcome == fallback.AttemptOutcomeSkippedUnavailable ||
+			outcome == fallback.AttemptOutcomeSkippedQuota ||
+			outcome == fallback.AttemptOutcomeSkippedConcurrency ||
+			outcome == fallback.AttemptOutcomeSkippedChannel {
+			fallback.RecordAttemptSkip(attempt.Deployment.ID)
+		}
+	}
 }
 
 // estimateTokenCount estimates the token count of a request using character-based approximation.

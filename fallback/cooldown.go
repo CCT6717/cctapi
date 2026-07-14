@@ -1,5 +1,14 @@
 package fallback
 
+// 部署/供应商级冷却策略（Deployment / Provider Level）
+//
+// 本文件实现部署级冷却策略，属于三层状态模型中的部署/供应商级：
+//   - CooldownPolicy：按错误类别定义冷却时长
+//   - ApplyRelayCooldown / ApplyCooldown：根据错误分类驱动冷却决策
+//
+// 冷却决策由 controller/relay.go 的错误分类结果驱动，最终作用于部署/供应商级。
+// 不管理模型级冷却（见 free_provider_model_runtime.go）或渠道级禁用（见 monitor.DisableChannel）。
+
 import (
 	"net/http"
 	"time"

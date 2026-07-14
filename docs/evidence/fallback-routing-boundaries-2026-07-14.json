@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "generated_on": "2026-07-14",
+  "scope": "fallback routing boundaries and single-instance release acceptance",
+  "validated_code_commit": "a898b59373c57a74bf622b03294d7c96a0ba3171",
+  "branch": "codex/fallback-routing-boundaries",
+  "pull_request": "https://github.com/CCT6717/cctapi/pull/1",
+  "ci": {
+    "run_id": 29345985697,
+    "run_url": "https://github.com/CCT6717/cctapi/actions/runs/29345985697",
+    "head_sha": "a898b59373c57a74bf622b03294d7c96a0ba3171",
+    "conclusion": "success",
+    "jobs": {
+      "frontend_build_and_test": "success",
+      "go_build_and_test": "success",
+      "repository_checks": "success",
+      "e2e_tests": "success"
+    }
+  },
+  "local_runtime": {
+    "address": "http://127.0.0.1:3008",
+    "http_status": 200,
+    "binary_sha256": "3CA18996F8FC5460D2BAF7BA0A0EC7491010461CACE1E8A5DEA46C811459A01B",
+    "listener_count": 1,
+    "playwright": {
+      "passed": 16,
+      "failed": 0,
+      "desktop_and_mobile": true,
+      "isolated_database_removed": true,
+      "production_runtime_restored": true
+    }
+  },
+  "live_protocol_acceptance": {
+    "virtual_model": "kilo-auto/free",
+    "observed_channel_id": 16,
+    "observed_channel_name": "[CCT Auto] kilo-e3b0c442",
+    "chat_completions": {
+      "http_status": 200,
+      "choices": 1
+    },
+    "chat_completions_stream": {
+      "http_status": 200,
+      "sse_frames": 37,
+      "done_marker": true
+    },
+    "responses": {
+      "http_status": 200,
+      "response_id_present": true,
+      "output_items": 1
+    },
+    "anthropic_messages": {
+      "http_status": 200,
+      "content_items": 1,
+      "text_present": true,
+      "stop_reason_present": true
+    },
+    "anthropic_messages_stream": {
+      "http_status": 200,
+      "event_names": [
+        "content_block_start",
+        "content_block_stop",
+        "message_delta",
+        "message_start",
+        "message_stop",
+        "ping"
+      ]
+    },
+    "structured_tool_call": {
+      "http_status": 200,
+      "tool_calls": 1,
+      "arguments_are_valid_json": true
+    }
+  },
+  "deterministic_kilo_rotation": {
+    "command": "go test ./controller -run ^TestRelayWithFallbackRotatesKiloModels$ -count=1 -v",
+    "conclusion": "success",
+    "covered_contracts": [
+      "intermediate HTTP 429 rotates to the next Kilo model without provider penalty",
+      "all compatible Kilo models rate limited penalizes the provider once then advances",
+      "non-rate-limit Kilo failure skips remaining Kilo models",
+      "written response is not replayed",
+      "non-429 rate-limit-shaped failure skips remaining Kilo models"
+    ],
+    "manual_recovery_tests": [
+      "TestFreeProviderModelRuntimeRateLimitExpires",
+      "TestFreeProviderModelRuntimeDeploymentReset",
+      "TestResetDeploymentStateClearsOnlyTargetModelRuntime",
+      "TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails"
+    ],
+    "live_http_429_observed": false,
+    "live_http_429_note": "Live Kilo requests succeeded on their first attempts, so no upstream 429 was manufactured or claimed. Rotation evidence comes from deterministic integration tests."
+  },
+  "secrets": {
+    "token_value_recorded": false,
+    "password_value_recorded": false,
+    "raw_upstream_body_recorded": false,
+    "temporary_acceptance_credentials_retained": false
+  }
+}

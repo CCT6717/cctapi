@@ -61,6 +61,11 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 Last verified handoff: 2026-07-14.
 
 - Branch `main` is pushed to `origin/main`.
+- Architecture-boundary release candidate is on `codex/fallback-routing-boundaries` in PR `#1`. Validated code commit `a898b59373c57a74bf622b03294d7c96a0ba3171` passed CI run `29345985697` across frontend, Go, repository, and E2E jobs.
+- Runtime-state boundaries, safe structured attempt events, centralized relay decisions, request-scoped routing snapshots, the single-instance recovery runbook, and evidence-based release gates are implemented and independently reviewed.
+- The exact validated candidate binary is running locally at `http://127.0.0.1:3008`; HTTP, isolated-database Playwright (16/16), Chat Completions, Responses, Anthropic Messages, streaming, and structured tool-call acceptance passed through `kilo-auto/free`.
+- Kilo model-specific HTTP 429 rotation is covered by deterministic integration tests: intermediate 429s do not penalize the provider, all-model exhaustion penalizes once then falls back, non-429 failures skip remaining Kilo models, written streams are not replayed, and manual recovery clears model cooldown state.
+- Sanitized release evidence: `docs/evidence/fallback-routing-boundaries-2026-07-14.json`. No token, password, raw upstream body, or temporary acceptance database is retained.
 - Security hardening is merged through `5409921`: default root credentials are removed, session cookies and browser mutations are protected, token CORS is scoped, internal errors are sanitized, JWT/dependencies use patched releases, and CI runs pinned `govulncheck` v1.6.0.
 - Latest smoke hardening commit: `36a6dc5 fix(smoke): wait for complete usage accounting`.
 - Preview release tag for this handoff: `v0.1.0-freellmapi-preview`.
@@ -303,8 +308,31 @@ Remaining production work:
   - Kilo completed 4/6 requests, then hit an upstream shared OpenRouter free-model rate limit and recovered to `healthy` after cooldown.
   - OVH completed 1/3 requests, honored upstream `Retry-After`, and remained `rate_limited` on the recovery probe.
   - Treat anonymous Kilo/OVH capacity as opportunistic only. Before sustained production traffic, repeat the soak with intended credentials or paid quota.
-- The next resilience slice should rotate Kilo catalog models on model-specific 429 responses and lower the automatic-routing score of providers that remain rate-limited across cooldown windows.
+- Kilo catalog models now rotate on confirmed model-specific HTTP 429 responses. A future scoring slice may further lower automatic-routing priority for providers that remain rate-limited across repeated cooldown windows.
 - The catalog store is designed for the current single-process SQLite deployment. A future multi-instance deployment should add database-level compare-and-swap or leader ownership for catalog publication.
+
+## Completed Architecture Phase 1 (2026-07-14)
+
+Status markers (`CURRENT` / `TARGET` / `DEFERRED` / `UNVERIFIED`) have been added to all delivery documents under `delivery/`:
+
+| Document | Markers Added | CURRENT | TARGET | DEFERRED | UNVERIFIED |
+|----------|--------------|---------|--------|----------|------------|
+| `INDEX.md` | 8 | 8 | 0 | 0 | 0 |
+| `高层架构设计.md` | 125 | 104 | 5 | 16 | 0 |
+| `系统设计.md` | 225 | 161 | 61 | 3 | 0 |
+| `部署设计.md` | 318 | 33 | 268 | 17 | 0 |
+| `安全设计.md` | 403 | 202 | 201 | 0 | 0 |
+
+Commit: `93f119a` — `docs: add CURRENT/TARGET/DEFERRED/UNVERIFIED status markers to delivery docs`
+
+Key reclassifications:
+- Single-instance SQLite, Kilo model-level 429 rotation, existing fallback panels → `CURRENT`
+- WAF, cloud VPC, KMS/Vault, SSM, CI/CD Stage 7~8, Prometheus/Grafana surplus check → `TARGET`
+- Redis, multi-instance, multi-region, elastic scaling → `DEFERRED`
+- RPO ≤ 24h / RTO ≤ 30min, log retention ≥ 180 days, cloud vendor selection → `TARGET` (not yet acceptance-tested)
+- Fixed public egress IP → `UNVERIFIED` (depends on upstream whitelist requirements)
+
+These markers distinguish what is already running from what is planned but not yet implemented, preventing future sessions from mistaking architecture targets for deployed capabilities.
 
 ## Important Files
 

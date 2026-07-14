@@ -430,7 +430,10 @@ func GetVirtualModel(modelName string) (*VirtualModelConfig, bool) {
 	}
 
 	vm, ok := config.VirtualModels[modelName]
-	return &vm, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneVirtualModelConfig(vm), true
 }
 
 // GetAllVirtualModelNames returns a list of all enabled virtual model names
@@ -463,27 +466,38 @@ func GetDeployment(id string) (*DeploymentConfig, bool) {
 	return &dep, ok
 }
 
-func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error) {
-	configLock.RLock()
+// VirtualModelRoutingSnapshot is an immutable request-side view of one
+// virtual model and its eligible configured deployments.
+type VirtualModelRoutingSnapshot struct {
+	VirtualModel VirtualModelConfig
+	Deployments  []DeploymentConfig
+}
 
+// SnapshotVirtualModelRoutingConfig captures every config value used by the
+// request planner under one read lock. Sorting happens after the lock is
+// released, using the captured smart-sort settings.
+func SnapshotVirtualModelRoutingConfig(modelName string) (VirtualModelRoutingSnapshot, error) {
+	var snapshot VirtualModelRoutingSnapshot
+
+	configLock.RLock()
 	if config == nil || !config.Enabled {
 		configLock.RUnlock()
-		return nil, fmt.Errorf("fallback config is not enabled")
+		return snapshot, fmt.Errorf("fallback config is not enabled")
 	}
 
 	vm, ok := config.VirtualModels[modelName]
 	if !ok || !vm.Enabled {
 		configLock.RUnlock()
-		return nil, fmt.Errorf("virtual model not found or disabled: %s", modelName)
+		return snapshot, fmt.Errorf("virtual model not found or disabled: %s", modelName)
 	}
+	snapshot.VirtualModel = *cloneVirtualModelConfig(vm)
 
-	pools := vm.Pools
 	deployments := make([]DeploymentConfig, 0)
 	for depID, dep := range config.Deployments {
 		if !dep.Enabled {
 			continue
 		}
-		for _, p := range pools {
+		for _, p := range snapshot.VirtualModel.Pools {
 			if dep.Pool == p {
 				dep.ID = depID
 				deployments = append(deployments, dep)
@@ -492,19 +506,17 @@ func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error)
 		}
 	}
 	smartSortEnabled := config.SmartSort.Enabled
+	smartSortWeights := config.SmartSort.Weights
 	configLock.RUnlock()
 
 	if len(deployments) == 0 {
-		return nil, fmt.Errorf("no enabled deployments found for virtual model: %s", modelName)
+		return snapshot, fmt.Errorf("no enabled deployments found for virtual model: %s", modelName)
 	}
 
 	if smartSortEnabled {
 		today := todayString()
-		configLock.RLock()
-		weights := config.SmartSort.Weights
-		configLock.RUnlock()
 		sort.SliceStable(deployments, func(i, j int) bool {
-			return getDeploymentScore(deployments[i], today, weights) > getDeploymentScore(deployments[j], today, weights)
+			return getDeploymentScore(deployments[i], today, smartSortWeights) > getDeploymentScore(deployments[j], today, smartSortWeights)
 		})
 	} else {
 		sort.SliceStable(deployments, func(i, j int) bool {
@@ -512,19 +524,29 @@ func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error)
 		})
 	}
 
-	preferredDeployment := vm.PreferredDeployment
-	if preferredDeployment == "" && vm.FixedDeployment != "" {
-		preferredDeployment = vm.FixedDeployment
+	preferredDeployment := snapshot.VirtualModel.PreferredDeployment
+	if preferredDeployment == "" && snapshot.VirtualModel.FixedDeployment != "" {
+		preferredDeployment = snapshot.VirtualModel.FixedDeployment
 	}
 	deployments = PreferDeployment(deployments, preferredDeployment)
-	if normalizeRoutingMode(vm.RoutingMode) == RoutingModeFixed && preferredDeployment != "" {
+	if normalizeRoutingMode(snapshot.VirtualModel.RoutingMode) == RoutingModeFixed && preferredDeployment != "" {
 		if len(deployments) > 0 && deployments[0].ID == preferredDeployment {
-			return deployments[:1], nil
+			snapshot.Deployments = deployments[:1]
+			return snapshot, nil
 		}
-		return nil, fmt.Errorf("fixed preferred deployment %s not found or disabled for VM %s", preferredDeployment, modelName)
+		return snapshot, fmt.Errorf("fixed preferred deployment %s not found or disabled for VM %s", preferredDeployment, modelName)
 	}
 
-	return deployments, nil
+	snapshot.Deployments = deployments
+	return snapshot, nil
+}
+
+func GetDeploymentsForVirtualModel(modelName string) ([]DeploymentConfig, error) {
+	snapshot, err := SnapshotVirtualModelRoutingConfig(modelName)
+	if err != nil {
+		return nil, err
+	}
+	return snapshot.Deployments, nil
 }
 
 func PreferDeployment(deployments []DeploymentConfig, deploymentID string) []DeploymentConfig {
