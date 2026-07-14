@@ -1,0 +1,78 @@
+{
+  "date": "2026-07-14",
+  "feature": "paced Kilo and OVH provider soak",
+  "runtime": {
+    "base_url": "http://127.0.0.1:3008",
+    "routing": "temporary fixed virtual model per provider",
+    "temporary_virtual_models_removed": true,
+    "temporary_token_removed": true
+  },
+  "pace": {
+    "kilo": {
+      "requests": 6,
+      "interval_seconds": 7,
+      "configured_rpm": 10
+    },
+    "ovh": {
+      "requests": 3,
+      "interval_seconds": 35,
+      "configured_rpm": 2
+    }
+  },
+  "results": {
+    "kilo": {
+      "deployment": "free:kilo-e3b0c442",
+      "real_model": "cohere/north-mini-code:free",
+      "successes": 4,
+      "failures": 2,
+      "successful_average_latency_ms": 2288,
+      "successful_max_latency_ms": 5500,
+      "failure_cause": "upstream shared OpenRouter free-model rate limit",
+      "cooldown_seconds": 60,
+      "post_cooldown_health": "healthy",
+      "post_cooldown_probe_latency_ms": 3351
+    },
+    "ovh": {
+      "deployment": "free:ovh-e3b0c442",
+      "real_model": "Meta-Llama-3_3-70B-Instruct",
+      "successes": 1,
+      "failures": 2,
+      "successful_average_latency_ms": 7360,
+      "successful_max_latency_ms": 7360,
+      "failure_cause": "upstream API rate limit",
+      "observed_retry_after_seconds": [15, 39],
+      "post_cooldown_health": "rate_limited",
+      "post_cooldown_probe_latency_ms": 1865
+    }
+  },
+  "usage_rows": {
+    "kilo": {
+      "request_count": 4,
+      "success_count": 4,
+      "total_tokens": 52
+    },
+    "ovh": {
+      "request_count": 1,
+      "success_count": 1,
+      "total_tokens": 42
+    }
+  },
+  "interpretation": [
+    "Fixed routing selected only the intended provider deployment.",
+    "The gateway preserved upstream error details and honored Retry-After cooldowns.",
+    "Kilo recovered after cooldown, so its failure was transient model demand rather than permanent provider failure.",
+    "Anonymous OVH remained rate-limited after the paced run and should not be treated as dependable production capacity.",
+    "The next resilience slice should rotate Kilo models on model-specific 429 responses and reduce or quarantine persistently rate-limited providers in automatic routing."
+  ],
+  "ci": {
+    "commit": "4170fa8391323fa7f9d4c3d1b86fc545e45134a4",
+    "run": 29308699282,
+    "result": "passed",
+    "url": "https://github.com/CCT6717/cctapi/actions/runs/29308699282"
+  },
+  "security": {
+    "credentials_recorded": false,
+    "provider_keys_recorded": false,
+    "response_bodies_recorded": false
+  }
+}

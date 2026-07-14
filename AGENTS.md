@@ -270,7 +270,11 @@ Completed dynamic catalog work:
 
 Remaining production work:
 
-- Before sustained production traffic, run a paced soak with the intended provider credentials or paid quota. Do not use anonymous-provider burst behavior as a production capacity estimate.
+- The 2026-07-14 anonymous-provider paced soak is recorded in `docs/evidence/provider-paced-soak-2026-07-14.json`:
+  - Kilo completed 4/6 requests, then hit an upstream shared OpenRouter free-model rate limit and recovered to `healthy` after cooldown.
+  - OVH completed 1/3 requests, honored upstream `Retry-After`, and remained `rate_limited` on the recovery probe.
+  - Treat anonymous Kilo/OVH capacity as opportunistic only. Before sustained production traffic, repeat the soak with intended credentials or paid quota.
+- The next resilience slice should rotate Kilo catalog models on model-specific 429 responses and lower the automatic-routing score of providers that remain rate-limited across cooldown windows.
 - The catalog store is designed for the current single-process SQLite deployment. A future multi-instance deployment should add database-level compare-and-swap or leader ownership for catalog publication.
 
 ## Important Files
@@ -314,6 +318,7 @@ Do not hardcode real tokens in repo files.
 - Full Go tests and Go binary build.
 - Repository whitespace/conflict checks.
 - Playwright desktop/mobile E2E against a CI-built frontend and Go server.
+- Go vet plus scoped race tests for fallback, controller, middleware, common, and router packages. CI run `29308699282` passed for commit `4170fa8`.
 
 ## PR 检查清单
 
