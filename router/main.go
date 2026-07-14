@@ -6,12 +6,14 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/logger"
+	"github.com/songquanpeng/one-api/middleware"
 	"net/http"
 	"os"
 	"strings"
 )
 
 func SetRouter(router *gin.Engine, buildFS embed.FS) {
+	router.Use(middleware.TokenAPICORS())
 	SetApiRouter(router)
 	SetDashboardRouter(router)
 	SetRelayRouter(router)

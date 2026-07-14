@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common/blacklist"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/network"
 	"github.com/songquanpeng/one-api/model"
 	"net/http"
@@ -150,7 +151,8 @@ func TokenAuth() func(c *gin.Context) {
 		}
 		userEnabled, err := model.CacheIsUserEnabled(token.UserId)
 		if err != nil {
-			abortWithMessage(c, http.StatusInternalServerError, err.Error())
+			logger.Errorf(ctx, "failed to check user status for token user %d: %v", token.UserId, err)
+			abortWithMessage(c, http.StatusInternalServerError, "用户状态检查失败")
 			return
 		}
 		if !userEnabled || blacklist.IsUserBanned(token.UserId) {

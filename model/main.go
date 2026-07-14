@@ -2,6 +2,7 @@ package model
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/config"
@@ -23,13 +24,23 @@ var LOG_DB *gorm.DB
 
 func CreateRootAccountIfNeed() error {
 	var user User
-	//if user.Status != util.UserStatusEnabled {
-	if err := DB.First(&user).Error; err != nil {
-		logger.SysLog("no user exists, creating a root user for you: username is root, password is 123456")
-		hashedPassword, err := common.Password2Hash("123456")
-		if err != nil {
-			return err
-		}
+	err := DB.First(&user).Error
+	if err == nil {
+		return nil
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return fmt.Errorf("check for existing users: %w", err)
+	}
+	if err = validateInitialRootPassword(config.InitialRootPassword); err != nil {
+		return err
+	}
+
+	hashedPassword, err := common.Password2Hash(config.InitialRootPassword)
+	if err != nil {
+		return err
+	}
+	logger.SysLog("no user exists, creating the initial root account from environment configuration")
+	return DB.Transaction(func(tx *gorm.DB) error {
 		accessToken := random.GetUUID()
 		if config.InitialRootAccessToken != "" {
 			accessToken = config.InitialRootAccessToken
@@ -43,7 +54,9 @@ func CreateRootAccountIfNeed() error {
 			AccessToken: accessToken,
 			Quota:       500000000000000,
 		}
-		DB.Create(&rootUser)
+		if err := tx.Create(&rootUser).Error; err != nil {
+			return fmt.Errorf("create initial root user: %w", err)
+		}
 		if config.InitialRootToken != "" {
 			logger.SysLog("creating initial root token as requested")
 			token := Token{
@@ -58,8 +71,20 @@ func CreateRootAccountIfNeed() error {
 				RemainQuota:    500000000000000,
 				UnlimitedQuota: true,
 			}
-			DB.Create(&token)
+			if err := tx.Create(&token).Error; err != nil {
+				return fmt.Errorf("create initial root token: %w", err)
+			}
 		}
+		return nil
+	})
+}
+
+func validateInitialRootPassword(password string) error {
+	if len(password) < 12 {
+		return errors.New("INITIAL_ROOT_PASSWORD must be set to at least 12 characters for an empty database")
+	}
+	if password == "123456" {
+		return errors.New("INITIAL_ROOT_PASSWORD must not use the legacy default password")
 	}
 	return nil
 }

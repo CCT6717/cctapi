@@ -3,7 +3,6 @@ package helper
 import (
 	"context"
 	"fmt"
-	"html/template"
 	"log"
 	"net"
 	"os/exec"
@@ -91,10 +90,6 @@ func Interface2String(inter interface{}) string {
 		return fmt.Sprintf("%f", inter)
 	}
 	return "Not Implemented"
-}
-
-func UnescapeHTML(x string) interface{} {
-	return template.HTML(x)
 }
 
 func IntMax(a int, b int) int {

@@ -136,7 +136,8 @@ func buildXunfeiAuthUrl(hostUrl string, apiKey, apiSecret string) string {
 	}
 	ul, err := url.Parse(hostUrl)
 	if err != nil {
-		fmt.Println(err)
+		logger.SysError("failed to parse Xunfei host URL: " + err.Error())
+		return ""
 	}
 	date := time.Now().UTC().Format(time.RFC1123)
 	signString := []string{"host: " + ul.Host, "date: " + date, "GET " + ul.Path + " HTTP/1.1"}

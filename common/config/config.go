@@ -25,6 +25,7 @@ var DisplayTokenStatEnabled = true
 // Any options with "Secret", "Token" in its key won't be return by GetOptions
 
 var SessionSecret = uuid.New().String()
+var SessionCookieSecure = env.String("SESSION_COOKIE_SECURE", "auto")
 
 var OptionMap map[string]string
 var OptionMapRWMutex sync.RWMutex
@@ -153,6 +154,8 @@ var MetricFailChanSize = env.Int("METRIC_FAIL_CHAN_SIZE", 128)
 var InitialRootToken = os.Getenv("INITIAL_ROOT_TOKEN")
 
 var InitialRootAccessToken = os.Getenv("INITIAL_ROOT_ACCESS_TOKEN")
+
+var InitialRootPassword = os.Getenv("INITIAL_ROOT_PASSWORD")
 
 var GeminiVersion = env.String("GEMINI_VERSION", "v1")
 
