@@ -398,12 +398,6 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 		errInfo := fallback.FormatRelayErrorInfo(bizErr.StatusCode, getRelayErrorMessage(bizErr), bizErr.Error.Type, bizErr.Error.Code)
 		errClass := fallback.ClassifyRelayError(errInfo)
 
-		// Only HTTP 429 responses are treated as confirmed rate limits for model rotation
-		// and provider-level rate-limit score accounting. Other statuses with rate-limit-like
-		// messages are handled as ordinary provider failures.
-		isConfirmedHTTPRateLimit := errClass.Category == fallback.ErrorCategoryRateLimit &&
-			bizErr.StatusCode == http.StatusTooManyRequests
-
 		// 契约 5：响应已写出后停止。一旦 c.Writer.Written() 返回 true，立即 return，不再尝试轮换或回退。
 		// Once any response bytes are written, replaying the request is unsafe.
 		if c.Writer.Written() {
@@ -414,15 +408,22 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			return
 		}
 
+		attemptDecision := fallback.DecideDeploymentModelAttempt(
+			attempt,
+			bizErr.StatusCode,
+			errClass.Category == fallback.ErrorCategoryRateLimit,
+		)
+		isConfirmedHTTPRateLimit := attemptDecision.ConfirmedHTTPRateLimit
+
 		// 契约 1：中间模型 429 只更新模型级状态（MarkFreeProviderModelRateLimited），不处罚部署级。
-		if attempt.ProviderName == "kilo" && attempt.Rotatable && isConfirmedHTTPRateLimit {
+		if attemptDecision.RecordModelRateLimit {
 			modelCooldown := fallback.MarkFreeProviderModelRateLimited(
 				dep.ID, dep.RealModel, getRelayErrorMessage(bizErr), fallback.RelayCooldownInput{
 					Category: errClass.Category, StatusCode: bizErr.StatusCode,
 					RetryAfterSeconds: bizErr.RetryAfterSeconds, Attempt: 1,
 				},
 			)
-			if attempt.HasNextModel() {
+			if attemptDecision.Action == fallback.DeploymentModelActionRotate {
 				logger.Infof(ctx, "[fallback] Kilo model %s cooling down for %.0fs; rotating within deployment %s",
 					dep.RealModel, modelCooldown.Seconds(), dep.ID)
 				recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeModelRateLimited,
@@ -492,7 +493,7 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			bizErr.StatusCode, errClass.Category, durationMs, false, i+1, upstreamAttemptCount)
 
 		// 契约 3：非 429 错误（500、认证失败等）直接跳过剩余 Kilo 模型（i += attempt.RemainingModelAttempts()）。
-		if attempt.ProviderName == "kilo" && !isConfirmedHTTPRateLimit {
+		if attemptDecision.Action == fallback.DeploymentModelActionSkipRemaining {
 			i += attempt.RemainingModelAttempts()
 		}
 

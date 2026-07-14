@@ -28,17 +28,16 @@ func PrepareDeploymentsForRequest(virtualModel string, caps RequestCapabilities)
 func PrepareDeploymentPlanForRequest(virtualModel string, caps RequestCapabilities) (DeploymentPlan, error) {
 	var plan DeploymentPlan
 
-	deployments, err := GetDeploymentsForVirtualModel(virtualModel)
+	routingSnapshot, err := SnapshotVirtualModelRoutingConfig(virtualModel)
 	if err != nil {
 		return plan, err
 	}
+	deployments := routingSnapshot.Deployments
+	vmConfig := routingSnapshot.VirtualModel
 
-	vmConfig, hasVMConfig := GetVirtualModel(virtualModel)
-	if hasVMConfig {
-		plan.PreferredDeploymentID = vmConfig.PreferredDeployment
-		if plan.PreferredDeploymentID == "" {
-			plan.PreferredDeploymentID = vmConfig.FixedDeployment
-		}
+	plan.PreferredDeploymentID = vmConfig.PreferredDeployment
+	if plan.PreferredDeploymentID == "" {
+		plan.PreferredDeploymentID = vmConfig.FixedDeployment
 	}
 	plan.StickyDeploymentID = GetStickyDeployment(virtualModel)
 
@@ -50,7 +49,7 @@ func PrepareDeploymentPlanForRequest(virtualModel string, caps RequestCapabiliti
 	deployments = FilterHealthyDeployments(deployments)
 	plan.HealthAfter = len(deployments)
 
-	if hasVMConfig && len(deployments) > 1 {
+	if len(deployments) > 1 {
 		deployments = SortByStrategy(deployments, vmConfig.Strategy)
 	}
 
