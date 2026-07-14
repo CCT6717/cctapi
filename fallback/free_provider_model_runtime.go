@@ -2,7 +2,6 @@ package fallback
 
 import (
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -45,6 +44,7 @@ var (
 )
 
 func MarkFreeProviderModelRateLimited(deploymentID, modelID, reason string, input RelayCooldownInput) time.Duration {
+	_ = reason // Reserved for the planned interface; runtime state stores only the safe category.
 	now := freeProviderModelRuntimeNow()
 	duration := CalculateRelayCooldownDuration(input)
 	until := now.Add(duration)
@@ -62,7 +62,7 @@ func MarkFreeProviderModelRateLimited(deploymentID, modelID, reason string, inpu
 		models[modelID] = entry
 	}
 	entry.cooldownUntil = cloneTime(&until)
-	entry.reason = sanitizeFreeProviderModelRuntimeReason(reason)
+	entry.reason = "rate limited"
 	entry.lastRateLimitedAt = cloneTime(&now)
 	entry.lastAttemptedAt = cloneTime(&now)
 	entry.consecutive429Count++
@@ -164,47 +164,4 @@ func cloneTime(value *time.Time) *time.Time {
 	}
 	copy := *value
 	return &copy
-}
-
-const freeProviderModelRuntimeReasonMaxLength = 128
-
-func sanitizeFreeProviderModelRuntimeReason(reason string) string {
-	fields := strings.Fields(reason)
-	parts := make([]string, 0, len(fields))
-	for i := 0; i < len(fields); i++ {
-		field := fields[i]
-		if strings.EqualFold(field, "bearer") {
-			parts = append(parts, "Bearer [REDACTED]")
-			if i+1 < len(fields) {
-				i++
-			}
-			continue
-		}
-		parts = append(parts, redactFreeProviderModelRuntimeToken(field))
-	}
-
-	sanitized := strings.Join(parts, " ")
-	if sanitized == "" {
-		return "rate limited"
-	}
-	if !strings.Contains(strings.ToLower(sanitized), "rate") {
-		sanitized = "rate limited: " + sanitized
-	}
-	runes := []rune(sanitized)
-	if len(runes) > freeProviderModelRuntimeReasonMaxLength {
-		sanitized = string(runes[:freeProviderModelRuntimeReasonMaxLength])
-	}
-	return sanitized
-}
-
-func redactFreeProviderModelRuntimeToken(token string) string {
-	lower := strings.ToLower(token)
-	for _, key := range []string{
-		"api_key=", "api-key=", "access_token=", "access-token=", "authorization=", "token=",
-	} {
-		if index := strings.Index(lower, key); index >= 0 {
-			return token[:index+len(key)] + "[REDACTED]"
-		}
-	}
-	return token
 }

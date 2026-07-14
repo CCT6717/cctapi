@@ -71,6 +71,8 @@ func TestFreeProviderModelRuntimeSanitizesRateLimitReason(t *testing.T) {
 	tests := []string{
 		"  upstream\t429   Bearer sk-secret-token-value  ",
 		"api_key=secret-value; retry after 30 seconds",
+		`{"error":"sk-secret-value"}`,
+		"x-api-key: secret-value",
 	}
 	for _, reason := range tests {
 		MarkFreeProviderModelRateLimited("free:kilo-test", "model-a", reason, RelayCooldownInput{})
@@ -79,11 +81,8 @@ func TestFreeProviderModelRuntimeSanitizesRateLimitReason(t *testing.T) {
 			t.Fatalf("unexpected snapshot: %+v", snapshot)
 		}
 		got := snapshot.Models[0].Reason
-		if strings.Contains(got, "sk-secret-token-value") || strings.Contains(got, "secret-value") {
-			t.Fatalf("rate-limit reason leaked secret: %q", got)
-		}
-		if len(got) > 128 || !strings.Contains(got, "rate") {
-			t.Fatalf("rate-limit reason was not bounded/useful: %q", got)
+		if got != "rate limited" {
+			t.Fatalf("rate-limit reason = %q, want fixed safe category", got)
 		}
 		resetFreeProviderModelRuntimeForTest()
 	}
@@ -91,8 +90,8 @@ func TestFreeProviderModelRuntimeSanitizesRateLimitReason(t *testing.T) {
 	longReason := strings.Repeat(" noisy reason ", 32)
 	MarkFreeProviderModelRateLimited("free:kilo-test", "model-a", longReason, RelayCooldownInput{})
 	got := SnapshotFreeProviderModelRuntime("free:kilo-test").Models[0].Reason
-	if len(got) > 128 || strings.Contains(got, "  ") {
-		t.Fatalf("rate-limit reason was not normalized/bounded: %q", got)
+	if got != "rate limited" {
+		t.Fatalf("long rate-limit reason = %q, want fixed safe category", got)
 	}
 }
 
