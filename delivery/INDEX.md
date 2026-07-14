@@ -6,34 +6,45 @@
 
 ---
 
-## 文档状态标记说明
+## 文档状态与能力状态说明
 
-本文档及下游交付文档中所有重要能力均标注以下状态标记：
+交付文档采用**双字段状态**：
 
-| 标记 | 含义 | 说明 |
+| 字段 | 取值 | 含义 |
 |------|------|------|
-| `CURRENT` | 已上线 | 代码和运行环境已实现，已生产验证 |
-| `TARGET` | 已决定，待实施 | 架构已确定，但代码尚未实施或尚未验收 |
+| **文档状态** | 草稿 / 已审核 / 已冻结 / 已归档 | 描述文档本身在审核流程中的阶段 |
+| **能力状态** | `CURRENT` / `TARGET` / `DEFERRED` / `UNVERIFIED` | 描述文档所描述的系统能力是否已实施 |
+
+| 能力状态 | 含义 | 判定标准 |
+|----------|------|----------|
+| `CURRENT` | 当前已实现 | 有代码支撑，并已在当前支持环境通过测试、CI 或验收 |
+| `TARGET` | 已决定，待实施 | 架构已确定，但代码尚未实施或尚未通过验收测试 |
 | `DEFERRED` | 远期演进 | 多实例、商业化等远期能力，不在当前 MVP |
 | `UNVERIFIED` | 待验证 | 文档中存在，但尚无代码或运行证据支持 |
 
-> **标记规则**：不改动文档骨架结构；在表格中追加状态列，或在段落前/后追加标记。单实例自托管、SQLite 主存、Kilo 模型级 429 轮换等已验证能力标记为 `CURRENT`；WAF、KMS/Vault、云 VPC 等标记为 `TARGET` 或 `UNVERIFIED`；Redis、多实例、多区域标记为 `DEFERRED`；RPO/RTO、日志保留期等未验收项标记为 `TARGET`。
+> **区分原则**：
+> - 文档通过 G3~G6 审核仅代表**文档格式与逻辑完整性通过**，不等于功能已发布。
+> - 功能发布需通过独立发布门禁（R1 代码审查 / R2 CI 通过 / R3 真实验收 / R4 证据脱敏确认）。
+> - 单实例自托管、SQLite 主存、Kilo 模型级 429 轮换等已验证能力标记为 `CURRENT`。
+> - WAF、KMS/Vault、云 VPC 等标记为 `TARGET` 或 `UNVERIFIED`。
+> - Redis、多实例、多区域标记为 `DEFERRED`。
+> - RPO/RTO、日志保留期等未验收项标记为 `TARGET`。
 
 ---
 
 ## 1. 交付物清单
 
-| 序号 | 文档 | 路径 | 负责角色 | Gate | 模板校验 | 人工审核 | 状态 |
-|------|------|------|----------|------|----------|----------|------|
-| 1 | 资料摘要 | `delivery/material_digest.md` | 闻资料（knowledge-ingest-engineer） | G1 | 7/7 ✅ | 通过 ✅ | `CURRENT`（已归档） |
-| 2 | 调研报告 | `delivery/research_report.md` | 查有据（research-analyst） | G2 | 12/12 ✅ | 通过 ✅ | `CURRENT`（已归档） |
-| 3 | 高层架构设计 | `delivery/高层架构设计.md` | 许边界（business-architect） | G3 | 12/12 ✅ | 通过 ✅ | `CURRENT`（文档已冻结） |
-| 4 | 系统设计 | `delivery/系统设计.md` | 高见远（system-architect） | G4 | 11/11 ✅ | 通过 ✅ | `CURRENT`（文档已冻结） |
-| 5 | UserStory | `delivery/UserStory.md` | 顾全景（product-story-designer） | G4 | 5/5 ✅ | 通过 ✅ | `CURRENT`（文档已冻结） |
-| 6 | 部署设计 | `delivery/部署设计.md` | 毕落地（platform-architect） | G5 | 8/8 ✅ | 通过 ✅ | `CURRENT`（文档已冻结，部署未实施） |
-| 7 | 安全设计 | `delivery/安全设计.md` | 严守正（security-architect） | G5 | 9/9 ✅ | 通过 ✅ | `CURRENT`（文档已冻结，安全设施未实施） |
-| 8 | 部署拓扑图 | `delivery/cctapi-deployment-topology.drawio` | 毕落地 | G5 | — | 通过 ✅ | `CURRENT`（已归档） |
-| 9 | 交付索引（本文件） | `delivery/INDEX.md` | 齐构成（team-lead） | G6 | — | 待审核 | `CURRENT`（本文档） |
+| 序号 | 文档 | 路径 | 负责角色 | Gate | 模板校验 | 人工审核 | 文档状态 | 能力状态 |
+|------|------|------|----------|------|----------|----------|------|------|
+| 1 | 资料摘要 | `delivery/material_digest.md` | 闻资料（knowledge-ingest-engineer） | G1 | 7/7 ✅ | 通过 ✅ | 已归档 | CURRENT |
+| 2 | 调研报告 | `delivery/research_report.md` | 查有据（research-analyst） | G2 | 12/12 ✅ | 通过 ✅ | 已归档 | CURRENT |
+| 3 | 高层架构设计 | `delivery/高层架构设计.md` | 许边界（business-architect） | G3 | 12/12 ✅ | 通过 ✅ | 已冻结 | CURRENT |
+| 4 | 系统设计 | `delivery/系统设计.md` | 高见远（system-architect） | G4 | 11/11 ✅ | 通过 ✅ | 已冻结 | CURRENT |
+| 5 | UserStory | `delivery/UserStory.md` | 顾全景（product-story-designer） | G4 | 5/5 ✅ | 通过 ✅ | 已冻结 | CURRENT |
+| 6 | 部署设计 | `delivery/部署设计.md` | 毕落地（platform-architect） | G5 | 8/8 ✅ | 通过 ✅ | 已冻结 | TARGET |
+| 7 | 安全设计 | `delivery/安全设计.md` | 严守正（security-architect） | G5 | 9/9 ✅ | 通过 ✅ | 已冻结 | TARGET |
+| 8 | 部署拓扑图 | `delivery/cctapi-deployment-topology.drawio` | 毕落地 | G5 | — | 通过 ✅ | 已归档 | CURRENT |
+| 9 | 交付索引（本文件） | `delivery/INDEX.md` | 齐构成（team-lead） | G6 | — | 待审核 | 已冻结 | CURRENT |
 
 ---
 
@@ -86,7 +97,7 @@
 |----------|----------|----------------------|--------------|
 | X1 | 预置虚拟模型命名口径 | 以 `cct/free` 为当前实际在线虚拟模型；`high/auto` / `low/auto` / `all/auto` 作为英文 README 历史口径 | 已统一 |
 | X2 | Fallback 面板导航构成 | 以前端实际 7 区 PANEL_ITEMS 为准（gateway / free-pool / status / metrics / scores / alerts / logs） | 已统一 |
-| X3 | Go 版本口径 | 以实际构建工具链 go1.22.12 为准；go.mod 声明 `go 1.20` 作为最低语言版本，CI/构建使用 1.22.x | 已统一 |
+| X3 | Go 版本口径 | 以实际构建工具链 Go 1.26.5 或同补丁线更高版本 为准；go.mod 声明 `go 1.20` 作为最低语言版本，CI/构建使用 1.26.x | 已统一 |
 | X4 | 评分公式 | 以 `sorting.go` 实现为准：base=100，含 exhausted -200 / 冷却 -100 / 软限额 -80 / 近错 -50 | 已统一 |
 | X5 | 配置格式 | 以 `strategy + pools` 为 canonical 配置格式；legacy `routing_mode` / `fallback_order` / `fixed_deployment` 仅作迁移期兼容，v2 网关 API 拒绝写入 legacy | 已统一 |
 | X6 | cct/free 回退链 | 以当前在线免费池（OpenRouter / Kilo / OVH / Pollinations）为实际基线；README 中 Gemini → OpenRouter 示例为旧文档示例 | 已统一 |

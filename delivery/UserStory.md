@@ -537,7 +537,7 @@ sequenceDiagram
 - **网络环境**：客户端通过 HTTPS 访问；上游供应商接口通过 HTTPS；可选 Redis 用于限流，无 Redis 时内存限流兜底。
 - **设备规格**：单实例自托管，可运行在个人笔记本 / 小型服务器 / 容器；推荐至少 2 vCPU、2 GB 内存、充足磁盘用于日志与 SQLite。
 - **运行环境约束**：
-  - Go 1.20+（实际构建工具链为 go1.22.12）。
+  - go.mod 最低语言版本为 Go 1.20；安全构建使用 Go 1.26.5 或同补丁线更高版本。
   - 前端构建依赖 Node.js 18+ 与 npm/yarn。
   - Windows 构建需要 w64devkit 提供 CGO（SQLite 依赖）。
   - Docker Compose 部署需挂载 `./data` 与 `./logs`。

@@ -233,7 +233,7 @@
 
 | 技术层 | 推荐方案 | 替代方案 | 选择理由 |
 | --- | --- | --- | --- |
-| 网关运行时 | 沿用 Go 单体（cctapi 现状，go.mod `go 1.20`，实际工具链 go1.22.12，见 X3） | LiteLLM（Python） | Go 单二进制 + 嵌入式前端与 cctapi「单机零依赖」部署哲学一致（D5，§1）；LiteLLM 需 Postgres+Redis 三件套，运维成本不匹配（SR-11） |
+| 网关运行时 | 沿用 Go 单体（cctapi 现状，go.mod `go 1.20`，安全构建基线 Go 1.26.5，见 X3） | LiteLLM（Python） | Go 单二进制 + 嵌入式前端与 cctapi「单机零依赖」部署哲学一致（D5，§1）；LiteLLM 需 Postgres+Redis 三件套，运维成本不匹配（SR-11） |
 | 配置与状态存储 | 沿用 SQLite + JSON 配置文件热重载（D5，§1、§2） | Postgres/MySQL（model/main.go 已支持，D5，§16）；Redis（多实例时） | 现状满足单机诉求；B2 经验表明 Redis 仅在多实例共享路由状态时才必要（SR-03、SR-11） |
 | 路由/回退语义 | 沿用 strategy+pools + 部署级评分/冷却（D5，§2、§5、§7），对照吸收 B2 三层 fallback 分层思想 | B1 渠道级优先级（SR-01）；B4 请求级 provider 偏好（SR-08） | cctapi 的部署级粒度比 B1 渠道级更细；B4 的请求级声明与 cctapi 网关侧持久化策略是两种哲学，混合会提高配置复杂度（X5 已暴露双格式并存成本） |
 | 协议转换 | 沿用 relay/model 边界转换（D5，§12、§15） | 引入 B1 式渠道适配器双向转换层 | cctapi 分层已被 D1，§11 明确为纪律（「协议翻译/兼容代码保持在 relay/model 边界」）；B1 做法作交叉验证而非替换 |
