@@ -1,5 +1,13 @@
 package fallback
 
+// 部署/供应商级内存运行时配额（Deployment / Provider Level）
+//
+// 本文件管理部署级内存运行时配额状态，属于三层状态模型中的部署/供应商级：
+//   - DeploymentRuntimeState：RPM/RPD/TPM/TPD、SuccessCount、FailureCount、RateLimitScore
+//
+// 状态按部署维度保存在内存中，在分钟/天边界自动重置。
+// 不管理模型级运行时状态（见 free_provider_model_runtime.go）或持久化配额（见 state.go）。
+
 import (
 	"sync"
 	"time"
@@ -18,11 +26,11 @@ type DeploymentRuntimeState struct {
 	LastResetMinute time.Time
 	LastResetDay    time.Time
 
-	SuccessCount int
-	FailureCount int
+	SuccessCount   int
+	FailureCount   int
 	RateLimitScore int
-	LastError     string
-	LastErrorAt   time.Time
+	LastError      string
+	LastErrorAt    time.Time
 }
 
 var (
@@ -47,7 +55,7 @@ func GetRuntimeState(deploymentID string) *DeploymentRuntimeState {
 	}
 	now := time.Now()
 	s = &DeploymentRuntimeState{
-		DeploymentID:   deploymentID,
+		DeploymentID:    deploymentID,
 		LastResetMinute: now.Truncate(time.Minute),
 		LastResetDay:    truncateToDay(now),
 	}
@@ -113,7 +121,7 @@ func RecordUsage(deploymentID string, totalTokens int) {
 		// create lazily without nested lock
 		now := time.Now()
 		s = &DeploymentRuntimeState{
-			DeploymentID:   deploymentID,
+			DeploymentID:    deploymentID,
 			LastResetMinute: now.Truncate(time.Minute),
 			LastResetDay:    truncateToDay(now),
 		}
@@ -154,7 +162,7 @@ func RecordFailure(deploymentID, errMsg string, isRateLimit bool) {
 	if !ok {
 		now := time.Now()
 		s = &DeploymentRuntimeState{
-			DeploymentID:   deploymentID,
+			DeploymentID:    deploymentID,
 			LastResetMinute: now.Truncate(time.Minute),
 			LastResetDay:    truncateToDay(now),
 		}
@@ -186,16 +194,16 @@ func DecayRateLimitScores() {
 
 // SnapshotRuntimeState returns a safe copy for API responses / UI.
 type RuntimeStateSnapshot struct {
-	DeploymentID    string    `json:"deployment_id"`
-	MinuteRequests  int       `json:"minute_requests"`
-	DayRequests     int       `json:"day_requests"`
-	MinuteTokens    int       `json:"minute_tokens"`
-	DayTokens       int       `json:"day_tokens"`
-	SuccessCount    int       `json:"success_count"`
-	FailureCount    int       `json:"failure_count"`
-	RateLimitScore  int       `json:"rate_limit_score"`
-	LastError       string    `json:"last_error"`
-	LastErrorAt     time.Time `json:"last_error_at"`
+	DeploymentID   string    `json:"deployment_id"`
+	MinuteRequests int       `json:"minute_requests"`
+	DayRequests    int       `json:"day_requests"`
+	MinuteTokens   int       `json:"minute_tokens"`
+	DayTokens      int       `json:"day_tokens"`
+	SuccessCount   int       `json:"success_count"`
+	FailureCount   int       `json:"failure_count"`
+	RateLimitScore int       `json:"rate_limit_score"`
+	LastError      string    `json:"last_error"`
+	LastErrorAt    time.Time `json:"last_error_at"`
 }
 
 func SnapshotRuntimeState(deploymentID string) RuntimeStateSnapshot {

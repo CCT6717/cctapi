@@ -1,5 +1,14 @@
 package fallback
 
+// 部署/供应商级健康状态（Deployment / Provider Level）
+//
+// 本文件管理部署级健康状态（HealthStatus），属于三层状态模型中的部署/供应商级：
+//   - 通过后台探针或手动触发检测部署可用性
+//   - 健康状态仅用于路由决策参考，不替代渠道级禁用逻辑
+//
+// 渠道级的启用/禁用由 controller/relay.go 检查 channel.Status 和 monitor.DisableChannel 控制。
+// 本文件的健康检查不管理模型级状态（见 free_provider_model_runtime.go）。
+
 import (
 	"context"
 	"encoding/json"
