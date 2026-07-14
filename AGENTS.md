@@ -277,7 +277,27 @@ Completed dynamic catalog work:
 - Per-model tools, JSON, vision, streaming, and context metadata is applied at the routing boundary without moving compatibility logic into controllers.
 - Admin sync reports aggregate provider/key outcomes without exposing keys, and partial failures or skips are never reported as full success.
 
+
+Completed Kilo model-level rate-limit rotation:
+
+- In-memory model runtime registry with per-model cooldowns, success/failure counters, consecutive 429 tracking, and deep-copy snapshots.
+- Capability-aware Kilo model attempt planner that filters alternatives by stream, tools, JSON, vision, and context requirements before each attempt.
+- Request-scoped model rotation in the relay fallback loop: a Kilo 429 cools only the affected model, retries the next compatible model within the same deployment, and penalizes the provider only when all compatible models are exhausted.
+- Non-429 Kilo errors skip remaining models and fall through to existing provider-level behavior without duplicate penalties.
+- Written-stream guard prevents replay after response bytes have reached the client.
+- Manual deployment recovery (`ResetDeploymentState`) clears both persistent provider cooldowns and in-memory model cooldowns.
+- Runtime API exposes `model_runtime` snapshots through the existing `/api/fallback/deployments/runtime-status` endpoint.
+- Free-pool admin UI renders compact Chinese diagnostics for actively cooling Kilo models (model ID, consecutive 429 count, cooldown deadline).
+- All changes covered by planner tests, runtime registry tests (including race and concurrency), controller rotation tests, router projection tests, and frontend Vitest tests.
+- Full Go build, vet, `./...` tests, and scoped race tests pass. Frontend lint, Vitest, Vite build, and Storybook build pass.
+
 Remaining production work:
+
+- The 2026-07-14 anonymous-provider paced soak is recorded in `docs/evidence/provider-paced-soak-2026-07-14.json`:
+  - Kilo completed 4/6 requests, then hit an upstream shared OpenRouter free-model rate limit and recovered to `healthy` after cooldown.
+  - OVH completed 1/3 requests, honored upstream `Retry-After`, and remained `rate_limited` on the recovery probe.
+  - Treat anonymous Kilo/OVH capacity as opportunistic only. Before sustained production traffic, repeat the soak with intended credentials or paid quota.
+- The catalog store is designed for the current single-process SQLite deployment. A future multi-instance deployment should add database-level compare-and-swap or leader ownership for catalog publication.
 
 - The 2026-07-14 anonymous-provider paced soak is recorded in `docs/evidence/provider-paced-soak-2026-07-14.json`:
   - Kilo completed 4/6 requests, then hit an upstream shared OpenRouter free-model rate limit and recovered to `healthy` after cooldown.
