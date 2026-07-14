@@ -61,6 +61,7 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 Last verified handoff: 2026-07-14.
 
 - Branch `main` is pushed to `origin/main`.
+- Security hardening is merged through `5409921`: default root credentials are removed, session cookies and browser mutations are protected, token CORS is scoped, internal errors are sanitized, JWT/dependencies use patched releases, and CI runs pinned `govulncheck` v1.6.0.
 - Latest smoke hardening commit: `36a6dc5 fix(smoke): wait for complete usage accounting`.
 - Preview release tag for this handoff: `v0.1.0-freellmapi-preview`.
 - Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 10.5.0.
@@ -112,14 +113,14 @@ $env:STORYBOOK_DISABLE_TELEMETRY='1'; npm run build-storybook
 
 cd D:\ct\project
 $env:PATH='D:\ct\tools\w64devkit-1.23.0\bin;' + $env:PATH
-& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./... -count=1
-& 'D:\ct\tools\go1.22.12\bin\go.exe' build -o one-api.exe .
+& 'D:\ct\tools\go\bin\go.exe' test ./... -count=1
+& 'D:\ct\tools\go\bin\go.exe' build -o one-api.exe .
 curl.exe -I http://127.0.0.1:3008/
 ```
 
 Expected result from the latest pass:
 
-- Frontend tests: 9 suites passed, 36 tests passed (Vitest 3.2.7).
+- Frontend tests: 9 suites passed, 44 tests passed (Vitest 3.2.7).
 - Browser tests: 16 Playwright checks passed across desktop Chromium and Mobile Chrome.
 - Frontend production build: passed (Vite 6.4.3), ESLint 0 errors and 0 warnings.
 - Storybook build: passed with asset-size warnings only.
@@ -130,8 +131,8 @@ Latest verification on `main`:
 ```powershell
 $env:CGO_ENABLED='1'
 $env:PATH='D:\ct\tools\w64devkit-1.23.0\bin;' + $env:PATH
-& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./... -count=1
-& 'D:\ct\tools\go1.22.12\bin\go.exe' build ./...
+& 'D:\ct\tools\go\bin\go.exe' test ./... -count=1
+& 'D:\ct\tools\go\bin\go.exe' build ./...
 ```
 
 Expected result from the latest pass:
@@ -143,9 +144,9 @@ Expected result from the latest pass:
 ```powershell
 $env:CGO_ENABLED='1'
 $env:PATH='D:\ct\tools\w64devkit-1.23.0\bin;' + $env:PATH
-& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./fallback ./router -count=1
-& 'D:\ct\tools\go1.22.12\bin\go.exe' test ./... -count=1
-& 'D:\ct\tools\go1.22.12\bin\go.exe' build ./...
+& 'D:\ct\tools\go\bin\go.exe' test ./fallback ./router -count=1
+& 'D:\ct\tools\go\bin\go.exe' test ./... -count=1
+& 'D:\ct\tools\go\bin\go.exe' build ./...
 ```
 
 Expected result from the latest pass:
