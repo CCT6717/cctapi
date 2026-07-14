@@ -166,7 +166,7 @@ func main() {
 		SameSite: cookiePolicy.SameSite,
 	})
 	server.Use(sessions.Sessions("session", store))
-	server.Use(middleware.SessionCSRF("session"))
+	server.Use(middleware.SessionCSRF("session", config.ServerAddress))
 
 	router.SetRouter(server, buildFS)
 	var port = os.Getenv("PORT")

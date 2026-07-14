@@ -1,12 +1,10 @@
 package middleware
 
 import (
-	"fmt"
 	"net/http"
 	"runtime/debug"
 
 	"github.com/gin-gonic/gin"
-	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/claudeutil"
 	"github.com/songquanpeng/one-api/common/logger"
 )
@@ -19,10 +17,7 @@ func RelayPanicRecover() gin.HandlerFunc {
 				logger.Errorf(ctx, "panic detected: %v", err)
 				logger.Errorf(ctx, "stacktrace from panic: %s", string(debug.Stack()))
 				logger.Errorf(ctx, "request: %s %s", c.Request.Method, c.Request.URL.Path)
-				body, _ := common.GetRequestBody(c)
-				logger.Errorf(ctx, "request body: %s", string(body))
-				msg := fmt.Sprintf("Panic detected, error: %v. Please submit an issue with the related log here: https://github.com/songquanpeng/one-api", err)
-				claudeutil.WriteClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_panic", msg)
+				claudeutil.WriteClaudeOrOpenAIError(c, http.StatusInternalServerError, "one_api_panic", "服务内部错误，请稍后重试")
 				c.Abort()
 			}
 		}()

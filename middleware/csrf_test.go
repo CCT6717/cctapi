@@ -10,11 +10,13 @@ import (
 
 func TestSessionCSRF(t *testing.T) {
 	tests := []struct {
-		name       string
-		method     string
-		cookie     bool
-		headers    map[string]string
-		wantStatus int
+		name             string
+		method           string
+		cookie           bool
+		headers          map[string]string
+		requestURL       string
+		trustedAddresses []string
+		wantStatus       int
 	}{
 		{
 			name: "cross-site fetch metadata is rejected", method: http.MethodPost, cookie: true,
@@ -27,6 +29,15 @@ func TestSessionCSRF(t *testing.T) {
 		{
 			name: "same origin is allowed", method: http.MethodPut, cookie: true,
 			headers: map[string]string{"Origin": "https://app.example"}, wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "default https port is normalized", method: http.MethodPut, cookie: true,
+			headers: map[string]string{"Origin": "https://app.example"}, requestURL: "https://app.example:443/api/probe", wantStatus: http.StatusNoContent,
+		},
+		{
+			name: "configured public address survives proxy host rewrite", method: http.MethodPut, cookie: true,
+			headers: map[string]string{"Origin": "https://app.example"}, requestURL: "http://127.0.0.1:3008/api/probe",
+			trustedAddresses: []string{"https://app.example"}, wantStatus: http.StatusNoContent,
 		},
 		{
 			name: "mismatched referer is rejected", method: http.MethodDelete, cookie: true,
@@ -54,12 +65,16 @@ func TestSessionCSRF(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			gin.SetMode(gin.TestMode)
 			engine := gin.New()
-			engine.Use(SessionCSRF("session"))
+			engine.Use(SessionCSRF("session", tt.trustedAddresses...))
 			engine.Handle(tt.method, "/api/probe", func(c *gin.Context) {
 				c.Status(http.StatusNoContent)
 			})
 
-			request := httptest.NewRequest(tt.method, "https://app.example/api/probe", nil)
+			requestURL := tt.requestURL
+			if requestURL == "" {
+				requestURL = "https://app.example/api/probe"
+			}
+			request := httptest.NewRequest(tt.method, requestURL, nil)
 			if tt.cookie {
 				request.AddCookie(&http.Cookie{Name: "session", Value: "signed-session"})
 			}

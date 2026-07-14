@@ -33,8 +33,31 @@ func TokenAPICORS() gin.HandlerFunc {
 }
 
 func isTokenAPIPath(path string) bool {
-	return path == "/v1" ||
-		strings.HasPrefix(path, "/v1/") ||
-		path == "/dashboard/billing/subscription" ||
-		path == "/dashboard/billing/usage"
+	if path == "/dashboard/billing/subscription" || path == "/dashboard/billing/usage" {
+		return true
+	}
+	for _, prefix := range []string{
+		"/v1/models",
+		"/v1/dashboard/billing",
+		"/v1/oneapi/proxy",
+		"/v1/completions",
+		"/v1/chat/completions",
+		"/v1/responses",
+		"/v1/messages",
+		"/v1/edits",
+		"/v1/images",
+		"/v1/embeddings",
+		"/v1/engines",
+		"/v1/audio",
+		"/v1/files",
+		"/v1/fine_tuning",
+		"/v1/moderations",
+		"/v1/assistants",
+		"/v1/threads",
+	} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }

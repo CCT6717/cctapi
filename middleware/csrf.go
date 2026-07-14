@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -9,7 +10,7 @@ import (
 	"github.com/songquanpeng/one-api/common/logger"
 )
 
-func SessionCSRF(cookieName string) gin.HandlerFunc {
+func SessionCSRF(cookieName string, trustedAddresses ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if isSafeMethod(c.Request.Method) || !hasCookie(c.Request, cookieName) {
 			c.Next()
@@ -22,7 +23,7 @@ func SessionCSRF(cookieName string) gin.HandlerFunc {
 		}
 
 		if origin := c.GetHeader("Origin"); origin != "" {
-			if !sourceMatchesHost(origin, c.Request.Host) {
+			if !sourceMatchesHost(origin, c.Request.Host, trustedAddresses) {
 				rejectCrossSiteRequest(c, "origin mismatch")
 				return
 			}
@@ -31,7 +32,7 @@ func SessionCSRF(cookieName string) gin.HandlerFunc {
 		}
 
 		if referer := c.GetHeader("Referer"); referer != "" {
-			if !sourceMatchesHost(referer, c.Request.Host) {
+			if !sourceMatchesHost(referer, c.Request.Host, trustedAddresses) {
 				rejectCrossSiteRequest(c, "referer mismatch")
 				return
 			}
@@ -58,16 +59,42 @@ func hasCookie(request *http.Request, name string) bool {
 	return err == nil
 }
 
-func sourceMatchesHost(rawSource string, requestHost string) bool {
+func sourceMatchesHost(rawSource string, requestHost string, trustedAddresses []string) bool {
 	source, err := url.Parse(rawSource)
 	if err != nil || source.Host == "" {
 		return false
 	}
-	return strings.EqualFold(normalizeHost(source.Host), normalizeHost(requestHost))
+	if normalizeHost(source.Host, source.Scheme) == normalizeHost(requestHost, source.Scheme) {
+		return true
+	}
+	for _, rawTrustedAddress := range trustedAddresses {
+		trustedAddress, err := url.Parse(rawTrustedAddress)
+		if err != nil || trustedAddress.Host == "" {
+			continue
+		}
+		if strings.EqualFold(source.Scheme, trustedAddress.Scheme) &&
+			normalizeHost(source.Host, source.Scheme) == normalizeHost(trustedAddress.Host, trustedAddress.Scheme) {
+			return true
+		}
+	}
+	return false
 }
 
-func normalizeHost(host string) string {
-	return strings.TrimSuffix(strings.TrimSpace(host), ".")
+func normalizeHost(host string, scheme string) string {
+	parsed, err := url.Parse("//" + strings.TrimSpace(host))
+	if err != nil || parsed.Hostname() == "" {
+		return ""
+	}
+	hostname := strings.ToLower(strings.TrimSuffix(parsed.Hostname(), "."))
+	port := parsed.Port()
+	if (strings.EqualFold(scheme, "https") && port == "443") ||
+		(strings.EqualFold(scheme, "http") && port == "80") {
+		port = ""
+	}
+	if port != "" {
+		return net.JoinHostPort(hostname, port)
+	}
+	return hostname
 }
 
 func rejectCrossSiteRequest(c *gin.Context, reason string) {

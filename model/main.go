@@ -16,13 +16,18 @@ import (
 	"gorm.io/gorm"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
 var DB *gorm.DB
 var LOG_DB *gorm.DB
+var rootBootstrapMutex sync.Mutex
 
 func CreateRootAccountIfNeed() error {
+	rootBootstrapMutex.Lock()
+	defer rootBootstrapMutex.Unlock()
+
 	var user User
 	err := DB.First(&user).Error
 	if err == nil {
@@ -40,7 +45,7 @@ func CreateRootAccountIfNeed() error {
 		return err
 	}
 	logger.SysLog("no user exists, creating the initial root account from environment configuration")
-	return DB.Transaction(func(tx *gorm.DB) error {
+	err = DB.Transaction(func(tx *gorm.DB) error {
 		accessToken := random.GetUUID()
 		if config.InitialRootAccessToken != "" {
 			accessToken = config.InitialRootAccessToken
@@ -77,6 +82,17 @@ func CreateRootAccountIfNeed() error {
 		}
 		return nil
 	})
+	if err == nil {
+		return nil
+	}
+
+	var existingRoot User
+	lookupErr := DB.Where("username = ? AND role = ?", "root", RoleRootUser).First(&existingRoot).Error
+	if lookupErr == nil {
+		logger.SysLog("initial root account was created concurrently")
+		return nil
+	}
+	return err
 }
 
 func validateInitialRootPassword(password string) error {

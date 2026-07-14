@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sync"
 	"testing"
 
 	"github.com/songquanpeng/one-api/common"
@@ -88,6 +89,64 @@ func TestCreateRootAccountIfNeedLeavesExistingDatabaseUnchanged(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("user count = %d, want 1", count)
+	}
+}
+
+func TestCreateRootAccountIfNeedToleratesConcurrentBootstrap(t *testing.T) {
+	originalDB := DB
+	originalPassword := config.InitialRootPassword
+	originalToken := config.InitialRootToken
+	originalAccessToken := config.InitialRootAccessToken
+	t.Cleanup(func() {
+		DB = originalDB
+		config.InitialRootPassword = originalPassword
+		config.InitialRootToken = originalToken
+		config.InitialRootAccessToken = originalAccessToken
+	})
+
+	database, err := gorm.Open(sqlite.Open("file:root-bootstrap?mode=memory&cache=shared&_busy_timeout=5000"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open shared in-memory database: %v", err)
+	}
+	sqlDB, err := database.DB()
+	if err != nil {
+		t.Fatalf("get database connection: %v", err)
+	}
+	sqlDB.SetMaxOpenConns(2)
+	if err := database.AutoMigrate(&User{}, &Token{}); err != nil {
+		t.Fatalf("migrate shared database: %v", err)
+	}
+	DB = database
+	config.InitialRootPassword = "strong-pass1"
+	config.InitialRootToken = ""
+	config.InitialRootAccessToken = ""
+
+	start := make(chan struct{})
+	errorsCh := make(chan error, 2)
+	var workers sync.WaitGroup
+	for range 2 {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			<-start
+			errorsCh <- CreateRootAccountIfNeed()
+		}()
+	}
+	close(start)
+	workers.Wait()
+	close(errorsCh)
+	for err := range errorsCh {
+		if err != nil {
+			t.Fatalf("concurrent bootstrap returned error: %v", err)
+		}
+	}
+
+	var count int64
+	if err := DB.Model(&User{}).Where("username = ?", "root").Count(&count).Error; err != nil {
+		t.Fatalf("count root users: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("root user count = %d, want 1", count)
 	}
 }
 

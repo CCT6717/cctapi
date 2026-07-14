@@ -41,7 +41,7 @@ func TurnstileCheck() gin.HandlerFunc {
 				logger.SysError(err.Error())
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
-					"message": err.Error(),
+					"message": "Turnstile 服务暂时不可用，请稍后重试",
 				})
 				c.Abort()
 				return
@@ -53,7 +53,7 @@ func TurnstileCheck() gin.HandlerFunc {
 				logger.SysError(err.Error())
 				c.JSON(http.StatusOK, gin.H{
 					"success": false,
-					"message": err.Error(),
+					"message": "Turnstile 服务暂时不可用，请稍后重试",
 				})
 				c.Abort()
 				return

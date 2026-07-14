@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/gin-gonic/gin"
@@ -23,12 +24,14 @@ func TestCORSScope(t *testing.T) {
 		path       string
 		method     string
 		wantOrigin string
+		tokenAPI   bool
 	}{
 		{name: "session api", path: "/api/user/self", method: http.MethodPut},
 		{name: "fallback admin api", path: "/api/fallback/providers", method: http.MethodPut},
-		{name: "models token api", path: "/v1/models", method: http.MethodGet, wantOrigin: "*"},
-		{name: "relay token api", path: "/v1/chat/completions", method: http.MethodPost, wantOrigin: "*"},
-		{name: "dashboard token api", path: "/dashboard/billing/usage", method: http.MethodGet, wantOrigin: "*"},
+		{name: "future session route under v1", path: "/v1/session/probe", method: http.MethodPost},
+		{name: "models token api", path: "/v1/models", method: http.MethodGet, wantOrigin: "*", tokenAPI: true},
+		{name: "relay token api", path: "/v1/chat/completions", method: http.MethodPost, wantOrigin: "*", tokenAPI: true},
+		{name: "dashboard token api", path: "/dashboard/billing/usage", method: http.MethodGet, wantOrigin: "*", tokenAPI: true},
 	}
 
 	for _, tt := range tests {
@@ -46,6 +49,19 @@ func TestCORSScope(t *testing.T) {
 			}
 			if got := recorder.Header().Get("Access-Control-Allow-Credentials"); got != "" {
 				t.Fatalf("credentialed CORS must remain disabled, got %q", got)
+			}
+			if tt.tokenAPI {
+				if recorder.Code != http.StatusNoContent {
+					t.Fatalf("preflight status = %d, want %d", recorder.Code, http.StatusNoContent)
+				}
+				if got := recorder.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, tt.method) {
+					t.Fatalf("Access-Control-Allow-Methods = %q, want %s", got, tt.method)
+				}
+				for _, header := range []string{"Authorization", "Content-Type"} {
+					if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(strings.ToLower(got), strings.ToLower(header)) {
+						t.Fatalf("Access-Control-Allow-Headers = %q, missing %s", got, header)
+					}
+				}
 			}
 		})
 	}
