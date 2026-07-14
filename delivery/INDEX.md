@@ -45,6 +45,8 @@
 | 7 | 安全设计 | `delivery/安全设计.md` | 严守正（security-architect） | G5 | 9/9 ✅ | 通过 ✅ | 已冻结 | TARGET |
 | 8 | 部署拓扑图 | `delivery/cctapi-deployment-topology.drawio` | 毕落地 | G5 | — | 通过 ✅ | 已归档 | CURRENT |
 | 9 | 交付索引（本文件） | `delivery/INDEX.md` | 齐构成（team-lead） | G6 | — | 待审核 | 已冻结 | CURRENT |
+| 10 | 单实例运行手册 | `delivery/单实例运行手册.md` | 运维 / 发布负责人 | R3-R4 | 手工演练 | 待审核 | 草稿 | TARGET |
+| 11 | 发布门禁 | `delivery/发布门禁.md` | 发布负责人 | R1-R4 | CI + 验收 | 待审核 | 草稿 | TARGET |
 
 ---
 
