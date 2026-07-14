@@ -49,7 +49,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.26.5"
 
       - name: Run go vet
         run: go vet ./...
@@ -59,6 +59,12 @@ jobs:
 
       - name: Run Go race tests (core packages)
         run: go test -race ./fallback ./controller ./middleware ./common ./router -count=1
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@v1.6.0
+
+      - name: Scan reachable Go vulnerabilities
+        run: govulncheck ./...
 
       - name: Build Go binary
         run: go build -o one-api.exe .
@@ -90,7 +96,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: "1.22"
+          go-version: "1.26.5"
 
       - name: Install frontend dependencies
         working-directory: web/default
