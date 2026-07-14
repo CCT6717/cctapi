@@ -154,16 +154,7 @@ func resolveFreeProviderCatalogModel(dep DeploymentConfig, caps RequestCapabilit
 	}
 
 	for _, entry := range ordered {
-		candidate := dep
-		candidate.SupportsVision = meta.SupportsVision
-		candidate.SupportsStream = meta.SupportsStream
-		candidate.SupportsTools = meta.SupportsTools
-		candidate.SupportsJSON = meta.SupportsJSON
-		candidate.ContextLength = meta.ContextLength
-		candidate = applyFreeModelCapabilities(candidate, entry)
-		if meta.Quirks != nil && meta.Quirks.DisableStream {
-			candidate.SupportsStream = false
-		}
+		candidate := applyFreeProviderCatalogModelCapabilities(dep, meta, entry)
 		if DeploymentSupports(candidate, caps) {
 			return candidate, true
 		}

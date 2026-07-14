@@ -70,6 +70,71 @@ func TestPrepareDeploymentModelPlanPromotesConfiguredKiloModelBeforeCatalogOrder
 	}
 }
 
+func TestKiloModelCandidatesUseProviderDefaultsForNilCatalogMetadata(t *testing.T) {
+	kilo := BuiltinFreeProviders["kilo"]
+	dep := DeploymentConfig{
+		ID:             "free:kilo-001122ff",
+		RealModel:      "kilo/configured:free",
+		SupportsTools:  true,
+		SupportsStream: false,
+		ContextLength:  512,
+	}
+
+	candidates := kiloModelCandidates(dep, []FreeModelCatalogEntry{
+		{ID: dep.RealModel},
+		{ID: "kilo/alternative:free"},
+	})
+
+	if len(candidates) != 2 {
+		t.Fatalf("candidate count = %d, want 2", len(candidates))
+	}
+	alternative := candidates[1]
+	if alternative.RealModel != "kilo/alternative:free" ||
+		alternative.SupportsTools != kilo.SupportsTools ||
+		alternative.SupportsStream != kilo.SupportsStream ||
+		alternative.ContextLength != kilo.ContextLength {
+		t.Fatalf("nil catalog metadata inherited configured capabilities: %#v; Kilo defaults: %#v", alternative, kilo)
+	}
+}
+
+func TestPrepareDeploymentModelPlanUsesKiloDefaultsForNilAlternativeMetadata(t *testing.T) {
+	depID := "free:kilo-001122ff"
+	configuredModel := "kilo/configured:free"
+	alternativeModel := "kilo/alternative:free"
+	tools := true
+	stream := false
+	smallContext := 512
+	setupFreeProviderModelPlanTest(t, depID, []FreeModelCatalogEntry{
+		{ID: configuredModel, SupportsTools: &tools, SupportsStream: &stream, ContextLength: &smallContext},
+		{ID: alternativeModel},
+	})
+	dep := DeploymentConfig{
+		ID:             depID,
+		RealModel:      configuredModel,
+		SupportsTools:  true,
+		SupportsStream: false,
+		ContextLength:  smallContext,
+	}
+
+	tests := []struct {
+		name      string
+		caps      RequestCapabilities
+		wantModel string
+	}{
+		{name: "tools", caps: RequestCapabilities{Tools: true}, wantModel: configuredModel},
+		{name: "stream", caps: RequestCapabilities{Stream: true}, wantModel: alternativeModel},
+		{name: "context", caps: RequestCapabilities{MaxTokens: 1024}, wantModel: alternativeModel},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			plan := PrepareDeploymentModelPlan(dep, tc.caps)
+			if plan.CompatibleCount != 1 || len(plan.Attempts) != 1 || plan.Attempts[0].Deployment.RealModel != tc.wantModel {
+				t.Fatalf("plan = %#v, want only %q", plan, tc.wantModel)
+			}
+		})
+	}
+}
+
 func TestPrepareDeploymentModelPlanRemovesCoolingKiloModelsAfterCompatibilityCount(t *testing.T) {
 	depID := "free:kilo-001122ff"
 	setupFreeProviderModelPlanTest(t, depID, []FreeModelCatalogEntry{{ID: "kilo/a:free"}, {ID: "kilo/b:free"}})

@@ -104,6 +104,19 @@ func applyFreeModelCapabilities(dep DeploymentConfig, entry FreeModelCatalogEntr
 	return dep
 }
 
+func applyFreeProviderCatalogModelCapabilities(dep DeploymentConfig, meta FreeProviderMeta, entry FreeModelCatalogEntry) DeploymentConfig {
+	dep.SupportsVision = meta.SupportsVision
+	dep.SupportsStream = meta.SupportsStream
+	dep.SupportsTools = meta.SupportsTools
+	dep.SupportsJSON = meta.SupportsJSON
+	dep.ContextLength = meta.ContextLength
+	dep = applyFreeModelCapabilities(dep, entry)
+	if meta.Quirks != nil && meta.Quirks.DisableStream {
+		dep.SupportsStream = false
+	}
+	return dep
+}
+
 func freeProviderCatalogModelIDs(models []FreeModelCatalogEntry) []string {
 	ids := make([]string, 0, len(models))
 	for _, entry := range models {

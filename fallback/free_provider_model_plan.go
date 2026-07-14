@@ -92,11 +92,12 @@ func prepareSingleDeploymentModelPlan(dep DeploymentConfig, providerName string,
 
 func kiloModelCandidates(dep DeploymentConfig, models []FreeModelCatalogEntry) []DeploymentConfig {
 	candidates := make([]DeploymentConfig, 0, len(models)+1)
+	meta := BuiltinFreeProviders["kilo"]
 	configuredModel := strings.TrimSpace(dep.RealModel)
 	configuredFound := false
 	for _, entry := range models {
 		if entry.ID == configuredModel {
-			candidates = append(candidates, applyFreeModelCapabilities(dep, entry))
+			candidates = append(candidates, applyFreeProviderCatalogModelCapabilities(dep, meta, entry))
 			configuredFound = true
 			break
 		}
@@ -106,7 +107,7 @@ func kiloModelCandidates(dep DeploymentConfig, models []FreeModelCatalogEntry) [
 	}
 	for _, entry := range models {
 		if entry.ID != configuredModel {
-			candidates = append(candidates, applyFreeModelCapabilities(dep, entry))
+			candidates = append(candidates, applyFreeProviderCatalogModelCapabilities(dep, meta, entry))
 		}
 	}
 	return candidates
