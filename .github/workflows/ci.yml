@@ -115,6 +115,9 @@ jobs:
 
       - name: Start server and run E2E tests
         working-directory: web/default
+        env:
+          INITIAL_ROOT_PASSWORD: cctapi-ci-root-password
+          CCT_E2E_PASSWORD: cctapi-ci-root-password
         run: |
           ../../one-api.exe --port 3008 > /tmp/cctapi-e2e.log 2>&1 &
           server_pid=$!

@@ -96,7 +96,7 @@ go build -o one-api.exe .
 ### 初始登录
 
 地址：`http://localhost:3008`
-账号：`root` / `123456`
+首次登录账号为 `root`，密码是首次启动时设置的 `INITIAL_ROOT_PASSWORD`。旧数据库若仍在使用历史默认密码，请立即在个人设置中修改。
 
 ---
 

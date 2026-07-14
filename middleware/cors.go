@@ -21,6 +21,20 @@ func TokenAPICORS() gin.HandlerFunc {
 		"Anthropic-Version",
 		"Anthropic-Beta",
 		"OpenAI-Beta",
+		"OpenAI-Organization",
+		"OpenAI-Project",
+		"X-Stainless-Lang",
+		"X-Stainless-Package-Version",
+		"X-Stainless-OS",
+		"X-Stainless-Arch",
+		"X-Stainless-Runtime",
+		"X-Stainless-Runtime-Version",
+		"X-Stainless-Async",
+		"X-Stainless-Retry-Count",
+		"X-Stainless-Timeout",
+		"X-Stainless-Helper-Method",
+		"X-Stainless-Poll-Helper",
+		"X-Stainless-Custom-Poll-Interval",
 	}
 	handler := cors.New(config)
 	return func(c *gin.Context) {

@@ -154,7 +154,8 @@ func main() {
 	middleware.SetUpLogger(server)
 	// Initialize session store
 	store := cookie.NewStore([]byte(config.SessionSecret))
-	cookiePolicy, err := config.ResolveSessionCookiePolicy(config.SessionCookieSecure, config.ServerAddress)
+	serverAddress := config.EffectiveServerAddress()
+	cookiePolicy, err := config.ResolveSessionCookiePolicy(config.SessionCookieSecure, serverAddress)
 	if err != nil {
 		logger.FatalLog("invalid session cookie configuration: " + err.Error())
 	}
@@ -166,7 +167,7 @@ func main() {
 		SameSite: cookiePolicy.SameSite,
 	})
 	server.Use(sessions.Sessions("session", store))
-	server.Use(middleware.SessionCSRF("session", config.ServerAddress))
+	server.Use(middleware.SessionCSRF("session", serverAddress))
 
 	router.SetRouter(server, buildFS)
 	var port = os.Getenv("PORT")

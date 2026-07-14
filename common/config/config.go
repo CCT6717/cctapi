@@ -13,7 +13,7 @@ import (
 )
 
 var SystemName = "One API"
-var ServerAddress = "http://localhost:3008"
+var ServerAddress = env.String("SERVER_ADDRESS", "http://localhost:3008")
 var Footer = ""
 var Logo = ""
 var TopUpLink = ""

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 var DB *gorm.DB
@@ -96,7 +97,7 @@ func CreateRootAccountIfNeed() error {
 }
 
 func validateInitialRootPassword(password string) error {
-	if len(password) < 12 {
+	if utf8.RuneCountInString(password) < 12 {
 		return errors.New("INITIAL_ROOT_PASSWORD must be set to at least 12 characters for an empty database")
 	}
 	if password == "123456" {

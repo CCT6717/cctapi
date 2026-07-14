@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -15,6 +16,13 @@ type SessionCookiePolicy struct {
 	HttpOnly bool
 	Secure   bool
 	SameSite http.SameSite
+}
+
+func EffectiveServerAddress() string {
+	if address := strings.TrimSpace(os.Getenv("SERVER_ADDRESS")); address != "" {
+		return address
+	}
+	return ServerAddress
 }
 
 func ResolveSessionCookiePolicy(mode string, serverAddress string) (SessionCookiePolicy, error) {

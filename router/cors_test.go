@@ -40,7 +40,7 @@ func TestCORSScope(t *testing.T) {
 			request := httptest.NewRequest(http.MethodOptions, tt.path, nil)
 			request.Header.Set("Origin", "https://client.example")
 			request.Header.Set("Access-Control-Request-Method", tt.method)
-			request.Header.Set("Access-Control-Request-Headers", "authorization,content-type")
+			request.Header.Set("Access-Control-Request-Headers", "authorization,content-type,openai-organization,openai-project,x-stainless-lang,x-stainless-package-version")
 
 			engine.ServeHTTP(recorder, request)
 
@@ -57,7 +57,7 @@ func TestCORSScope(t *testing.T) {
 				if got := recorder.Header().Get("Access-Control-Allow-Methods"); !strings.Contains(got, tt.method) {
 					t.Fatalf("Access-Control-Allow-Methods = %q, want %s", got, tt.method)
 				}
-				for _, header := range []string{"Authorization", "Content-Type"} {
+				for _, header := range []string{"Authorization", "Content-Type", "OpenAI-Organization", "OpenAI-Project", "X-Stainless-Lang", "X-Stainless-Package-Version"} {
 					if got := recorder.Header().Get("Access-Control-Allow-Headers"); !strings.Contains(strings.ToLower(got), strings.ToLower(header)) {
 						t.Fatalf("Access-Control-Allow-Headers = %q, missing %s", got, header)
 					}

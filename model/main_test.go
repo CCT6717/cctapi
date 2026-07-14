@@ -19,7 +19,9 @@ func TestValidateInitialRootPassword(t *testing.T) {
 		{name: "missing", wantErr: true},
 		{name: "legacy default", password: "123456", wantErr: true},
 		{name: "too short", password: "short-pass", wantErr: true},
+		{name: "four multibyte characters are still short", password: "安全口令", wantErr: true},
 		{name: "minimum length", password: "strong-pass1"},
+		{name: "twelve multibyte characters", password: "这是十二个字符的安全口令值"},
 	}
 
 	for _, tt := range tests {

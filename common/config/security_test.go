@@ -2,6 +2,7 @@ package config
 
 import (
 	"net/http"
+	"os"
 	"testing"
 )
 
@@ -50,5 +51,23 @@ func TestResolveSessionCookiePolicy(t *testing.T) {
 				t.Fatalf("Secure = %t, want %t", policy.Secure, tt.wantSecure)
 			}
 		})
+	}
+}
+
+func TestEffectiveServerAddressUsesEnvironmentOverride(t *testing.T) {
+	originalAddress := ServerAddress
+	t.Cleanup(func() { ServerAddress = originalAddress })
+	ServerAddress = "http://database-setting.example"
+	t.Setenv("SERVER_ADDRESS", "https://public.example")
+
+	if got := EffectiveServerAddress(); got != "https://public.example" {
+		t.Fatalf("EffectiveServerAddress() = %q, want environment override", got)
+	}
+
+	if err := os.Unsetenv("SERVER_ADDRESS"); err != nil {
+		t.Fatalf("unset SERVER_ADDRESS: %v", err)
+	}
+	if got := EffectiveServerAddress(); got != ServerAddress {
+		t.Fatalf("EffectiveServerAddress() = %q, want configured fallback %q", got, ServerAddress)
 	}
 }
