@@ -324,7 +324,7 @@ def check_deployment_state(provider):
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     today = datetime.now().strftime("%Y-%m-%d")
-    
+
     # Find deployment states for provider (uses request_count / success_count / error_count)
     results = {}
     cursor.execute(
@@ -340,7 +340,7 @@ def check_deployment_state(provider):
             "exhausted_until": row[5],
             "last_error_code": row[6],
         }
-    
+
     # Check deployment_cooldown_states (not model_cooldowns)
     cursor.execute(
         "SELECT deployment_id, reason, cooldown_until FROM deployment_cooldown_states WHERE cooldown_until > datetime('now') AND deployment_id LIKE ?",
@@ -353,7 +353,7 @@ def check_deployment_state(provider):
             "reason": row[1],
             "cooldown_until": row[2],
         })
-    
+
     conn.close()
     return results, cooldowns
 
@@ -436,7 +436,7 @@ def check_attempt_events(virtual_model, since_iso, until_iso, db_path=DB_PATH):
 def run_soak(args):
     token = get_token()
     model = resolve_model(args.provider, args.model)
-    
+
     # Determine request type mix
     if args.types:
         type_pool = args.types.split(",")
@@ -444,7 +444,7 @@ def run_soak(args):
         type_pool = ["chat", "chat", "chat", "stream", "tools"]
         if args.provider == "kilo":
             type_pool.append("responses")
-    
+
     records = []
     state_checks = []
     checkpoint_owned = False
@@ -462,18 +462,18 @@ def run_soak(args):
         soak_start_iso = prev_data.get("soak_start_iso", soak_start_iso)
         checkpoint_owned = True
         print(f"Resuming from request {resume_from + 1}")
-    
+
     # Pre-soak state snapshot
     pre_states, pre_cooldowns = check_deployment_state(args.provider)
-    
+
     print(f"Starting soak: {args.count} requests to {model}")
     print(f"Delay: {args.delay}s | Types: {type_pool}")
     print(f"Pre-soak state: {len(pre_states)} deployment states, {len(pre_cooldowns)} deployment cooldowns")
-    
+
     for i in range(resume_from, args.count):
         req_type = request_type_for_index(type_pool, i)
         print(f"[{i+1}/{args.count}] {req_type} ...", end=" ", flush=True)
-        
+
         record = make_request(token, model, req_type, timeout=args.timeout)
         record["outcome"] = classify_outcome(record)
         records.append(record)
@@ -485,7 +485,7 @@ def run_soak(args):
         if record.get("retry_after"):
             print(f" retry_after={record['retry_after']}", end="")
         print()
-        
+
         # Periodic state check every 10 requests
         if (i + 1) % 10 == 0:
             states, cooldowns = check_deployment_state(args.provider)
@@ -496,7 +496,7 @@ def run_soak(args):
                 "deployment_cooldowns": cooldowns,
             })
             print(f"  -> State check: {len(states)} states, {len(cooldowns)} deployment cooldowns")
-        
+
         # Save checkpoint every 20 requests
         if (i + 1) % 20 == 0 and args.resume_file:
             # Convert args to serializable dict (Path objects -> str)
@@ -512,12 +512,12 @@ def run_soak(args):
                 }, f, indent=2, ensure_ascii=False)
             checkpoint_written = True
             print(f"  -> Checkpoint saved")
-        
+
         # Delay before next request (except last)
         if i < args.count - 1:
             actual_delay = args.delay + random.uniform(-0.5, 0.5)
             time.sleep(max(0.1, actual_delay))
-    
+
     # Post-soak state
     soak_end_iso = datetime.now(timezone.utc).isoformat()
     post_states, post_cooldowns = check_deployment_state(args.provider)
@@ -536,7 +536,7 @@ def run_soak(args):
     for r in records:
         if r.get("real_model"):
             real_models[r["real_model"]] = real_models.get(r["real_model"], 0) + 1
-    
+
     summary = {
         "provider": args.provider,
         "virtual_model": model,
@@ -565,7 +565,7 @@ def run_soak(args):
     # Verify attempt_events consistency
     attempt_events = check_attempt_events(model, soak_start_iso, soak_end_iso)
     summary["attempt_events_verification"] = attempt_events
-    
+
     report = {
         "meta": {
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -579,17 +579,17 @@ def run_soak(args):
         "records": records,
         "state_checks": state_checks,
     }
-    
+
     # Save report
     report_path = Path(args.output)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     with open(report_path, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2, ensure_ascii=False)
-    
+
     # Also update resume file if exists
     if (checkpoint_owned or checkpoint_written) and args.resume_file.exists():
         args.resume_file.unlink()
-    
+
     print(f"\n{'='*50}")
     print(f"Soak complete for {args.provider}")
     print(f"Success: {success_count}/{len(records)} ({summary['success_rate']}%)")
@@ -603,7 +603,7 @@ def run_soak(args):
         print(f"  {m}: {c}")
     print(f"Report saved: {report_path}")
     print(f"{'='*50}")
-    
+
     return (
         summary["success_rate"] >= 99.0
         and rate_limit_count == 0
@@ -627,24 +627,24 @@ def main():
     parser.add_argument("--output", default="docs/evidence/soak-{provider}-{timestamp}.json", help="Output report path")
     parser.add_argument("--resume-file", default=".soak-checkpoint.json", help="Checkpoint file for resuming")
     parser.add_argument("--resume-from", action="store_true", help="Resume from checkpoint if exists")
-    
+
     args = parser.parse_args()
-    
+
     # Format output path
     if "{provider}" in args.output:
         args.output = args.output.replace("{provider}", args.provider)
     if "{timestamp}" in args.output:
         args.output = args.output.replace("{timestamp}", datetime.now().strftime("%Y-%m-%d"))
-    
+
     args.resume_file = Path(args.resume_file)
-    
+
     # Change to project root if in scripts/
     script_dir = Path(__file__).parent.resolve()
     project_root = script_dir.parent
     if (project_root / "one-api.db").exists():
         import os
         os.chdir(project_root)
-    
+
     try:
         ok = run_soak(args)
     except ValueError as exc:
