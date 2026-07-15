@@ -1,8 +1,10 @@
 import copy
 import importlib.util
+import io
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -250,6 +252,26 @@ class SoakScriptTests(unittest.TestCase):
             soak.extract_request_id({"x-request-id": "request-legacy"}),
             "request-legacy",
         )
+
+    def test_http_error_preserves_gateway_request_id(self):
+        error = soak.urllib.error.HTTPError(
+            "http://127.0.0.1:3008/v1/chat/completions",
+            429,
+            "rate limited",
+            {"Retry-After": "60", "X-Oneapi-Request-Id": "request-429"},
+            io.BytesIO(b"{}"),
+        )
+        with mock.patch.object(soak.urllib.request, "urlopen", side_effect=error):
+            record = soak.make_request(
+                "test-token",
+                "openrouter/auto",
+                "chat",
+                timeout=1,
+            )
+
+        self.assertEqual(record["status"], 429)
+        self.assertEqual(record["request_id"], "request-429")
+        self.assertEqual(record["retry_after"], "60")
 
 
 if __name__ == "__main__":

@@ -374,6 +374,7 @@ def make_request(token, model, req_type, timeout=30):
         if hasattr(e, "read"):
             e.read()
         retry_after = e.headers.get("Retry-After") if e.headers else None
+        req_id = extract_request_id(dict(e.headers or {}))
     except Exception:
         status = -1
 
