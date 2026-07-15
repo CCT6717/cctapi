@@ -11,8 +11,11 @@
     "kilo_model_rotation_contract": "passed",
     "provider_fallback_contract": "passed",
     "legacy_pressure_http_status": "50/50 HTTP 200",
-    "production_capacity_gate": "passed_strict_four_protocol_smoke",
-    "reason": "Fresh strict verification passed Chat, stream, Responses, and tools with protocol structure asserted for every request."
+    "production_capacity_gate": "failed_strict_50_protocol_reliability",
+    "reason": "The 4-request strict smoke passed, but the 50-request strict soak passed only 27/50 requests and recorded 23 protocol errors.",
+    "strict_50_capacity_gate": "failed_protocol_reliability",
+    "strict_50_reason": "27/50 requests passed strict protocol validation; 23 HTTP 200 responses failed protocol validation.",
+    "strict_four_protocol_smoke_gate": "passed_4_of_4"
   },
   "historical_runs": [
     {
@@ -194,5 +197,159 @@
     "tool_call_present": true,
     "tool_arguments_valid_json": true,
     "scope": "strict protocol smoke; historical 50-request run remains status-only capacity evidence"
+  },
+  "strict_50_verification": {
+    "evidence": "docs/evidence/soak-openrouter-strict-50-2026-07-15.json",
+    "gate": "failed_protocol_reliability",
+    "virtual_model": "openrouter/auto",
+    "requests": 50,
+    "successes": 27,
+    "protocol_errors": 23,
+    "http_rate_limits": 0,
+    "other_errors": 0,
+    "success_rate_percent": 54.0,
+    "average_latency_ms": 2633.44,
+    "p95_latency_ms": 4965,
+    "by_type": {
+      "chat": {
+        "success": 12,
+        "protocol_error": 1
+      },
+      "responses": {
+        "success": 1,
+        "protocol_error": 11
+      },
+      "stream": {
+        "success": 13
+      },
+      "tools": {
+        "success": 1,
+        "protocol_error": 11
+      }
+    },
+    "by_model": {
+      "cohere/north-mini-code:free": {
+        "protocol_error": 6,
+        "success": 5
+      },
+      "gpt-oss-20b": {
+        "success": 6
+      },
+      "tencent/hy3:free": {
+        "success": 16,
+        "protocol_error": 17
+      }
+    },
+    "by_type_and_model": {
+      "chat|cohere/north-mini-code:free": {
+        "success": 3
+      },
+      "chat|gpt-oss-20b": {
+        "success": 2
+      },
+      "chat|tencent/hy3:free": {
+        "success": 7,
+        "protocol_error": 1
+      },
+      "responses|cohere/north-mini-code:free": {
+        "protocol_error": 3
+      },
+      "responses|gpt-oss-20b": {
+        "success": 1
+      },
+      "responses|tencent/hy3:free": {
+        "protocol_error": 8
+      },
+      "stream|cohere/north-mini-code:free": {
+        "success": 2
+      },
+      "stream|gpt-oss-20b": {
+        "success": 2
+      },
+      "stream|tencent/hy3:free": {
+        "success": 9
+      },
+      "tools|cohere/north-mini-code:free": {
+        "protocol_error": 3
+      },
+      "tools|gpt-oss-20b": {
+        "success": 1
+      },
+      "tools|tencent/hy3:free": {
+        "protocol_error": 8
+      }
+    },
+    "diagnosis": [
+      "The historical strict-50 run used responses_max_output_tokens=20 and captured 0/50 gateway request IDs; its Responses failures are not treated as final model-capability evidence.",
+      "The persisted structural-probe artifact records a direct tencent/hy3:free Responses request at 512 tokens with a valid output_text structure, request ID, and usage-log linkage.",
+      "The same artifact records a direct tencent/hy3:free tools request at 512 tokens with a tool call but non-JSON function arguments, request ID, and usage-log linkage.",
+      "The persisted Kilo catalog marks tencent/hy3:free supports_tools=true from upstream supported_parameters, while the attributable direct probe does not satisfy the OpenAI tool-call argument contract."
+    ],
+    "conclusion": "The overall production-capacity gate failed. The 4/4 smoke remains a separate protocol smoke only; openrouter/auto is not protocol-reliable across model rotation until model-specific tool capability false positives are excluded or rotated.",
+    "next_actions": [
+      "Use request-contract version 2 with a 512-token Responses budget in future strict runs.",
+      "Design model-level handling for tool-capability false positives without a permanent provider blacklist.",
+      "Repeat the 50-request strict soak after the routing fix."
+    ],
+    "request_contract": {
+      "version": 1,
+      "chat_max_tokens": 256,
+      "stream_max_tokens": 256,
+      "responses_max_output_tokens": 20,
+      "tools_max_tokens": 50,
+      "required_tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "get_weather"
+        }
+      }
+    },
+    "request_id_coverage": {
+      "captured": 0,
+      "total": 50,
+      "header_fix_required": "x-oneapi-request-id was not captured by this historical run"
+    },
+    "structural_probe_evidence": "docs/evidence/soak-openrouter-structural-probes-2026-07-15.json",
+    "probe_summary": {
+      "evidence": "docs/evidence/soak-openrouter-structural-probes-2026-07-15.json",
+      "total_probes": 20,
+      "request_id_coverage": 20,
+      "usage_link_coverage": 11,
+      "direct_tencent_responses_512_valid": true,
+      "direct_tencent_tools_512_invalid": true
+    }
+  },
+  "structural_probe_evidence": {
+    "file": "docs/evidence/soak-openrouter-structural-probes-2026-07-15.json",
+    "request_contract": {
+      "version": 2,
+      "chat_max_tokens": 256,
+      "stream_max_tokens": 256,
+      "responses_max_output_tokens": 512,
+      "tools_max_tokens": 50,
+      "required_tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "get_weather"
+        }
+      }
+    },
+    "targets": {
+      "responses_tencent_found": false,
+      "tools_tencent_invalid_found": false,
+      "tools_non_tencent_valid_found": true,
+      "direct_tencent_responses_512_valid": true,
+      "direct_tencent_tools_512_invalid": true
+    },
+    "summary": {
+      "total_probes": 20,
+      "request_id_coverage": 20,
+      "usage_link_coverage": 11,
+      "responses_protocol_valid": 7,
+      "tools_protocol_valid": 3
+    },
+    "raw_response_stored": false,
+    "raw_tool_arguments_stored": false,
+    "raw_error_stored": false
   }
 }

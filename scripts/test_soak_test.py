@@ -1,7 +1,10 @@
+import copy
 import importlib.util
+import io
 import sqlite3
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -14,6 +17,7 @@ SPEC.loader.exec_module(soak)
 class SoakScriptTests(unittest.TestCase):
     def test_text_requests_allow_visible_output_budget(self):
         self.assertGreaterEqual(soak.TEXT_MAX_TOKENS, 128)
+        self.assertGreaterEqual(soak.RESPONSES_MAX_OUTPUT_TOKENS, 512)
 
     def test_resolve_model_uses_only_valid_defaults(self):
         self.assertEqual(soak.resolve_model("kilo", ""), "kilo-auto/free")
@@ -218,6 +222,7 @@ class SoakScriptTests(unittest.TestCase):
             120,
         )
         soak.validate_checkpoint_identity({"run_identity": identity}, identity)
+        self.assertEqual(identity["request_contract"], soak.request_contract())
 
         with self.assertRaises(ValueError):
             soak.validate_checkpoint_identity({}, identity)
@@ -226,6 +231,47 @@ class SoakScriptTests(unittest.TestCase):
         changed["virtual_model"] = "kilo-auto/free"
         with self.assertRaises(ValueError):
             soak.validate_checkpoint_identity({"run_identity": changed}, identity)
+
+        old_contract = copy.deepcopy(identity)
+        old_contract["request_contract"]["responses_max_output_tokens"] = 20
+        with self.assertRaises(ValueError):
+            soak.validate_checkpoint_identity({"run_identity": old_contract}, identity)
+
+    def test_runtime_reasons_and_request_ids_are_sanitized(self):
+        self.assertEqual(
+            soak.sanitize_runtime_reason('Post "https://upstream.example/v1": EOF'),
+            "upstream unavailable",
+        )
+        self.assertEqual(soak.sanitize_runtime_reason("429 rate limited"), "rate limited")
+        self.assertEqual(soak.sanitize_runtime_reason("unknown detail"), "runtime error")
+        self.assertEqual(
+            soak.extract_request_id({"X-Oneapi-Request-Id": "request-123"}),
+            "request-123",
+        )
+        self.assertEqual(
+            soak.extract_request_id({"x-request-id": "request-legacy"}),
+            "request-legacy",
+        )
+
+    def test_http_error_preserves_gateway_request_id(self):
+        error = soak.urllib.error.HTTPError(
+            "http://127.0.0.1:3008/v1/chat/completions",
+            429,
+            "rate limited",
+            {"Retry-After": "60", "X-Oneapi-Request-Id": "request-429"},
+            io.BytesIO(b"{}"),
+        )
+        with mock.patch.object(soak.urllib.request, "urlopen", side_effect=error):
+            record = soak.make_request(
+                "test-token",
+                "openrouter/auto",
+                "chat",
+                timeout=1,
+            )
+
+        self.assertEqual(record["status"], 429)
+        self.assertEqual(record["request_id"], "request-429")
+        self.assertEqual(record["retry_after"], "60")
 
 
 if __name__ == "__main__":

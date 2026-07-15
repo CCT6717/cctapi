@@ -1,0 +1,733 @@
+{
+  "meta": {
+    "generated_at": "2026-07-15T11:50:38.636956+00:00",
+    "schema_version": "structural-probe-v1",
+    "sensitive": false,
+    "raw_response_stored": false,
+    "raw_tool_arguments_stored": false,
+    "raw_error_stored": false,
+    "request_contract": {
+      "version": 2,
+      "chat_max_tokens": 256,
+      "stream_max_tokens": 256,
+      "responses_max_output_tokens": 512,
+      "tools_max_tokens": 50,
+      "required_tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "get_weather"
+        }
+      }
+    }
+  },
+  "targets": {
+    "responses_tencent_found": false,
+    "tools_tencent_invalid_found": false,
+    "tools_non_tencent_valid_found": true,
+    "direct_tencent_responses_512_valid": true,
+    "direct_tencent_tools_512_invalid": true
+  },
+  "summary": {
+    "total_probes": 20,
+    "request_id_coverage": 20,
+    "usage_link_coverage": 11,
+    "responses_protocol_valid": 7,
+    "tools_protocol_valid": 3
+  },
+  "records": [
+    {
+      "executed_at": "2026-07-15T11:48:44.009726+00:00",
+      "probe_type": "responses",
+      "endpoint": "/v1/responses",
+      "virtual_model": "openrouter/auto",
+      "request_id": "202607151948441473590038325036",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_output_tokens": 512
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 1,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "output_item_types": [
+        "message"
+      ],
+      "content_part_types": [
+        "output_text"
+      ],
+      "output_text_lengths": [
+        7
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116133,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 314,
+        "completion_tokens": 95
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:48:54.733184+00:00",
+      "probe_type": "responses",
+      "endpoint": "/v1/responses",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519485473377500063075254",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_output_tokens": 512
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 1,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "output_item_types": [
+        "message"
+      ],
+      "content_part_types": [
+        "output_text"
+      ],
+      "output_text_lengths": [
+        7
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116135,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 314,
+        "completion_tokens": 95
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:48:56.710732+00:00",
+      "probe_type": "responses",
+      "endpoint": "/v1/responses",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519485671123380060148848",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_output_tokens": 512
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 1,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "output_item_types": [
+        "message"
+      ],
+      "content_part_types": [
+        "output_text"
+      ],
+      "output_text_lengths": [
+        7
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116137,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 314,
+        "completion_tokens": 95
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:48:58.159787+00:00",
+      "probe_type": "responses",
+      "endpoint": "/v1/responses",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519485816078520010140110",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_output_tokens": 512
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 1,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "output_item_types": [
+        "message"
+      ],
+      "content_part_types": [
+        "output_text"
+      ],
+      "output_text_lengths": [
+        7
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116138,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 314,
+        "completion_tokens": 95
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:48:59.640560+00:00",
+      "probe_type": "responses",
+      "endpoint": "/v1/responses",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519485964056060078324239",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_output_tokens": 512
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 1,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "output_item_types": [
+        "message"
+      ],
+      "content_part_types": [
+        "output_text"
+      ],
+      "output_text_lengths": [
+        7
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116140,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 314,
+        "completion_tokens": 95
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:01.098245+00:00",
+      "probe_type": "responses",
+      "endpoint": "/v1/responses",
+      "virtual_model": "openrouter/auto",
+      "request_id": "202607151949019924950068353103",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_output_tokens": 512
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 1,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "output_item_types": [
+        "message"
+      ],
+      "content_part_types": [
+        "output_text"
+      ],
+      "output_text_lengths": [
+        7
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116141,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 314,
+        "completion_tokens": 95
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:02.557598+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519490255759850082722247",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 0,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": true,
+      "finish_reason": "tool_calls",
+      "tool_argument_shapes": [
+        {
+          "function_name": "get_weather",
+          "arguments_type": "str",
+          "arguments_length": 17,
+          "arguments_valid_json": true
+        }
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116143,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 367,
+        "completion_tokens": 117
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:04.003894+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "20260715194904489430008782988",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 0,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": true,
+      "finish_reason": "tool_calls",
+      "tool_argument_shapes": [
+        {
+          "function_name": "get_weather",
+          "arguments_type": "str",
+          "arguments_length": 17,
+          "arguments_valid_json": true
+        }
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116144,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 367,
+        "completion_tokens": 117
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:05.442832+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519490544283200007962039",
+      "response_id_present": true,
+      "real_model": "gpt-oss-20b",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 0,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": true,
+      "finish_reason": "tool_calls",
+      "tool_argument_shapes": [
+        {
+          "function_name": "get_weather",
+          "arguments_type": "str",
+          "arguments_length": 17,
+          "arguments_valid_json": true
+        }
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116145,
+        "usage_model_name": "openrouter/auto",
+        "usage_real_model_name": "openai-fast",
+        "prompt_tokens": 367,
+        "completion_tokens": 117
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:06.895114+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519490690538320000180748",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:08.102492+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519490811286590098954364",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:09.209098+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519490920909890041543530",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:10.297789+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519491029829190070351639",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:11.399349+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519491140027010066273133",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:12.494215+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519491249496040020694751",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:15.108952+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519491510895220035207461",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:16.209851+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519491621073550057436916",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:49:17.321780+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "virtual_model": "openrouter/auto",
+      "request_id": "2026071519491732279210050455186",
+      "response_id_present": false,
+      "real_model": null,
+      "http_status": 503,
+      "safe_error_reason": "upstream unavailable",
+      "budget": {
+        "max_tokens": 50,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": false,
+      "response_output_count": 0,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "finish_reason": null,
+      "tool_argument_shapes": [],
+      "usage_link": {
+        "usage_log_found": false
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:50:30.138005+00:00",
+      "probe_type": "responses",
+      "endpoint": "/v1/responses",
+      "requested_model": "tencent/hy3:free",
+      "virtual_model": null,
+      "request_id": "2026071519503014354160033358213",
+      "response_id_present": true,
+      "real_model": "tencent/hy3:free",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_output_tokens": 512
+      },
+      "protocol_valid": true,
+      "content_present": true,
+      "response_output_count": 1,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "output_item_types": [
+        "message"
+      ],
+      "content_part_types": [
+        "output_text"
+      ],
+      "output_text_lengths": [
+        37
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116234,
+        "usage_model_name": "tencent/hy3:free",
+        "usage_real_model_name": "tencent/hy3:free",
+        "prompt_tokens": 18,
+        "completion_tokens": 59
+      }
+    },
+    {
+      "executed_at": "2026-07-15T11:50:35.007020+00:00",
+      "probe_type": "tools",
+      "endpoint": "/v1/chat/completions",
+      "requested_model": "tencent/hy3:free",
+      "virtual_model": null,
+      "request_id": "20260715195035783340038937430",
+      "response_id_present": true,
+      "real_model": "tencent/hy3:free",
+      "http_status": 200,
+      "safe_error_reason": null,
+      "budget": {
+        "max_tokens": 512,
+        "tool_choice": {
+          "type": "function",
+          "function": {
+            "name": "get_weather"
+          }
+        }
+      },
+      "protocol_valid": false,
+      "content_present": true,
+      "response_output_count": 0,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": false,
+      "finish_reason": "tool_calls",
+      "tool_argument_shapes": [
+        {
+          "function_name": "get_weather",
+          "arguments_type": "str",
+          "arguments_length": 206,
+          "arguments_valid_json": false,
+          "json_error_category": "Expecting value",
+          "json_error_position": 0
+        }
+      ],
+      "usage_link": {
+        "usage_log_found": true,
+        "usage_created_at": 1784116238,
+        "usage_model_name": "tencent/hy3:free",
+        "usage_real_model_name": "tencent/hy3:free",
+        "prompt_tokens": 195,
+        "completion_tokens": 60
+      }
+    }
+  ]
+}
