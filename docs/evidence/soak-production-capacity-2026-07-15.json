@@ -1,0 +1,198 @@
+{
+  "schema_version": 2,
+  "meta": {
+    "title": "cctapi Kilo 429 模型轮换与生产容量验证报告（独立审查修正版）",
+    "generated_at": "2026-07-15T15:34:33.0018287+08:00",
+    "sensitive": false,
+    "evidence_status": "corrected_after_independent_audit",
+    "validated_main_commit": "6313b7f1974219f49abd386eb2c94fe6a1d2400e"
+  },
+  "decision": {
+    "kilo_model_rotation_contract": "passed",
+    "provider_fallback_contract": "passed",
+    "legacy_pressure_http_status": "50/50 HTTP 200",
+    "production_capacity_gate": "passed_strict_four_protocol_smoke",
+    "reason": "Fresh strict verification passed Chat, stream, Responses, and tools with protocol structure asserted for every request."
+  },
+  "historical_runs": [
+    {
+      "file": "soak-kilo-2026-07-15.json",
+      "model": "kilo-auto/free",
+      "requests": 50,
+      "http_200": 50,
+      "client_429": 0,
+      "route_class": "direct_non_fallback"
+    },
+    {
+      "file": "soak-kilo-batch2.json",
+      "model": "kilo-auto/free",
+      "requests": 30,
+      "http_200": 30,
+      "client_429": 0,
+      "route_class": "direct_non_fallback"
+    },
+    {
+      "file": "soak-kilo-batch3.json",
+      "model": "kilo-auto/free",
+      "requests": 50,
+      "http_200": 34,
+      "client_429": 16,
+      "route_class": "direct_non_fallback",
+      "note": "429 was generated before fallback model rotation and is not upstream model-rotation evidence."
+    },
+    {
+      "file": "soak-openrouter-verify.json",
+      "model": "openrouter/auto",
+      "requests": 15,
+      "http_200": 15,
+      "client_429": 0,
+      "route_class": "virtual_fallback"
+    },
+    {
+      "file": "soak-openrouter-2026-07-15.json",
+      "model": "openrouter/auto",
+      "requests": 30,
+      "http_200": 30,
+      "client_429": 0,
+      "route_class": "virtual_fallback"
+    },
+    {
+      "file": "soak-openrouter-pressure.json",
+      "model": "openrouter/auto",
+      "requests": 50,
+      "http_200": 50,
+      "client_429": 0,
+      "response_model_ids": 12,
+      "route_class": "virtual_fallback_mixed_providers"
+    },
+    {
+      "file": "soak-ovh-2026-07-15.json",
+      "model": "ovh-auto/free",
+      "requests": 50,
+      "http_200": 0,
+      "http_503": 50,
+      "route_class": "invalid_model_test",
+      "capacity_conclusion": "none"
+    }
+  ],
+  "independent_database_evidence": {
+    "observation_window_utc": "2026-07-15 06:40:00 through 07:05:00",
+    "attempt_events_total": 21,
+    "attempt_events_breakdown": {
+      "kilo_model_rate_limited": 10,
+      "kilo_skipped_quota": 10,
+      "pollinations_skipped_quota": 1
+    },
+    "model_rate_limited_requests": 7,
+    "model_rate_limited_requests_with_final_success_log": 7,
+    "rotation_requests": [
+      {
+        "request_id": "2026071514443977968080093298720",
+        "model_rate_limited": 2,
+        "final_provider": "kilo",
+        "final_model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "final_success_log": true
+      },
+      {
+        "request_id": "2026071514455690787290002765380",
+        "model_rate_limited": 2,
+        "final_provider": "kilo",
+        "final_model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "final_success_log": true
+      },
+      {
+        "request_id": "2026071514473742240470011286496",
+        "model_rate_limited": 2,
+        "final_provider": "kilo",
+        "final_model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+        "final_success_log": true
+      },
+      {
+        "request_id": "2026071514484291644710049592503",
+        "model_rate_limited": 1,
+        "final_provider": "kilo",
+        "final_model": "kilo-auto/free",
+        "final_success_log": true
+      },
+      {
+        "request_id": "2026071514494473001120072523032",
+        "model_rate_limited": 1,
+        "final_provider": "kilo",
+        "final_model": "kilo-auto/free",
+        "final_success_log": true
+      },
+      {
+        "request_id": "2026071514505184464540037568639",
+        "model_rate_limited": 1,
+        "final_provider": "kilo",
+        "final_model": "kilo-auto/free",
+        "final_success_log": true
+      },
+      {
+        "request_id": "20260715145153731520089453370",
+        "model_rate_limited": 1,
+        "final_provider": "kilo",
+        "final_model": "kilo-auto/free",
+        "final_success_log": true
+      }
+    ],
+    "kilo_exhaustion_then_fallback": {
+      "request_id": "2026071514525332096600061245900",
+      "kilo_models_skipped_quota": 10,
+      "final_provider": "pollinations",
+      "final_model": "openai-fast",
+      "final_success_log": true
+    },
+    "separate_pollinations_exhaustion": {
+      "request_id": "202607151454446873670022564370",
+      "pollinations_skipped_quota": 1,
+      "final_provider": "openrouter",
+      "final_model": "openrouter/free",
+      "final_success_log": true
+    }
+  },
+  "corrected_findings": [
+    "Kilo model-level HTTP 429 rotation is active: 10 model_rate_limited events occurred across 7 requests, and every affected request has a final success usage log.",
+    "A request skipped quota for 10 Kilo models and then succeeded through Pollinations.",
+    "A different request skipped Pollinations quota and then succeeded through OpenRouter; it must not be merged with the Kilo exhaustion request.",
+    "The pressure run observed 12 response model IDs across mixed Kilo, OpenRouter, and Pollinations routing. The evidence does not support calling all 12 Kilo models.",
+    "The 50-request pressure run had 50 HTTP 200 responses, but its historical script did not strictly validate stream completion, Responses output, or tool-call structure."
+  ],
+  "secrets": {
+    "token_value_recorded": false,
+    "password_value_recorded": false,
+    "raw_upstream_body_recorded": false,
+    "historical_response_previews_removed": true,
+    "historical_raw_errors_removed": true
+  },
+  "strict_validation_contract": [
+    "Use openrouter/auto or another validated virtual model.",
+    "Require protocol_valid for Chat, stream, Responses, and tools.",
+    "Query attempt_events by virtual_model and SQLite datetime conversion.",
+    "Preserve the original event window across checkpoint resume.",
+    "Store no response preview or raw upstream error message.",
+    "Attribute provider/model claims through request_id-to-usage-log joins."
+  ],
+  "strict_verification": {
+    "evidence": "docs/evidence/soak-openrouter-strict-verify.json",
+    "executed_at": "2026-07-15T09:37:49.744826+00:00",
+    "virtual_model": "openrouter/auto",
+    "requests": 4,
+    "successes": 4,
+    "protocol_errors": 0,
+    "http_rate_limits": 0,
+    "request_types": [
+      "chat",
+      "stream",
+      "responses",
+      "tools"
+    ],
+    "chat_content_present": true,
+    "stream_content_present": true,
+    "stream_done": true,
+    "responses_output_present": true,
+    "tool_call_present": true,
+    "tool_arguments_valid_json": true,
+    "scope": "strict protocol smoke; historical 50-request run remains status-only capacity evidence"
+  }
+}
