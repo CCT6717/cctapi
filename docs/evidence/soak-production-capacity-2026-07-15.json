@@ -12,7 +12,9 @@
     "provider_fallback_contract": "passed",
     "legacy_pressure_http_status": "50/50 HTTP 200",
     "production_capacity_gate": "passed_strict_four_protocol_smoke",
-    "reason": "Fresh strict verification passed Chat, stream, Responses, and tools with protocol structure asserted for every request."
+    "reason": "Fresh strict verification passed Chat, stream, Responses, and tools with protocol structure asserted for every request.",
+    "strict_50_capacity_gate": "failed_protocol_reliability",
+    "strict_50_reason": "27/50 requests passed strict protocol validation; 23 HTTP 200 responses failed protocol validation."
   },
   "historical_runs": [
     {
@@ -194,5 +196,100 @@
     "tool_call_present": true,
     "tool_arguments_valid_json": true,
     "scope": "strict protocol smoke; historical 50-request run remains status-only capacity evidence"
+  },
+  "strict_50_verification": {
+    "evidence": "docs/evidence/soak-openrouter-strict-50-2026-07-15.json",
+    "gate": "failed_protocol_reliability",
+    "virtual_model": "openrouter/auto",
+    "requests": 50,
+    "successes": 27,
+    "protocol_errors": 23,
+    "http_rate_limits": 0,
+    "other_errors": 0,
+    "success_rate_percent": 54.0,
+    "average_latency_ms": 2633.44,
+    "p95_latency_ms": 4965,
+    "by_type": {
+      "chat": {
+        "success": 12,
+        "protocol_error": 1
+      },
+      "responses": {
+        "success": 1,
+        "protocol_error": 11
+      },
+      "stream": {
+        "success": 13
+      },
+      "tools": {
+        "success": 1,
+        "protocol_error": 11
+      }
+    },
+    "by_model": {
+      "cohere/north-mini-code:free": {
+        "protocol_error": 6,
+        "success": 5
+      },
+      "gpt-oss-20b": {
+        "success": 6
+      },
+      "tencent/hy3:free": {
+        "success": 16,
+        "protocol_error": 17
+      }
+    },
+    "by_type_and_model": {
+      "chat|cohere/north-mini-code:free": {
+        "success": 3
+      },
+      "chat|gpt-oss-20b": {
+        "success": 2
+      },
+      "chat|tencent/hy3:free": {
+        "success": 7,
+        "protocol_error": 1
+      },
+      "responses|cohere/north-mini-code:free": {
+        "protocol_error": 3
+      },
+      "responses|gpt-oss-20b": {
+        "success": 1
+      },
+      "responses|tencent/hy3:free": {
+        "protocol_error": 8
+      },
+      "stream|cohere/north-mini-code:free": {
+        "success": 2
+      },
+      "stream|gpt-oss-20b": {
+        "success": 2
+      },
+      "stream|tencent/hy3:free": {
+        "success": 9
+      },
+      "tools|cohere/north-mini-code:free": {
+        "protocol_error": 3
+      },
+      "tools|gpt-oss-20b": {
+        "success": 1
+      },
+      "tools|tencent/hy3:free": {
+        "protocol_error": 8
+      }
+    },
+    "diagnosis": [
+      "Responses produced 11 protocol errors with one output item but no output_text while the soak used a 20-token output budget.",
+      "A sanitized 512-token follow-up probe produced valid Responses output through tencent/hy3:free, confirming the Responses budget was insufficient.",
+      "Tools produced 11 protocol errors: some responses omitted tool calls and others returned non-JSON function arguments.",
+      "A sanitized 512-token probe still returned non-JSON tool arguments through tencent/hy3:free, so the tools issue is not token truncation.",
+      "The persisted Kilo catalog marks tencent/hy3:free supports_tools=true from upstream supported_parameters, but observed behavior does not satisfy the OpenAI tool-call contract."
+    ],
+    "conclusion": "The 50-request strict gate did not pass. Do not describe openrouter/auto as protocol-reliable across model rotation until model-specific tool capability failures are excluded or rotated.",
+    "next_actions": [
+      "Use the corrected 512-token Responses budget in future strict runs.",
+      "Design model-level handling for tool-capability false positives without hard-coding a permanent provider blacklist.",
+      "Repeat the 50-request strict soak after the routing fix."
+    ]
   }
 }

@@ -14,6 +14,7 @@ SPEC.loader.exec_module(soak)
 class SoakScriptTests(unittest.TestCase):
     def test_text_requests_allow_visible_output_budget(self):
         self.assertGreaterEqual(soak.TEXT_MAX_TOKENS, 128)
+        self.assertGreaterEqual(soak.RESPONSES_MAX_OUTPUT_TOKENS, 512)
 
     def test_resolve_model_uses_only_valid_defaults(self):
         self.assertEqual(soak.resolve_model("kilo", ""), "kilo-auto/free")

@@ -43,6 +43,7 @@ DEFAULT_MODELS = {
     "openrouter": "openrouter/auto",
 }
 TEXT_MAX_TOKENS = 256
+RESPONSES_MAX_OUTPUT_TOKENS = 512
 REQUIRED_TOOL_CHOICE = {
     "type": "function",
     "function": {"name": "get_weather"},
@@ -297,7 +298,7 @@ def make_request(token, model, req_type, timeout=30):
         payload = {
             "model": model,
             "input": random.choice(PROMPTS),
-            "max_output_tokens": 20,
+            "max_output_tokens": RESPONSES_MAX_OUTPUT_TOKENS,
         }
         req = urllib.request.Request(
             f"{BASE_URL}/v1/responses",
