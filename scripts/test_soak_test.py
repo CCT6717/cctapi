@@ -52,11 +52,32 @@ class SoakScriptTests(unittest.TestCase):
     def test_json_protocol_parsers_validate_responses_and_tools(self):
         responses = soak.parse_json_response(
             "responses",
-            {"id": "resp_1", "model": "upstream/model", "output": [{"type": "message"}]},
+            {
+                "id": "resp_1",
+                "model": "upstream/model",
+                "output": [
+                    {
+                        "type": "message",
+                        "content": [{"type": "output_text", "text": "ok"}],
+                    }
+                ],
+            },
         )
         self.assertTrue(responses["protocol_valid"])
+        self.assertTrue(responses["content_present"])
         self.assertTrue(responses["response_id_present"])
         self.assertEqual(responses["response_output_count"], 1)
+
+        for malformed_output in (
+            "not-a-list",
+            [{"type": "message"}],
+            [{"type": "message", "content": [{"type": "output_text", "text": ""}]}],
+        ):
+            malformed = soak.parse_json_response(
+                "responses",
+                {"id": "resp_bad", "output": malformed_output},
+            )
+            self.assertFalse(malformed["protocol_valid"])
 
         tools = soak.parse_json_response(
             "tools",
@@ -111,30 +132,50 @@ class SoakScriptTests(unittest.TestCase):
                 )
                 """
             )
-            conn.execute(
+            conn.executemany(
                 """
                 INSERT INTO attempt_events (
                     created_at, request_id, virtual_model, provider,
                     real_model, outcome, status_code
                 ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    "2026-07-15 06:44:42.2219578+00:00",
-                    "request-full-id",
-                    "openrouter/auto",
-                    "kilo",
-                    "cohere/north-mini-code:free",
-                    "model_rate_limited",
-                    429,
-                ),
+                [
+                    (
+                        "2026-07-15 06:44:42.100+00:00",
+                        "request-before-window",
+                        "openrouter/auto",
+                        "kilo",
+                        "before/model:free",
+                        "model_rate_limited",
+                        429,
+                    ),
+                    (
+                        "2026-07-15 06:44:42.300+00:00",
+                        "request-full-id",
+                        "openrouter/auto",
+                        "kilo",
+                        "cohere/north-mini-code:free",
+                        "model_rate_limited",
+                        429,
+                    ),
+                    (
+                        "2026-07-15 06:44:42.500+00:00",
+                        "request-after-window",
+                        "openrouter/auto",
+                        "kilo",
+                        "after/model:free",
+                        "model_rate_limited",
+                        429,
+                    ),
+                ],
             )
             conn.commit()
             conn.close()
 
             result = soak.check_attempt_events(
                 "openrouter/auto",
-                "2026-07-15T06:40:00+00:00",
-                "2026-07-15T06:50:00+00:00",
+                "2026-07-15T06:44:42.200+00:00",
+                "2026-07-15T06:44:42.400+00:00",
                 db_path=db_path,
             )
 
@@ -157,6 +198,34 @@ class SoakScriptTests(unittest.TestCase):
         )
         with self.assertRaises(ValueError):
             soak.request_type_for_index([], 0)
+
+    def test_default_request_types_cover_all_protocols_and_force_tool_choice(self):
+        self.assertEqual(
+            soak.default_request_types(),
+            ["chat", "stream", "responses", "tools"],
+        )
+        self.assertEqual(
+            soak.REQUIRED_TOOL_CHOICE,
+            {"type": "function", "function": {"name": "get_weather"}},
+        )
+
+    def test_checkpoint_identity_must_match_current_run(self):
+        identity = soak.build_run_identity(
+            "openrouter",
+            "openrouter/auto",
+            ["chat", "stream", "responses", "tools"],
+            5.2,
+            120,
+        )
+        soak.validate_checkpoint_identity({"run_identity": identity}, identity)
+
+        with self.assertRaises(ValueError):
+            soak.validate_checkpoint_identity({}, identity)
+
+        changed = dict(identity)
+        changed["virtual_model"] = "kilo-auto/free"
+        with self.assertRaises(ValueError):
+            soak.validate_checkpoint_identity({"run_identity": changed}, identity)
 
 
 if __name__ == "__main__":

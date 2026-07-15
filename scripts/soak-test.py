@@ -43,6 +43,32 @@ DEFAULT_MODELS = {
     "openrouter": "openrouter/auto",
 }
 TEXT_MAX_TOKENS = 256
+REQUIRED_TOOL_CHOICE = {
+    "type": "function",
+    "function": {"name": "get_weather"},
+}
+
+
+def default_request_types():
+    return ["chat", "stream", "responses", "tools"]
+
+
+def build_run_identity(provider, virtual_model, request_types, delay, timeout):
+    return {
+        "provider": provider,
+        "virtual_model": virtual_model,
+        "request_types": list(request_types),
+        "delay_seconds": delay,
+        "timeout_seconds": timeout,
+    }
+
+
+def validate_checkpoint_identity(checkpoint, expected_identity):
+    if checkpoint.get("run_identity") != expected_identity:
+        raise ValueError(
+            "Resume checkpoint does not match the current provider, model, "
+            "request types, delay, and timeout."
+        )
 
 
 def resolve_model(provider, explicit_model):
@@ -116,11 +142,36 @@ def parse_json_response(req_type, data):
     }
 
     if req_type == "responses":
-        output = data.get("output") or []
+        output = data.get("output")
         result["response_id_present"] = bool(data.get("id"))
+        if not isinstance(output, list):
+            return result
+
         result["response_output_count"] = len(output)
-        result["content_present"] = bool(output)
-        result["protocol_valid"] = result["response_id_present"] and bool(output)
+        output_items_valid = bool(output) and all(
+            isinstance(item, dict) and isinstance(item.get("type"), str)
+            for item in output
+        )
+        for item in output:
+            if not isinstance(item, dict) or item.get("type") != "message":
+                continue
+            content = item.get("content")
+            if not isinstance(content, list):
+                continue
+            if any(
+                isinstance(part, dict)
+                and part.get("type") == "output_text"
+                and isinstance(part.get("text"), str)
+                and bool(part["text"].strip())
+                for part in content
+            ):
+                result["content_present"] = True
+                break
+        result["protocol_valid"] = (
+            result["response_id_present"]
+            and output_items_valid
+            and result["content_present"]
+        )
         return result
 
     choices = data.get("choices") or []
@@ -220,6 +271,7 @@ def make_request(token, model, req_type, timeout=30):
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": "What is the weather in Tokyo?"}],
+            "tool_choice": REQUIRED_TOOL_CHOICE,
             "tools": [
                 {
                     "type": "function",
@@ -366,8 +418,8 @@ def check_attempt_events(virtual_model, since_iso, until_iso, db_path=DB_PATH):
         """
         SELECT COUNT(*) FROM attempt_events
         WHERE virtual_model = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) <= datetime(?)
+          AND julianday(created_at) >= julianday(?)
+          AND julianday(created_at) <= julianday(?)
         """,
         (virtual_model, since_iso, until_iso),
     )
@@ -377,8 +429,8 @@ def check_attempt_events(virtual_model, since_iso, until_iso, db_path=DB_PATH):
         """
         SELECT COUNT(DISTINCT request_id) FROM attempt_events
         WHERE virtual_model = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) <= datetime(?)
+          AND julianday(created_at) >= julianday(?)
+          AND julianday(created_at) <= julianday(?)
         """,
         (virtual_model, since_iso, until_iso),
     )
@@ -388,8 +440,8 @@ def check_attempt_events(virtual_model, since_iso, until_iso, db_path=DB_PATH):
         """
         SELECT provider, outcome, COUNT(*) FROM attempt_events
         WHERE virtual_model = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) <= datetime(?)
+          AND julianday(created_at) >= julianday(?)
+          AND julianday(created_at) <= julianday(?)
         GROUP BY provider, outcome
         ORDER BY provider, outcome
         """,
@@ -405,8 +457,8 @@ def check_attempt_events(virtual_model, since_iso, until_iso, db_path=DB_PATH):
                plan_index, upstream_attempt_index
         FROM attempt_events
         WHERE virtual_model = ?
-          AND datetime(created_at) >= datetime(?)
-          AND datetime(created_at) <= datetime(?)
+          AND julianday(created_at) >= julianday(?)
+          AND julianday(created_at) <= julianday(?)
         ORDER BY created_at, id
         """,
         (virtual_model, since_iso, until_iso),
@@ -441,9 +493,15 @@ def run_soak(args):
     if args.types:
         type_pool = args.types.split(",")
     else:
-        type_pool = ["chat", "chat", "chat", "stream", "tools"]
-        if args.provider == "kilo":
-            type_pool.append("responses")
+        type_pool = default_request_types()
+
+    run_identity = build_run_identity(
+        args.provider,
+        model,
+        type_pool,
+        args.delay,
+        args.timeout,
+    )
 
     records = []
     state_checks = []
@@ -456,6 +514,7 @@ def run_soak(args):
     if args.resume_from and args.resume_file.exists():
         with open(args.resume_file, "r", encoding="utf-8") as f:
             prev_data = json.load(f)
+        validate_checkpoint_identity(prev_data, run_identity)
         records = prev_data.get("records", [])
         state_checks = prev_data.get("state_checks", [])
         resume_from = len(records)
@@ -509,6 +568,7 @@ def run_soak(args):
                     "checkpoint_at": i + 1,
                     "soak_start_iso": soak_start_iso,
                     "virtual_model": model,
+                    "run_identity": run_identity,
                 }, f, indent=2, ensure_ascii=False)
             checkpoint_written = True
             print(f"  -> Checkpoint saved")
