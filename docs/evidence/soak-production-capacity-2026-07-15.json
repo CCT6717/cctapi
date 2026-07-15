@@ -11,10 +11,11 @@
     "kilo_model_rotation_contract": "passed",
     "provider_fallback_contract": "passed",
     "legacy_pressure_http_status": "50/50 HTTP 200",
-    "production_capacity_gate": "passed_strict_four_protocol_smoke",
-    "reason": "Fresh strict verification passed Chat, stream, Responses, and tools with protocol structure asserted for every request.",
+    "production_capacity_gate": "failed_strict_50_protocol_reliability",
+    "reason": "The 4-request strict smoke passed, but the 50-request strict soak passed only 27/50 requests and recorded 23 protocol errors.",
     "strict_50_capacity_gate": "failed_protocol_reliability",
-    "strict_50_reason": "27/50 requests passed strict protocol validation; 23 HTTP 200 responses failed protocol validation."
+    "strict_50_reason": "27/50 requests passed strict protocol validation; 23 HTTP 200 responses failed protocol validation.",
+    "strict_four_protocol_smoke_gate": "passed_4_of_4"
   },
   "historical_runs": [
     {
@@ -279,17 +280,76 @@
       }
     },
     "diagnosis": [
-      "Responses produced 11 protocol errors with one output item but no output_text while the soak used a 20-token output budget.",
-      "A sanitized 512-token follow-up probe produced valid Responses output through tencent/hy3:free, confirming the Responses budget was insufficient.",
-      "Tools produced 11 protocol errors: some responses omitted tool calls and others returned non-JSON function arguments.",
-      "A sanitized 512-token probe still returned non-JSON tool arguments through tencent/hy3:free, so the tools issue is not token truncation.",
-      "The persisted Kilo catalog marks tencent/hy3:free supports_tools=true from upstream supported_parameters, but observed behavior does not satisfy the OpenAI tool-call contract."
+      "The historical strict-50 run used responses_max_output_tokens=20 and captured 0/50 gateway request IDs; its Responses failures are not treated as final model-capability evidence.",
+      "The persisted structural-probe artifact records a direct tencent/hy3:free Responses request at 512 tokens with a valid output_text structure, request ID, and usage-log linkage.",
+      "The same artifact records a direct tencent/hy3:free tools request at 512 tokens with a tool call but non-JSON function arguments, request ID, and usage-log linkage.",
+      "The persisted Kilo catalog marks tencent/hy3:free supports_tools=true from upstream supported_parameters, while the attributable direct probe does not satisfy the OpenAI tool-call argument contract."
     ],
-    "conclusion": "The 50-request strict gate did not pass. Do not describe openrouter/auto as protocol-reliable across model rotation until model-specific tool capability failures are excluded or rotated.",
+    "conclusion": "The overall production-capacity gate failed. The 4/4 smoke remains a separate protocol smoke only; openrouter/auto is not protocol-reliable across model rotation until model-specific tool capability false positives are excluded or rotated.",
     "next_actions": [
-      "Use the corrected 512-token Responses budget in future strict runs.",
-      "Design model-level handling for tool-capability false positives without hard-coding a permanent provider blacklist.",
+      "Use request-contract version 2 with a 512-token Responses budget in future strict runs.",
+      "Design model-level handling for tool-capability false positives without a permanent provider blacklist.",
       "Repeat the 50-request strict soak after the routing fix."
-    ]
+    ],
+    "request_contract": {
+      "version": 1,
+      "chat_max_tokens": 256,
+      "stream_max_tokens": 256,
+      "responses_max_output_tokens": 20,
+      "tools_max_tokens": 50,
+      "required_tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "get_weather"
+        }
+      }
+    },
+    "request_id_coverage": {
+      "captured": 0,
+      "total": 50,
+      "header_fix_required": "x-oneapi-request-id was not captured by this historical run"
+    },
+    "structural_probe_evidence": "docs/evidence/soak-openrouter-structural-probes-2026-07-15.json",
+    "probe_summary": {
+      "evidence": "docs/evidence/soak-openrouter-structural-probes-2026-07-15.json",
+      "total_probes": 20,
+      "request_id_coverage": 20,
+      "usage_link_coverage": 11,
+      "direct_tencent_responses_512_valid": true,
+      "direct_tencent_tools_512_invalid": true
+    }
+  },
+  "structural_probe_evidence": {
+    "file": "docs/evidence/soak-openrouter-structural-probes-2026-07-15.json",
+    "request_contract": {
+      "version": 2,
+      "chat_max_tokens": 256,
+      "stream_max_tokens": 256,
+      "responses_max_output_tokens": 512,
+      "tools_max_tokens": 50,
+      "required_tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "get_weather"
+        }
+      }
+    },
+    "targets": {
+      "responses_tencent_found": false,
+      "tools_tencent_invalid_found": false,
+      "tools_non_tencent_valid_found": true,
+      "direct_tencent_responses_512_valid": true,
+      "direct_tencent_tools_512_invalid": true
+    },
+    "summary": {
+      "total_probes": 20,
+      "request_id_coverage": 20,
+      "usage_link_coverage": 11,
+      "responses_protocol_valid": 7,
+      "tools_protocol_valid": 3
+    },
+    "raw_response_stored": false,
+    "raw_tool_arguments_stored": false,
+    "raw_error_stored": false
   }
 }

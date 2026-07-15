@@ -44,6 +44,8 @@ DEFAULT_MODELS = {
 }
 TEXT_MAX_TOKENS = 256
 RESPONSES_MAX_OUTPUT_TOKENS = 512
+TOOLS_MAX_TOKENS = 50
+REQUEST_CONTRACT_VERSION = 2
 REQUIRED_TOOL_CHOICE = {
     "type": "function",
     "function": {"name": "get_weather"},
@@ -54,6 +56,20 @@ def default_request_types():
     return ["chat", "stream", "responses", "tools"]
 
 
+def request_contract():
+    return {
+        "version": REQUEST_CONTRACT_VERSION,
+        "chat_max_tokens": TEXT_MAX_TOKENS,
+        "stream_max_tokens": TEXT_MAX_TOKENS,
+        "responses_max_output_tokens": RESPONSES_MAX_OUTPUT_TOKENS,
+        "tools_max_tokens": TOOLS_MAX_TOKENS,
+        "required_tool_choice": {
+            "type": REQUIRED_TOOL_CHOICE["type"],
+            "function": dict(REQUIRED_TOOL_CHOICE["function"]),
+        },
+    }
+
+
 def build_run_identity(provider, virtual_model, request_types, delay, timeout):
     return {
         "provider": provider,
@@ -61,6 +77,7 @@ def build_run_identity(provider, virtual_model, request_types, delay, timeout):
         "request_types": list(request_types),
         "delay_seconds": delay,
         "timeout_seconds": timeout,
+        "request_contract": request_contract(),
     }
 
 
@@ -68,8 +85,31 @@ def validate_checkpoint_identity(checkpoint, expected_identity):
     if checkpoint.get("run_identity") != expected_identity:
         raise ValueError(
             "Resume checkpoint does not match the current provider, model, "
-            "request types, delay, and timeout."
+            "request types, delay, timeout, and request contract."
         )
+
+
+def sanitize_runtime_reason(reason):
+    if not reason:
+        return ""
+    normalized = str(reason).strip().lower()
+    if "rate limit" in normalized or "429" in normalized:
+        return "rate limited"
+    if "timeout" in normalized or "deadline" in normalized:
+        return "timeout"
+    if any(marker in normalized for marker in ("401", "403", "unauthorized", "forbidden")):
+        return "authentication failed"
+    if any(
+        marker in normalized
+        for marker in ("eof", "connection", "upstream", "http://", "https://", "502", "503", "504")
+    ):
+        return "upstream unavailable"
+    return "runtime error"
+
+
+def extract_request_id(headers):
+    normalized = {str(key).lower(): value for key, value in headers.items()}
+    return normalized.get("x-oneapi-request-id") or normalized.get("x-request-id")
 
 
 def resolve_model(provider, explicit_model):
@@ -287,7 +327,7 @@ def make_request(token, model, req_type, timeout=30):
                     },
                 }
             ],
-            "max_tokens": 50,
+            "max_tokens": TOOLS_MAX_TOKENS,
         }
         req = urllib.request.Request(
             f"{BASE_URL}/v1/chat/completions",
@@ -327,7 +367,7 @@ def make_request(token, model, req_type, timeout=30):
                     validation["protocol_valid"] = False
 
             # Try to extract request ID from headers
-            req_id = headers.get("X-Request-Id", headers.get("x-request-id", None))
+            req_id = extract_request_id(headers)
 
     except urllib.error.HTTPError as e:
         status = e.code
@@ -403,7 +443,7 @@ def check_deployment_state(provider):
     for row in cursor.fetchall():
         cooldowns.append({
             "deployment_id": row[0],
-            "reason": row[1],
+            "reason": sanitize_runtime_reason(row[1]),
             "cooldown_until": row[2],
         })
 
@@ -618,7 +658,7 @@ def run_soak(args):
         "validation_contract": {
             "chat": "HTTP 200, JSON choices, and non-empty assistant content",
             "stream": "HTTP 200, parsed SSE frames, content, and [DONE]",
-            "responses": "HTTP 200, response id, and non-empty output",
+            "responses": "HTTP 200, response id, and non-empty output_text",
             "tools": "HTTP 200, tool_calls, and valid JSON arguments",
         },
     }
@@ -635,6 +675,7 @@ def run_soak(args):
             "soak_start": soak_start_iso,
             "soak_end": soak_end_iso,
             "protocol_validation": "strict",
+            "request_contract": request_contract(),
         },
         "summary": summary,
         "records": records,

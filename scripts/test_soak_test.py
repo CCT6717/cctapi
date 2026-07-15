@@ -1,3 +1,4 @@
+import copy
 import importlib.util
 import sqlite3
 import tempfile
@@ -219,6 +220,7 @@ class SoakScriptTests(unittest.TestCase):
             120,
         )
         soak.validate_checkpoint_identity({"run_identity": identity}, identity)
+        self.assertEqual(identity["request_contract"], soak.request_contract())
 
         with self.assertRaises(ValueError):
             soak.validate_checkpoint_identity({}, identity)
@@ -227,6 +229,27 @@ class SoakScriptTests(unittest.TestCase):
         changed["virtual_model"] = "kilo-auto/free"
         with self.assertRaises(ValueError):
             soak.validate_checkpoint_identity({"run_identity": changed}, identity)
+
+        old_contract = copy.deepcopy(identity)
+        old_contract["request_contract"]["responses_max_output_tokens"] = 20
+        with self.assertRaises(ValueError):
+            soak.validate_checkpoint_identity({"run_identity": old_contract}, identity)
+
+    def test_runtime_reasons_and_request_ids_are_sanitized(self):
+        self.assertEqual(
+            soak.sanitize_runtime_reason('Post "https://upstream.example/v1": EOF'),
+            "upstream unavailable",
+        )
+        self.assertEqual(soak.sanitize_runtime_reason("429 rate limited"), "rate limited")
+        self.assertEqual(soak.sanitize_runtime_reason("unknown detail"), "runtime error")
+        self.assertEqual(
+            soak.extract_request_id({"X-Oneapi-Request-Id": "request-123"}),
+            "request-123",
+        )
+        self.assertEqual(
+            soak.extract_request_id({"x-request-id": "request-legacy"}),
+            "request-legacy",
+        )
 
 
 if __name__ == "__main__":

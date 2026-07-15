@@ -5,7 +5,25 @@
     "sensitive": false,
     "soak_start": "2026-07-15T11:17:53.342973+00:00",
     "soak_end": "2026-07-15T11:24:36.054409+00:00",
-    "protocol_validation": "strict"
+    "protocol_validation": "strict",
+    "request_contract": {
+      "version": 1,
+      "chat_max_tokens": 256,
+      "stream_max_tokens": 256,
+      "responses_max_output_tokens": 20,
+      "tools_max_tokens": 50,
+      "required_tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "get_weather"
+        }
+      }
+    },
+    "request_id_coverage": {
+      "captured": 0,
+      "total": 50,
+      "header_fix_required": "x-oneapi-request-id was not captured by this historical run"
+    }
   },
   "summary": {
     "provider": "openrouter",
@@ -48,7 +66,7 @@
     "post_deployment_cooldowns": [
       {
         "deployment_id": "free:openrouter-1f9cf7de",
-        "reason": "do request failed: Post \"https://openrouter.ai/api/v1/chat/completions\": EOF",
+        "reason": "upstream unavailable",
         "cooldown_until": "2026-07-15 19:19:38.2214301+08:00"
       }
     ],
@@ -1163,7 +1181,7 @@
       "deployment_cooldowns": [
         {
           "deployment_id": "free:openrouter-1f9cf7de",
-          "reason": "do request failed: Post \"https://openrouter.ai/api/v1/chat/completions\": EOF",
+          "reason": "upstream unavailable",
           "cooldown_until": "2026-07-15 19:19:38.2214301+08:00"
         }
       ]
@@ -1184,7 +1202,7 @@
       "deployment_cooldowns": [
         {
           "deployment_id": "free:openrouter-1f9cf7de",
-          "reason": "do request failed: Post \"https://openrouter.ai/api/v1/chat/completions\": EOF",
+          "reason": "upstream unavailable",
           "cooldown_until": "2026-07-15 19:19:38.2214301+08:00"
         }
       ]
@@ -1205,7 +1223,7 @@
       "deployment_cooldowns": [
         {
           "deployment_id": "free:openrouter-1f9cf7de",
-          "reason": "do request failed: Post \"https://openrouter.ai/api/v1/chat/completions\": EOF",
+          "reason": "upstream unavailable",
           "cooldown_until": "2026-07-15 19:19:38.2214301+08:00"
         }
       ]
@@ -1226,7 +1244,7 @@
       "deployment_cooldowns": [
         {
           "deployment_id": "free:openrouter-1f9cf7de",
-          "reason": "do request failed: Post \"https://openrouter.ai/api/v1/chat/completions\": EOF",
+          "reason": "upstream unavailable",
           "cooldown_until": "2026-07-15 19:19:38.2214301+08:00"
         }
       ]
@@ -1247,7 +1265,7 @@
       "deployment_cooldowns": [
         {
           "deployment_id": "free:openrouter-1f9cf7de",
-          "reason": "do request failed: Post \"https://openrouter.ai/api/v1/chat/completions\": EOF",
+          "reason": "upstream unavailable",
           "cooldown_until": "2026-07-15 19:19:38.2214301+08:00"
         }
       ]
