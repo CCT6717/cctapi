@@ -33,6 +33,13 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		"free:kilo-00000003",
 		"free:kilo-00000004",
 		"free:kilo-00000005",
+		"free:kilo-00000006",
+		"free:kilo-00000007",
+		"free:kilo-00000008",
+		"free:kilo-00000011",
+		"free:kilo-00000012",
+		"free:kilo-00000013",
+		"free:kilo-00000014",
 	})
 
 	t.Run("rate limit rotates to next Kilo model without provider penalty", func(t *testing.T) {
@@ -216,6 +223,288 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 			t.Fatalf("non-429 rate-limit-shaped failure changed model cooldowns: %+v", modelRuntime)
 		}
 	})
+
+	t.Run("invalid Kilo tool arguments rotate before writing without provider penalty", func(t *testing.T) {
+		kiloID := "free:kilo-00000006"
+		pollinationsID := "free:pollinations-00000006"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		invalidResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{not-json"}}]},"finish_reason":"tool_calls"}]}`
+		validResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"ok\"}"}}]},"finish_reason":"tool_calls"}]}`
+		switchEventsBefore := fixture.switchEventCount(t)
+		fallback.ResetAttemptMetrics(kiloID)
+		errorCountersBefore := fallback.SnapshotErrorCategoryCounters()[fallback.ErrorCategoryTemporary.String()]
+		var attempted []string
+		c, recorder := newRelayRotationToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			modelID := c.GetString(ctxkey.FallbackRealModel)
+			attempted = append(attempted, modelID)
+			if modelID == "kilo/a:free" {
+				_, _ = c.Writer.Write([]byte(invalidResponse))
+				return nil
+			}
+			_, _ = c.Writer.Write([]byte(validResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free", "kilo/b:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != validResponse {
+			t.Fatalf("client response = %q, want only valid second response", recorder.Body.String())
+		}
+		if !fallback.IsFreeProviderModelCapabilityFalsePositive(kiloID, "kilo/a:free", "tools") {
+			t.Fatal("invalid tools model was not isolated")
+		}
+		if fallback.IsFreeProviderModelCapabilityFalsePositive(kiloID, "kilo/b:free", "tools") {
+			t.Fatal("successful tools model was incorrectly isolated")
+		}
+		providerRuntime := fallback.SnapshotRuntimeState(kiloID)
+		if providerRuntime.FailureCount != 0 || providerRuntime.RateLimitScore != 0 {
+			t.Fatalf("model capability false-positive penalized provider: %+v", providerRuntime)
+		}
+		if count := fixture.switchEventCount(t); count != switchEventsBefore {
+			t.Fatalf("same-deployment tools rotation changed switch events from %d to %d", switchEventsBefore, count)
+		}
+		attemptMetrics := fallback.SnapshotAttemptMetrics(kiloID)
+		if attemptMetrics.FailureCount != 1 || attemptMetrics.SuccessCount != 1 {
+			t.Fatalf("tools rotation attempt metrics = %+v, want one failure and one success", attemptMetrics)
+		}
+		errorCountersAfter := fallback.SnapshotErrorCategoryCounters()[fallback.ErrorCategoryTemporary.String()]
+		if errorCountersAfter != errorCountersBefore+1 {
+			t.Fatalf("temporary error counter changed from %d to %d, want +1", errorCountersBefore, errorCountersAfter)
+		}
+	})
+
+	t.Run("missing required Kilo tool call rotates before writing without provider penalty", func(t *testing.T) {
+		kiloID := "free:kilo-00000011"
+		pollinationsID := "free:pollinations-00000011"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		missingToolResponse := `{"choices":[{"message":{"role":"assistant","content":"I cannot call tools"},"finish_reason":"stop"}]}`
+		validResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"ok\"}"}}]},"finish_reason":"tool_calls"}]}`
+		switchEventsBefore := fixture.switchEventCount(t)
+		var attempted []string
+		settlementCommitted := 0
+		settlementRolledBack := 0
+		c, recorder := newRelayRotationRequiredToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			modelID := c.GetString(ctxkey.FallbackRealModel)
+			attempted = append(attempted, modelID)
+			c.Set("fallback_deferred_post_consume", func(accepted bool) {
+				if accepted {
+					settlementCommitted++
+				} else {
+					settlementRolledBack++
+				}
+			})
+			if modelID == "kilo/a:free" {
+				_, _ = c.Writer.Write([]byte(missingToolResponse))
+				return nil
+			}
+			_, _ = c.Writer.Write([]byte(validResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free", "kilo/b:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != validResponse {
+			t.Fatalf("client response = %q, want only valid second response", recorder.Body.String())
+		}
+		if !fallback.IsFreeProviderModelCapabilityFalsePositive(kiloID, "kilo/a:free", "tools") {
+			t.Fatal("missing-tool model was not isolated")
+		}
+		providerRuntime := fallback.SnapshotRuntimeState(kiloID)
+		if providerRuntime.FailureCount != 0 || providerRuntime.RateLimitScore != 0 {
+			t.Fatalf("missing required tool call penalized provider: %+v", providerRuntime)
+		}
+		_, requestCount, errorCount, err := fallback.GetDeploymentStats(kiloID)
+		if err != nil {
+			t.Fatalf("GetDeploymentStats: %v", err)
+		}
+		if requestCount != 0 || errorCount != 0 {
+			t.Fatalf("missing required tool call changed persistent provider accounting: requests=%d errors=%d", requestCount, errorCount)
+		}
+		if cooldown := fallback.SnapshotDeploymentCooldown(kiloID); cooldown.CooldownActive {
+			t.Fatalf("missing required tool call cooled provider: %+v", cooldown)
+		}
+		attemptMetrics := fallback.SnapshotAttemptMetrics(kiloID)
+		if attemptMetrics.FailureCount != 1 || attemptMetrics.SuccessCount != 1 {
+			t.Fatalf("required-tools rotation attempt metrics = %+v, want one failure and one success", attemptMetrics)
+		}
+		if settlementCommitted != 1 || settlementRolledBack != 1 {
+			t.Fatalf("deferred settlements committed=%d rolled_back=%d, want 1/1", settlementCommitted, settlementRolledBack)
+		}
+		if count := fixture.switchEventCount(t); count != switchEventsBefore {
+			t.Fatalf("same-deployment required-tools rotation changed switch events from %d to %d", switchEventsBefore, count)
+		}
+	})
+
+	t.Run("selected Kilo tool function mismatch rotates", func(t *testing.T) {
+		kiloID := "free:kilo-00000013"
+		pollinationsID := "free:pollinations-00000013"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		wrongFunctionResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"other","arguments":"{\"q\":\"wrong\"}"}}]},"finish_reason":"tool_calls"}]}`
+		validResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"ok\"}"}}]},"finish_reason":"tool_calls"}]}`
+		var attempted []string
+		c, recorder := newRelayRotationSelectedToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			modelID := c.GetString(ctxkey.FallbackRealModel)
+			attempted = append(attempted, modelID)
+			if modelID == "kilo/a:free" {
+				_, _ = c.Writer.Write([]byte(wrongFunctionResponse))
+				return nil
+			}
+			_, _ = c.Writer.Write([]byte(validResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free", "kilo/b:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != validResponse {
+			t.Fatalf("client response = %q, want selected-function response", recorder.Body.String())
+		}
+	})
+
+	t.Run("Kilo tool call under none rotates", func(t *testing.T) {
+		kiloID := "free:kilo-00000014"
+		pollinationsID := "free:pollinations-00000014"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		unexpectedToolResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"unexpected\"}"}}]},"finish_reason":"tool_calls"}]}`
+		textResponse := `{"choices":[{"message":{"role":"assistant","content":"No tool called"},"finish_reason":"stop"}]}`
+		var attempted []string
+		c, recorder := newRelayRotationNoToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			modelID := c.GetString(ctxkey.FallbackRealModel)
+			attempted = append(attempted, modelID)
+			if modelID == "kilo/a:free" {
+				_, _ = c.Writer.Write([]byte(unexpectedToolResponse))
+				return nil
+			}
+			_, _ = c.Writer.Write([]byte(textResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free", "kilo/b:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != textResponse {
+			t.Fatalf("client response = %q, want no-tool response", recorder.Body.String())
+		}
+	})
+
+	t.Run("missing auto Kilo tool call is accepted without isolation", func(t *testing.T) {
+		kiloID := "free:kilo-00000012"
+		pollinationsID := "free:pollinations-00000012"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		textResponse := `{"choices":[{"message":{"role":"assistant","content":"No tool needed"},"finish_reason":"stop"}]}`
+		var attempted []string
+		c, recorder := newRelayRotationAutoToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			attempted = append(attempted, c.GetString(ctxkey.FallbackRealModel))
+			_, _ = c.Writer.Write([]byte(textResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != textResponse {
+			t.Fatalf("client response = %q, want first model response", recorder.Body.String())
+		}
+		if fallback.IsFreeProviderModelCapabilityFalsePositive(kiloID, "kilo/a:free", "tools") {
+			t.Fatal("auto tool choice incorrectly isolated model")
+		}
+	})
+
+	t.Run("all invalid Kilo tool models fall back to Pollinations without provider penalty", func(t *testing.T) {
+		kiloID := "free:kilo-00000007"
+		pollinationsID := "free:pollinations-00000007"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		invalidResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{not-json"}}]},"finish_reason":"tool_calls"}]}`
+		fallbackResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"fallback\"}"}}]},"finish_reason":"tool_calls"}]}`
+		switchEventsBefore := fixture.switchEventCount(t)
+		var attempted []string
+		c, recorder := newRelayRotationToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			modelID := c.GetString(ctxkey.FallbackRealModel)
+			attempted = append(attempted, modelID)
+			if c.GetString(ctxkey.FallbackDeploymentID) == kiloID {
+				_, _ = c.Writer.Write([]byte(invalidResponse))
+				return nil
+			}
+			_, _ = c.Writer.Write([]byte(fallbackResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free", "kilo/b:free", "openai-fast"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != fallbackResponse {
+			t.Fatalf("client response = %q, want Pollinations response", recorder.Body.String())
+		}
+		for _, modelID := range []string{"kilo/a:free", "kilo/b:free"} {
+			if !fallback.IsFreeProviderModelCapabilityFalsePositive(kiloID, modelID, "tools") {
+				t.Fatalf("invalid tools model %s was not isolated", modelID)
+			}
+		}
+		providerRuntime := fallback.SnapshotRuntimeState(kiloID)
+		if providerRuntime.FailureCount != 0 || providerRuntime.RateLimitScore != 0 {
+			t.Fatalf("tools capability exhaustion penalized provider: %+v", providerRuntime)
+		}
+		events := fixture.switchEvents(t)
+		if int64(len(events)) != switchEventsBefore+1 {
+			t.Fatalf("provider switch event count = %d, want %d", len(events), switchEventsBefore+1)
+		}
+		lastEvent := events[len(events)-1]
+		if lastEvent.FromDeployment != kiloID || lastEvent.ToDeployment != pollinationsID {
+			t.Fatalf("last provider switch event = %+v, want Kilo-to-Pollinations", lastEvent)
+		}
+	})
+
+	t.Run("pre-isolated Kilo tools deployment records model-state skip before Pollinations", func(t *testing.T) {
+		kiloID := "free:kilo-00000008"
+		pollinationsID := "free:pollinations-00000008"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+		fallback.MarkFreeProviderModelCapabilityFalsePositive(kiloID, "kilo/a:free", "tools")
+		fallback.MarkFreeProviderModelCapabilityFalsePositive(kiloID, "kilo/b:free", "tools")
+		fallback.ResetAttemptMetrics(kiloID)
+
+		fallbackResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"fallback\"}"}}]},"finish_reason":"tool_calls"}]}`
+		switchEventsBefore := fixture.switchEventCount(t)
+		var attempted []string
+		c, recorder := newRelayRotationToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			attempted = append(attempted, c.GetString(ctxkey.FallbackRealModel))
+			_, _ = c.Writer.Write([]byte(fallbackResponse))
+			return nil
+		})
+
+		if want := []string{"openai-fast"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("upstream attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != fallbackResponse {
+			t.Fatalf("client response = %q, want Pollinations response", recorder.Body.String())
+		}
+		metrics := fallback.SnapshotAttemptMetrics(kiloID)
+		if metrics.SkipCount != 1 || metrics.FailureCount != 0 || metrics.SuccessCount != 0 {
+			t.Fatalf("pre-isolated Kilo metrics = %+v, want one skip only", metrics)
+		}
+		events := fixture.switchEvents(t)
+		if int64(len(events)) != switchEventsBefore+1 {
+			t.Fatalf("provider switch event count = %d, want %d", len(events), switchEventsBefore+1)
+		}
+		lastEvent := events[len(events)-1]
+		if lastEvent.FromDeployment != kiloID || lastEvent.ToDeployment != pollinationsID || lastEvent.Reason != "tools capability temporarily unavailable" {
+			t.Fatalf("last provider switch event = %+v, want safe Kilo model-state fallback", lastEvent)
+		}
+	})
 }
 
 func setupRelayRotationFixture(t *testing.T, kiloDeploymentIDs []string) relayRotationFixture {
@@ -243,7 +532,7 @@ func setupRelayRotationFixture(t *testing.T, kiloDeploymentIDs []string) relayRo
 	if err := fallback.InitFreeProviderCatalogStore(); err != nil {
 		t.Fatalf("InitFreeProviderCatalogStore: %v", err)
 	}
-	modelsJSON := `[{"id":"kilo/a:free"},{"id":"kilo/b:free"}]`
+	modelsJSON := `[{"id":"kilo/a:free","supports_tools":true},{"id":"kilo/b:free","supports_tools":true}]`
 	now := time.Now().UTC()
 	for _, deploymentID := range kiloDeploymentIDs {
 		if err := db.Exec(`INSERT INTO free_provider_catalog_records
@@ -275,6 +564,7 @@ func loadRelayRotationConfig(t *testing.T, kiloID, pollinationsID string) {
 	t.Helper()
 	fallback.ClearStickyDeployment(relayRotationVirtualModel)
 	fallback.ResetFreeProviderModelRuntime(kiloID)
+	fallback.ResetFreeProviderModelCapabilityFalsePositive(kiloID, "")
 	cfg := fallback.Config{
 		Enabled: true,
 		VirtualModels: map[string]fallback.VirtualModelConfig{
@@ -334,6 +624,56 @@ func newRelayRotationContext() (*gin.Context, *httptest.ResponseRecorder) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"hello"}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"look up ok"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationRequiredToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"look up ok"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}],"tool_choice":"required"}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationAutoToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"look up ok"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}],"tool_choice":"auto"}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationSelectedToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"look up ok"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}],"tool_choice":{"type":"function","function":{"name":"lookup"}}}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationNoToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"answer without tools"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}],"tool_choice":"none"}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)

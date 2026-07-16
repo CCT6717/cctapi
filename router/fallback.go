@@ -533,7 +533,7 @@ func buildFallbackRuntimeStatusRows(cfg *fallback.Config) []map[string]interface
 			"cooldown_updated_at":      cooldown.UpdatedAt,
 			"is_sticky":                len(stickyVirtualModels) > 0,
 			"sticky_virtual_models":    stickyVirtualModels,
-			"model_runtime":            fallback.SnapshotFreeProviderModelRuntime(id),
+			"model_runtime":            fallback.SnapshotFreeProviderModelRuntimeDiagnostics(id),
 		})
 	}
 	return rows

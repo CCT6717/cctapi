@@ -151,6 +151,55 @@ func TestPrepareDeploymentModelPlanRemovesCoolingKiloModelsAfterCompatibilityCou
 	}
 }
 
+func TestPrepareDeploymentModelPlanSkipsToolsFalsePositiveOnlyForToolsRequests(t *testing.T) {
+	depID := "free:kilo-001122ff"
+	supportsTools := true
+	setupFreeProviderModelPlanTest(t, depID, []FreeModelCatalogEntry{
+		{ID: "kilo/a:free", SupportsTools: &supportsTools},
+		{ID: "kilo/b:free", SupportsTools: &supportsTools},
+	})
+	MarkFreeProviderModelCapabilityFalsePositive(depID, "kilo/a:free", "tools")
+
+	toolsPlan := PrepareDeploymentModelPlan(
+		DeploymentConfig{ID: depID, RealModel: "kilo/a:free", SupportsTools: true},
+		RequestCapabilities{Tools: true},
+	)
+	if len(toolsPlan.Attempts) != 1 || toolsPlan.Attempts[0].Deployment.RealModel != "kilo/b:free" {
+		t.Fatalf("tools plan did not skip false-positive model: %#v", toolsPlan)
+	}
+
+	plainPlan := PrepareDeploymentModelPlan(
+		DeploymentConfig{ID: depID, RealModel: "kilo/a:free", SupportsTools: true},
+		RequestCapabilities{},
+	)
+	if len(plainPlan.Attempts) != 2 || plainPlan.Attempts[0].Deployment.RealModel != "kilo/a:free" {
+		t.Fatalf("plain plan incorrectly skipped tools false-positive model: %#v", plainPlan)
+	}
+}
+
+func TestPrepareDeploymentModelAttemptsPreservesAllUnavailableKiloDeploymentAsSkip(t *testing.T) {
+	depID := "free:kilo-001122ff"
+	supportsTools := true
+	setupFreeProviderModelPlanTest(t, depID, []FreeModelCatalogEntry{
+		{ID: "kilo/a:free", SupportsTools: &supportsTools},
+		{ID: "kilo/b:free", SupportsTools: &supportsTools},
+	})
+	MarkFreeProviderModelCapabilityFalsePositive(depID, "kilo/a:free", "tools")
+	MarkFreeProviderModelCapabilityFalsePositive(depID, "kilo/b:free", "tools")
+
+	attempts := PrepareDeploymentModelAttempts(
+		[]DeploymentConfig{{ID: depID, RealModel: "kilo/a:free", SupportsTools: true}},
+		RequestCapabilities{Tools: true},
+	)
+	if len(attempts) != 1 {
+		t.Fatalf("attempt count = %d, want one model-state skip: %#v", len(attempts), attempts)
+	}
+	attempt := attempts[0]
+	if attempt.SkipReason != "tools capability temporarily unavailable" || attempt.CompatibleCount != 2 || attempt.CapabilityFalsePositiveCount != 2 {
+		t.Fatalf("unexpected model-state skip: %#v", attempt)
+	}
+}
+
 func TestPrepareDeploymentModelPlanExcludesKiloModelsWithoutRequestedCapabilities(t *testing.T) {
 	trueValue := true
 	falseValue := false

@@ -524,6 +524,7 @@ func ResetDeploymentState(deploymentID string) error {
 		return err
 	}
 	ResetFreeProviderModelRuntime(deploymentID)
+	ResetFreeProviderModelCapabilityFalsePositive(deploymentID, "")
 	return nil
 }
 

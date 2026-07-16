@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"sync/atomic"
 
 	"github.com/gin-gonic/gin"
@@ -120,7 +121,14 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 					usage.PromptTokens = meta.PromptTokens
 					usage.CompletionTokens = usage.TotalTokens - meta.PromptTokens
 				}
-				go postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
+				schedulePostConsume(c,
+					func() {
+						go postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
+					},
+					func() {
+						billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+					},
+				)
 				return nil
 			}
 		}
@@ -170,8 +178,34 @@ func RelayTextHelper(c *gin.Context) *model.ErrorWithStatusCode {
 		}
 	}
 	// post-consume quota
-	go postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
+	schedulePostConsume(c,
+		func() {
+			go postConsumeQuota(ctx, usage, meta, textRequest, ratio, preConsumedQuota, modelRatio, groupRatio, systemPromptReset)
+		},
+		func() {
+			billing.ReturnPreConsumedQuota(ctx, preConsumedQuota, meta.TokenId)
+		},
+	)
 	return nil
+}
+
+func schedulePostConsume(c *gin.Context, commit, rollback func()) {
+	deferSettlement, _ := c.Get(ctxkey.FallbackDeferPostConsume)
+	if deferSettlement != true {
+		commit()
+		return
+	}
+
+	var once sync.Once
+	c.Set(ctxkey.FallbackDeferredPostConsume, func(accepted bool) {
+		once.Do(func() {
+			if accepted {
+				commit()
+				return
+			}
+			rollback()
+		})
+	})
 }
 
 func getRequestBody(c *gin.Context, meta *meta.Meta, textRequest *model.GeneralOpenAIRequest, adaptor adaptor.Adaptor) (io.Reader, error) {
