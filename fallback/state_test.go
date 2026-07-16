@@ -126,6 +126,8 @@ func TestResetDeploymentStateClearsOnlyTargetModelRuntime(t *testing.T) {
 	otherDeploymentID := "free:kilo-aabbccdd"
 	MarkFreeProviderModelRateLimited(targetDeploymentID, "model-a", "rate limited", RelayCooldownInput{})
 	MarkFreeProviderModelRateLimited(otherDeploymentID, "model-b", "rate limited", RelayCooldownInput{})
+	MarkFreeProviderModelCapabilityFalsePositive(targetDeploymentID, "model-a", "tools")
+	MarkFreeProviderModelCapabilityFalsePositive(otherDeploymentID, "model-b", "tools")
 
 	if err := ResetDeploymentState(targetDeploymentID); err != nil {
 		t.Fatalf("ResetDeploymentState failed: %v", err)
@@ -136,6 +138,12 @@ func TestResetDeploymentStateClearsOnlyTargetModelRuntime(t *testing.T) {
 	}
 	if !IsFreeProviderModelCooling(otherDeploymentID, "model-b") {
 		t.Fatal("reset affected another deployment model runtime")
+	}
+	if IsFreeProviderModelCapabilityFalsePositive(targetDeploymentID, "model-a", "tools") {
+		t.Fatal("target capability false-positive was not reset")
+	}
+	if !IsFreeProviderModelCapabilityFalsePositive(otherDeploymentID, "model-b", "tools") {
+		t.Fatal("reset affected another deployment capability false-positive")
 	}
 }
 
@@ -151,6 +159,7 @@ func TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails(t *testin
 
 	deploymentID := "free:kilo-reset-failure"
 	MarkFreeProviderModelRateLimited(deploymentID, "model-a", "rate limited", RelayCooldownInput{})
+	MarkFreeProviderModelCapabilityFalsePositive(deploymentID, "model-a", "tools")
 	if _, err := EnsureDeploymentState(deploymentID, todayString()); err != nil {
 		t.Fatalf("EnsureDeploymentState failed: %v", err)
 	}
@@ -172,6 +181,9 @@ func TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails(t *testin
 	}
 	if !IsFreeProviderModelCooling(deploymentID, "model-a") {
 		t.Fatal("failed persistent reset cleared model runtime")
+	}
+	if !IsFreeProviderModelCapabilityFalsePositive(deploymentID, "model-a", "tools") {
+		t.Fatal("failed persistent reset cleared capability false-positive")
 	}
 }
 

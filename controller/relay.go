@@ -222,6 +222,22 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 				http.StatusServiceUnavailable, fallback.ErrorCategoryTemporary, 0, false, i+1, 0)
 			continue
 		}
+		if attempt.SkipReason != "" {
+			logger.Infof(ctx, "[fallback] deployment %s skipped before upstream attempt: %s", dep.ID, attempt.SkipReason)
+			lastBizErr = &model.ErrorWithStatusCode{
+				StatusCode: http.StatusServiceUnavailable,
+				Error: model.Error{
+					Message: attempt.SkipReason,
+					Type:    "fallback_model_state",
+					Code:    "models_temporarily_unavailable",
+				},
+			}
+			prevDeployment = dep.ID
+			prevDurationMs = 0
+			recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeSkippedModelState,
+				http.StatusServiceUnavailable, fallback.ErrorCategoryTemporary, 0, false, i+1, 0)
+			continue
+		}
 
 		// Get channel by deployment's channel ID
 		channel, err := dbmodel.GetChannelById(dep.ChannelID, true)
@@ -353,6 +369,17 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 		logger.Infof(ctx, "[fallback] attempt %d/%d virtual model %s deployment %s channel %d real model %s",
 			upstreamAttemptCount, len(modelAttempts), virtualModel, dep.ID, dep.ChannelID, dep.RealModel)
 
+		// For non-streaming tools requests, buffer the response so we can validate
+		// tool-call arguments before committing them to the client.
+		needBufferResponse := !caps.Stream && caps.Tools && attempt.ProviderName == "kilo"
+		var bufWriter *bufferedResponseWriter
+		var originalWriter gin.ResponseWriter
+		if needBufferResponse {
+			originalWriter = c.Writer
+			bufWriter = newBufferedResponseWriter(originalWriter)
+			c.Writer = bufWriter
+		}
+
 		// Execute the relay helper
 		bizErr := execute(c, relayMode)
 		durationMs := time.Since(attemptStart).Milliseconds()
@@ -367,6 +394,31 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 		}
 
 		if bizErr == nil {
+			// Validate non-streaming tool-call arguments before writing to client.
+			if needBufferResponse && bufWriter != nil {
+				c.Writer = originalWriter
+				if !validateToolCalls(bufWriter.buf.Bytes()) {
+					if attempt.ProviderName == "kilo" {
+						fallback.MarkFreeProviderModelCapabilityFalsePositive(dep.ID, dep.RealModel, "tools")
+						logger.Infof(ctx, "[fallback] model %s tools capability false-positive detected, rotating", dep.RealModel)
+					}
+					lastBizErr = &model.ErrorWithStatusCode{
+						StatusCode: http.StatusBadGateway,
+						Error: model.Error{
+							Message: "invalid tool arguments",
+							Type:    "invalid_upstream_response",
+							Code:    "model_capability_false_positive",
+						},
+					}
+					prevDeployment = dep.ID
+					prevDurationMs = durationMs
+					recordFallbackAttempt(ctx, requestId, virtualModel, attempt, fallback.AttemptOutcomeModelCapabilityFalsePositive,
+						http.StatusBadGateway, fallback.ErrorCategoryTemporary, durationMs, false, i+1, upstreamAttemptCount)
+					continue
+				}
+				bufWriter.flushTo(originalWriter)
+			}
+
 			fallback.SetStickyDeployment(virtualModel, dep.ID)
 			if attempt.ProviderName == "kilo" {
 				fallback.RecordFreeProviderModelSuccess(dep.ID, dep.RealModel)
@@ -400,6 +452,11 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 
 		// 契约 5：响应已写出后停止。一旦 c.Writer.Written() 返回 true，立即 return，不再尝试轮换或回退。
 		// Once any response bytes are written, replaying the request is unsafe.
+		if needBufferResponse && bufWriter != nil {
+			// The buffered response was never committed to the client. Discard it
+			// and let the existing fallback decision handle the upstream error.
+			c.Writer = originalWriter
+		}
 		if c.Writer.Written() {
 			logger.Infof(ctx, "[fallback] response already written for deployment %s, stopping attempts",
 				dep.ID)
@@ -683,13 +740,15 @@ func recordFallbackAttempt(
 		fallback.RecordAttemptSuccess(attempt.Deployment.ID, durationMs)
 	default:
 		fallback.RecordAttemptEventIfWorthy(event)
-		if outcome == fallback.AttemptOutcomeFailure {
+		if outcome == fallback.AttemptOutcomeFailure ||
+			outcome == fallback.AttemptOutcomeModelCapabilityFalsePositive {
 			fallback.RecordAttemptFailure(attempt.Deployment.ID, durationMs)
 			fallback.RecordErrorCategoryCounter(errCat)
 		} else if outcome == fallback.AttemptOutcomeSkippedUnavailable ||
 			outcome == fallback.AttemptOutcomeSkippedQuota ||
 			outcome == fallback.AttemptOutcomeSkippedConcurrency ||
-			outcome == fallback.AttemptOutcomeSkippedChannel {
+			outcome == fallback.AttemptOutcomeSkippedChannel ||
+			outcome == fallback.AttemptOutcomeSkippedModelState {
 			fallback.RecordAttemptSkip(attempt.Deployment.ID)
 		}
 	}
@@ -707,6 +766,170 @@ func effectiveTokenCount(estimated int) int {
 		return estimated
 	}
 	return 1024
+}
+
+type bufferedResponseWriter struct {
+	gin.ResponseWriter
+	header     http.Header
+	buf        bytes.Buffer
+	statusCode int
+	size       int
+	written    bool
+}
+
+func newBufferedResponseWriter(writer gin.ResponseWriter) *bufferedResponseWriter {
+	return &bufferedResponseWriter{
+		ResponseWriter: writer,
+		header:         writer.Header().Clone(),
+		statusCode:     http.StatusOK,
+		size:           -1,
+	}
+}
+
+func (writer *bufferedResponseWriter) Header() http.Header {
+	return writer.header
+}
+
+func (writer *bufferedResponseWriter) WriteHeader(statusCode int) {
+	if writer.written {
+		return
+	}
+	writer.statusCode = statusCode
+	writer.written = true
+	writer.size = 0
+}
+
+func (writer *bufferedResponseWriter) WriteHeaderNow() {
+	if !writer.written {
+		writer.WriteHeader(writer.statusCode)
+	}
+}
+
+func (writer *bufferedResponseWriter) Write(data []byte) (int, error) {
+	writer.WriteHeaderNow()
+	written, err := writer.buf.Write(data)
+	writer.size += written
+	return written, err
+}
+
+func (writer *bufferedResponseWriter) WriteString(value string) (int, error) {
+	return writer.Write([]byte(value))
+}
+
+func (writer *bufferedResponseWriter) Status() int { return writer.statusCode }
+func (writer *bufferedResponseWriter) Size() int   { return writer.size }
+func (writer *bufferedResponseWriter) Written() bool {
+	return writer.written
+}
+
+// Flush intentionally does not commit a buffered non-streaming response.
+func (writer *bufferedResponseWriter) Flush() {}
+
+func (writer *bufferedResponseWriter) flushTo(destination gin.ResponseWriter) {
+	if writer == nil || destination == nil || !writer.written {
+		return
+	}
+	for key := range destination.Header() {
+		delete(destination.Header(), key)
+	}
+	for key, values := range writer.header {
+		destination.Header()[key] = append([]string(nil), values...)
+	}
+	destination.WriteHeader(writer.statusCode)
+	if writer.buf.Len() > 0 {
+		_, _ = destination.Write(writer.buf.Bytes())
+	}
+}
+
+// validateToolCalls accepts the response schemas emitted by Chat Completions,
+// Responses, and Anthropic Messages. Responses without tool calls are valid;
+// every emitted tool call must contain a non-empty JSON object as arguments.
+func validateToolCalls(body []byte) bool {
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return false
+	}
+	if choices, ok := payload["choices"]; ok {
+		return validateChatCompletionToolCalls(choices)
+	}
+	if output, ok := payload["output"]; ok {
+		return validateResponsesToolCalls(output)
+	}
+	if content, ok := payload["content"]; ok {
+		return validateAnthropicToolCalls(content)
+	}
+	return false
+}
+
+func validateChatCompletionToolCalls(raw json.RawMessage) bool {
+	var choices []struct {
+		FinishReason string `json:"finish_reason"`
+		Message      struct {
+			ToolCalls []struct {
+				Function struct {
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
+		} `json:"message"`
+	}
+	if err := json.Unmarshal(raw, &choices); err != nil || len(choices) == 0 {
+		return false
+	}
+	for _, choice := range choices {
+		if choice.FinishReason == "tool_calls" && len(choice.Message.ToolCalls) == 0 {
+			return false
+		}
+		for _, toolCall := range choice.Message.ToolCalls {
+			if !validToolArguments(toolCall.Function.Arguments) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func validateResponsesToolCalls(raw json.RawMessage) bool {
+	var output []struct {
+		Type      string `json:"type"`
+		Arguments string `json:"arguments"`
+	}
+	if err := json.Unmarshal(raw, &output); err != nil || len(output) == 0 {
+		return false
+	}
+	for _, item := range output {
+		if item.Type == "function_call" && !validToolArguments(item.Arguments) {
+			return false
+		}
+	}
+	return true
+}
+
+func validateAnthropicToolCalls(raw json.RawMessage) bool {
+	var content []struct {
+		Type  string          `json:"type"`
+		Input json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(raw, &content); err != nil || len(content) == 0 {
+		return false
+	}
+	for _, block := range content {
+		if block.Type != "tool_use" {
+			continue
+		}
+		var arguments map[string]any
+		if len(block.Input) == 0 || json.Unmarshal(block.Input, &arguments) != nil || arguments == nil {
+			return false
+		}
+	}
+	return true
+}
+
+func validToolArguments(value string) bool {
+	if value == "" {
+		return false
+	}
+	var arguments map[string]any
+	return json.Unmarshal([]byte(value), &arguments) == nil && arguments != nil
 }
 
 func estimateTokenCount(req *model.GeneralOpenAIRequest) int {

@@ -175,3 +175,141 @@ func cloneTime(value *time.Time) *time.Time {
 	copy := *value
 	return &copy
 }
+
+// =========================================================================
+// Model-level capability false-positive tracking
+// =========================================================================
+// When a free-provider model claims to support a capability (e.g. tools) but
+// returns an invalid response for that capability, it is marked as a false
+// positive.  The model is temporarily excluded from candidate planning for
+// requests that require that capability.  False-positive state is in-memory
+// only and is cleared on process restart or manual deployment recovery.
+
+type freeProviderModelCapabilityFalsePositive struct {
+	capability string
+	expiresAt  *time.Time
+}
+
+var (
+	freeProviderModelCapabilityFP   = make(map[string]map[string]*freeProviderModelCapabilityFalsePositive)
+	freeProviderModelCapabilityFPMu sync.RWMutex
+	capabilityFPDuration            = 30 * time.Minute
+)
+
+// MarkFreeProviderModelCapabilityFalsePositive records that a specific model
+// failed to honour a capability it advertises.  The model is excluded from
+// candidate planning for requests requiring that capability until the entry
+// expires.
+func MarkFreeProviderModelCapabilityFalsePositive(deploymentID, modelID, capability string) {
+	now := freeProviderModelRuntimeNow()
+	expires := now.Add(capabilityFPDuration)
+
+	freeProviderModelCapabilityFPMu.Lock()
+	defer freeProviderModelCapabilityFPMu.Unlock()
+	models := freeProviderModelCapabilityFP[deploymentID]
+	if models == nil {
+		models = make(map[string]*freeProviderModelCapabilityFalsePositive)
+		freeProviderModelCapabilityFP[deploymentID] = models
+	}
+	models[modelID] = &freeProviderModelCapabilityFalsePositive{
+		capability: capability,
+		expiresAt:  &expires,
+	}
+}
+
+// IsFreeProviderModelCapabilityFalsePositive returns true when the model is
+// currently flagged as unable to serve the given capability.
+func IsFreeProviderModelCapabilityFalsePositive(deploymentID, modelID, capability string) bool {
+	now := freeProviderModelRuntimeNow()
+	freeProviderModelCapabilityFPMu.RLock()
+	entry := freeProviderModelCapabilityFP[deploymentID][modelID]
+	active := entry != nil && entry.expiresAt != nil && entry.expiresAt.After(now)
+	matches := active && entry.capability == capability
+	freeProviderModelCapabilityFPMu.RUnlock()
+	if active {
+		return matches
+	}
+	if entry == nil {
+		return false
+	}
+
+	freeProviderModelCapabilityFPMu.Lock()
+	models := freeProviderModelCapabilityFP[deploymentID]
+	current := models[modelID]
+	if current == entry && (current.expiresAt == nil || !current.expiresAt.After(now)) {
+		delete(models, modelID)
+		if len(models) == 0 {
+			delete(freeProviderModelCapabilityFP, deploymentID)
+		}
+	}
+	freeProviderModelCapabilityFPMu.Unlock()
+	return false
+}
+
+// ResetFreeProviderModelCapabilityFalsePositive clears false-positive state.
+// If modelID is empty, all models for the deployment are cleared.
+func ResetFreeProviderModelCapabilityFalsePositive(deploymentID, modelID string) {
+	freeProviderModelCapabilityFPMu.Lock()
+	defer freeProviderModelCapabilityFPMu.Unlock()
+	models := freeProviderModelCapabilityFP[deploymentID]
+	if models == nil {
+		return
+	}
+	if modelID == "" {
+		delete(freeProviderModelCapabilityFP, deploymentID)
+		return
+	}
+	delete(models, modelID)
+	if len(models) == 0 {
+		delete(freeProviderModelCapabilityFP, deploymentID)
+	}
+}
+
+type FreeProviderModelCapabilityFalsePositiveSnapshot struct {
+	ModelID    string     `json:"model_id"`
+	Capability string     `json:"capability"`
+	Reason     string     `json:"reason"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+}
+
+// FreeProviderModelRuntimeDiagnostics preserves the existing model_runtime
+// fields while adding safe capability false-positive diagnostics.
+type FreeProviderModelRuntimeDiagnostics struct {
+	FreeProviderModelRuntimeSummary
+	ActiveCapabilityFalsePositiveCount int                                                `json:"active_capability_false_positive_count"`
+	CapabilityFalsePositives           []FreeProviderModelCapabilityFalsePositiveSnapshot `json:"capability_false_positives"`
+}
+
+func SnapshotFreeProviderModelRuntimeDiagnostics(deploymentID string) FreeProviderModelRuntimeDiagnostics {
+	diagnostics := FreeProviderModelRuntimeDiagnostics{
+		FreeProviderModelRuntimeSummary: SnapshotFreeProviderModelRuntime(deploymentID),
+		CapabilityFalsePositives:        []FreeProviderModelCapabilityFalsePositiveSnapshot{},
+	}
+	now := freeProviderModelRuntimeNow()
+
+	freeProviderModelCapabilityFPMu.Lock()
+	models := freeProviderModelCapabilityFP[deploymentID]
+	for modelID, entry := range models {
+		if entry == nil || entry.expiresAt == nil || !entry.expiresAt.After(now) {
+			delete(models, modelID)
+			continue
+		}
+		diagnostics.CapabilityFalsePositives = append(diagnostics.CapabilityFalsePositives,
+			FreeProviderModelCapabilityFalsePositiveSnapshot{
+				ModelID:    modelID,
+				Capability: entry.capability,
+				Reason:     "invalid tool arguments",
+				ExpiresAt:  cloneTime(entry.expiresAt),
+			})
+	}
+	if len(models) == 0 {
+		delete(freeProviderModelCapabilityFP, deploymentID)
+	}
+	freeProviderModelCapabilityFPMu.Unlock()
+
+	sort.Slice(diagnostics.CapabilityFalsePositives, func(i, j int) bool {
+		return diagnostics.CapabilityFalsePositives[i].ModelID < diagnostics.CapabilityFalsePositives[j].ModelID
+	})
+	diagnostics.ActiveCapabilityFalsePositiveCount = len(diagnostics.CapabilityFalsePositives)
+	return diagnostics
+}

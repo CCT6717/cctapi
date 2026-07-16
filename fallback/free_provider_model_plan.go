@@ -5,13 +5,15 @@ import "strings"
 // DeploymentModelAttempt is one request-scoped model candidate for a deployment.
 // Its Deployment value is a copy and never mutates the configured deployment.
 type DeploymentModelAttempt struct {
-	Deployment      DeploymentConfig
-	ProviderName    string
-	ModelIndex      int
-	ModelCount      int
-	CompatibleCount int
-	CoolingCount    int
-	Rotatable       bool
+	Deployment                   DeploymentConfig
+	ProviderName                 string
+	ModelIndex                   int
+	ModelCount                   int
+	CompatibleCount              int
+	CoolingCount                 int
+	CapabilityFalsePositiveCount int
+	Rotatable                    bool
+	SkipReason                   string
 }
 
 func (attempt DeploymentModelAttempt) HasNextModel() bool {
@@ -28,10 +30,11 @@ func (attempt DeploymentModelAttempt) RemainingModelAttempts() int {
 
 // DeploymentModelPlan groups the model candidates for one deployment.
 type DeploymentModelPlan struct {
-	Attempts        []DeploymentModelAttempt
-	CompatibleCount int
-	CoolingCount    int
-	Rotatable       bool
+	Attempts                     []DeploymentModelAttempt
+	CompatibleCount              int
+	CoolingCount                 int
+	CapabilityFalsePositiveCount int
+	Rotatable                    bool
 }
 
 // PrepareDeploymentModelPlan builds the request-scoped model candidates for one
@@ -59,19 +62,24 @@ func PrepareDeploymentModelPlan(dep DeploymentConfig, caps RequestCapabilities) 
 			plan.CoolingCount++
 			continue
 		}
+		if caps.Tools && IsFreeProviderModelCapabilityFalsePositive(dep.ID, candidate.RealModel, "tools") {
+			plan.CapabilityFalsePositiveCount++
+			continue
+		}
 		available = append(available, candidate)
 	}
 
 	plan.Attempts = make([]DeploymentModelAttempt, 0, len(available))
 	for index, candidate := range available {
 		plan.Attempts = append(plan.Attempts, DeploymentModelAttempt{
-			Deployment:      candidate,
-			ProviderName:    providerName,
-			ModelIndex:      index,
-			ModelCount:      len(available),
-			CompatibleCount: plan.CompatibleCount,
-			CoolingCount:    plan.CoolingCount,
-			Rotatable:       true,
+			Deployment:                   candidate,
+			ProviderName:                 providerName,
+			ModelIndex:                   index,
+			ModelCount:                   len(available),
+			CompatibleCount:              plan.CompatibleCount,
+			CoolingCount:                 plan.CoolingCount,
+			CapabilityFalsePositiveCount: plan.CapabilityFalsePositiveCount,
+			Rotatable:                    true,
 		})
 	}
 	return plan
@@ -82,9 +90,33 @@ func PrepareDeploymentModelPlan(dep DeploymentConfig, caps RequestCapabilities) 
 func PrepareDeploymentModelAttempts(deployments []DeploymentConfig, caps RequestCapabilities) []DeploymentModelAttempt {
 	attempts := make([]DeploymentModelAttempt, 0, len(deployments))
 	for _, dep := range deployments {
-		attempts = append(attempts, PrepareDeploymentModelPlan(dep, caps).Attempts...)
+		plan := PrepareDeploymentModelPlan(dep, caps)
+		if len(plan.Attempts) == 0 && plan.CompatibleCount > 0 {
+			providerName, _ := FreeProviderNameFromDeploymentID(dep.ID)
+			attempts = append(attempts, DeploymentModelAttempt{
+				Deployment:                   dep,
+				ProviderName:                 providerName,
+				CompatibleCount:              plan.CompatibleCount,
+				CoolingCount:                 plan.CoolingCount,
+				CapabilityFalsePositiveCount: plan.CapabilityFalsePositiveCount,
+				Rotatable:                    plan.Rotatable,
+				SkipReason:                   unavailableModelPlanReason(plan),
+			})
+			continue
+		}
+		attempts = append(attempts, plan.Attempts...)
 	}
 	return attempts
+}
+
+func unavailableModelPlanReason(plan DeploymentModelPlan) string {
+	if plan.CoolingCount == plan.CompatibleCount {
+		return "all compatible models cooling down"
+	}
+	if plan.CapabilityFalsePositiveCount == plan.CompatibleCount {
+		return "tools capability temporarily unavailable"
+	}
+	return "all compatible models temporarily unavailable"
 }
 
 func prepareSingleDeploymentModelPlan(dep DeploymentConfig, providerName string, caps RequestCapabilities) DeploymentModelPlan {

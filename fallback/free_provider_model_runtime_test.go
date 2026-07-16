@@ -12,7 +12,63 @@ func resetFreeProviderModelRuntimeForTest() {
 	freeProviderModelRuntimeMu.Lock()
 	freeProviderModelRuntime = make(map[string]map[string]*freeProviderModelRuntimeEntry)
 	freeProviderModelRuntimeMu.Unlock()
+	freeProviderModelCapabilityFPMu.Lock()
+	freeProviderModelCapabilityFP = make(map[string]map[string]*freeProviderModelCapabilityFalsePositive)
+	capabilityFPDuration = 30 * time.Minute
+	freeProviderModelCapabilityFPMu.Unlock()
 	freeProviderModelRuntimeNow = time.Now
+}
+
+func TestFreeProviderModelCapabilityFalsePositiveExpiresAndResets(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+	now := time.Date(2026, 7, 15, 12, 0, 0, 0, time.UTC)
+	freeProviderModelRuntimeNow = func() time.Time { return now }
+
+	MarkFreeProviderModelCapabilityFalsePositive("free:kilo-test", "model-a", "tools")
+	if !IsFreeProviderModelCapabilityFalsePositive("free:kilo-test", "model-a", "tools") {
+		t.Fatal("active tools false-positive was not recorded")
+	}
+	if IsFreeProviderModelCapabilityFalsePositive("free:kilo-test", "model-a", "json") {
+		t.Fatal("tools false-positive affected another capability")
+	}
+
+	now = now.Add(31 * time.Minute)
+	if IsFreeProviderModelCapabilityFalsePositive("free:kilo-test", "model-a", "tools") {
+		t.Fatal("expired tools false-positive remained active")
+	}
+	freeProviderModelCapabilityFPMu.RLock()
+	_, deploymentExists := freeProviderModelCapabilityFP["free:kilo-test"]
+	freeProviderModelCapabilityFPMu.RUnlock()
+	if deploymentExists {
+		t.Fatal("expired tools false-positive was not removed from runtime state")
+	}
+
+	MarkFreeProviderModelCapabilityFalsePositive("free:kilo-test", "model-a", "tools")
+	ResetFreeProviderModelCapabilityFalsePositive("free:kilo-test", "")
+	if IsFreeProviderModelCapabilityFalsePositive("free:kilo-test", "model-a", "tools") {
+		t.Fatal("deployment reset did not clear tools false-positive")
+	}
+}
+
+func TestFreeProviderModelCapabilityFalsePositiveConcurrentAccess(t *testing.T) {
+	resetFreeProviderModelRuntimeForTest()
+	t.Cleanup(resetFreeProviderModelRuntimeForTest)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			modelID := "model-" + string(rune('a'+i%3))
+			for j := 0; j < 100; j++ {
+				MarkFreeProviderModelCapabilityFalsePositive("free:kilo-test", modelID, "tools")
+				_ = IsFreeProviderModelCapabilityFalsePositive("free:kilo-test", modelID, "tools")
+				ResetFreeProviderModelCapabilityFalsePositive("free:kilo-test", modelID)
+			}
+		}(i)
+	}
+	wg.Wait()
 }
 
 func TestFreeProviderModelRuntimeRateLimitDurations(t *testing.T) {

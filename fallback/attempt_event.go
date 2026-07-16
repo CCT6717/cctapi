@@ -14,14 +14,16 @@ import (
 type AttemptOutcome string
 
 const (
-	AttemptOutcomeSuccess            AttemptOutcome = "success"
-	AttemptOutcomeFailure            AttemptOutcome = "failure"
-	AttemptOutcomeSkippedUnavailable AttemptOutcome = "skipped_unavailable"
-	AttemptOutcomeSkippedQuota       AttemptOutcome = "skipped_quota"
-	AttemptOutcomeSkippedConcurrency AttemptOutcome = "skipped_concurrency"
-	AttemptOutcomeSkippedChannel     AttemptOutcome = "skipped_channel"
-	AttemptOutcomeModelRateLimited   AttemptOutcome = "model_rate_limited"
-	AttemptOutcomeNonFallbackable    AttemptOutcome = "non_fallbackable"
+	AttemptOutcomeSuccess                      AttemptOutcome = "success"
+	AttemptOutcomeFailure                      AttemptOutcome = "failure"
+	AttemptOutcomeSkippedUnavailable           AttemptOutcome = "skipped_unavailable"
+	AttemptOutcomeSkippedQuota                 AttemptOutcome = "skipped_quota"
+	AttemptOutcomeSkippedConcurrency           AttemptOutcome = "skipped_concurrency"
+	AttemptOutcomeSkippedChannel               AttemptOutcome = "skipped_channel"
+	AttemptOutcomeSkippedModelState            AttemptOutcome = "skipped_model_state"
+	AttemptOutcomeModelRateLimited             AttemptOutcome = "model_rate_limited"
+	AttemptOutcomeNonFallbackable              AttemptOutcome = "non_fallbackable"
+	AttemptOutcomeModelCapabilityFalsePositive AttemptOutcome = "model_capability_false_positive"
 )
 
 // AttemptEvent records a single attempt at an upstream deployment.

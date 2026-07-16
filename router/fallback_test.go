@@ -641,13 +641,17 @@ func TestBuildFallbackEditorChannel_NoFullKey(t *testing.T) {
 
 func TestBuildFallbackRuntimeStatusRowsIncludesModelRuntime(t *testing.T) {
 	deploymentID := "free:kilo-model-runtime"
-	t.Cleanup(func() { fallback.ResetFreeProviderModelRuntime(deploymentID) })
+	t.Cleanup(func() {
+		fallback.ResetFreeProviderModelRuntime(deploymentID)
+		fallback.ResetFreeProviderModelCapabilityFalsePositive(deploymentID, "")
+	})
 
 	retryAfter := 120
 	fallback.MarkFreeProviderModelRateLimited(deploymentID, "kilo/model-a:free", "rate limited", fallback.RelayCooldownInput{
 		Category: fallback.ErrorCategoryRateLimit, StatusCode: http.StatusTooManyRequests,
 		RetryAfterSeconds: &retryAfter, Attempt: 1,
 	})
+	fallback.MarkFreeProviderModelCapabilityFalsePositive(deploymentID, "kilo/model-b:free", "tools")
 
 	rows := buildFallbackRuntimeStatusRows(&fallback.Config{
 		Enabled: true,
@@ -661,12 +665,19 @@ func TestBuildFallbackRuntimeStatusRowsIncludesModelRuntime(t *testing.T) {
 	})
 
 	row := findRuntimeStatusRow(t, rows, deploymentID)
-	modelRuntime, ok := row["model_runtime"].(fallback.FreeProviderModelRuntimeSummary)
+	modelRuntime, ok := row["model_runtime"].(fallback.FreeProviderModelRuntimeDiagnostics)
 	if !ok {
 		t.Fatalf("expected model_runtime field, got %#v", row["model_runtime"])
 	}
 	if modelRuntime.ActiveCooldownCount != 1 || len(modelRuntime.Models) != 1 {
 		t.Fatalf("unexpected model runtime: %#v", modelRuntime)
+	}
+	if modelRuntime.ActiveCapabilityFalsePositiveCount != 1 || len(modelRuntime.CapabilityFalsePositives) != 1 {
+		t.Fatalf("unexpected capability diagnostics: %#v", modelRuntime)
+	}
+	capabilityRuntime := modelRuntime.CapabilityFalsePositives[0]
+	if capabilityRuntime.ModelID != "kilo/model-b:free" || capabilityRuntime.Capability != "tools" || capabilityRuntime.Reason != "invalid tool arguments" || capabilityRuntime.ExpiresAt == nil {
+		t.Fatalf("unexpected capability false-positive: %#v", capabilityRuntime)
 	}
 
 	raw, err := json.Marshal(row)
