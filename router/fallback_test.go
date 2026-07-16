@@ -698,6 +698,8 @@ func TestBuildFallbackRuntimeStatusRowsIncludesProviderRateLimitDegradation(t *t
 	time.Sleep(time.Millisecond)
 	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
 	fallback.RecordSuccess(deploymentID)
+	const outerErrorSentinel = "Bearer sk-task4-sensitive-key raw_upstream_body INJECTED_UPSTREAM_TEXT"
+	fallback.RecordFailure(deploymentID, outerErrorSentinel, false)
 
 	rows := buildFallbackRuntimeStatusRows(&fallback.Config{
 		Enabled: true,
@@ -722,13 +724,24 @@ func TestBuildFallbackRuntimeStatusRowsIncludesProviderRateLimitDegradation(t *t
 		t.Fatalf("unexpected provider degradation diagnostics: %#v", degradation)
 	}
 
-	raw, err := json.Marshal(row)
+	outerRaw, err := json.Marshal(row)
 	if err != nil {
-		t.Fatalf("marshal failed: %v", err)
+		t.Fatalf("marshal outer runtime row: %v", err)
 	}
-	for _, forbidden := range []string{"Bearer injected-token", "sk-secret", "raw_upstream_body", "INJECTED_UPSTREAM_TEXT"} {
-		if strings.Contains(string(raw), forbidden) {
-			t.Fatalf("runtime row leaked sensitive material %q: %s", forbidden, string(raw))
+	if !strings.Contains(string(outerRaw), outerErrorSentinel) {
+		t.Fatalf("outer runtime error fixture did not retain sentinel: %s", string(outerRaw))
+	}
+
+	nestedRaw, err := json.Marshal(row["provider_rate_limit_degradation"])
+	if err != nil {
+		t.Fatalf("marshal provider degradation: %v", err)
+	}
+	if !strings.Contains(string(nestedRaw), `"reason":"repeated rate limits"`) {
+		t.Fatalf("provider degradation did not retain fixed safe reason: %s", string(nestedRaw))
+	}
+	for _, forbidden := range []string{outerErrorSentinel, "Bearer", "sk-task4-sensitive-key", "raw_upstream_body", "INJECTED_UPSTREAM_TEXT"} {
+		if strings.Contains(string(nestedRaw), forbidden) {
+			t.Fatalf("provider degradation leaked sensitive material %q: %s", forbidden, string(nestedRaw))
 		}
 	}
 }
