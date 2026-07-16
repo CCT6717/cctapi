@@ -95,6 +95,11 @@ describe('GatewayStatus', () => {
     expect(container.textContent).toContain('持续限流降权 L2');
     expect(container.textContent).toContain('跨冷却限流 3 次');
     expect(container.textContent).toContain('预计恢复');
-    expect(container.textContent).not.toContain('持续限流降权 L1');
+
+    const inactiveCard = [...container.querySelectorAll('.gw-dep-card')].find((card) =>
+      card.textContent.includes('free:inactive'),
+    );
+    expect(inactiveCard).not.toBeNull();
+    expect(inactiveCard?.querySelector('.gw-degradation')).toBeNull();
   });
 });
