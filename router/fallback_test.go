@@ -689,6 +689,50 @@ func TestBuildFallbackRuntimeStatusRowsIncludesModelRuntime(t *testing.T) {
 	}
 }
 
+func TestBuildFallbackRuntimeStatusRowsIncludesProviderRateLimitDegradation(t *testing.T) {
+	deploymentID := "free:provider-degradation-runtime"
+	fallback.ResetProviderRateLimitDegradation(deploymentID)
+	t.Cleanup(func() { fallback.ResetProviderRateLimitDegradation(deploymentID) })
+
+	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
+	time.Sleep(time.Millisecond)
+	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
+	fallback.RecordSuccess(deploymentID)
+
+	rows := buildFallbackRuntimeStatusRows(&fallback.Config{
+		Enabled: true,
+		Deployments: map[string]fallback.DeploymentConfig{
+			deploymentID: {
+				Enabled:   true,
+				Pool:      "free",
+				RealModel: "provider-free",
+			},
+		},
+	})
+
+	row := findRuntimeStatusRow(t, rows, deploymentID)
+	degradation, ok := row["provider_rate_limit_degradation"].(fallback.ProviderRateLimitDegradationSnapshot)
+	if !ok {
+		t.Fatalf("expected provider degradation field, got %#v", row["provider_rate_limit_degradation"])
+	}
+	if !degradation.Active || degradation.Level != 1 || degradation.EpisodeCount != 2 {
+		t.Fatalf("unexpected provider degradation state: %#v", degradation)
+	}
+	if degradation.Reason != "repeated rate limits" || degradation.LastRateLimitedAt == nil || degradation.NextRecoveryAt == nil || degradation.ConsecutiveRecoverySuccesses != 1 {
+		t.Fatalf("unexpected provider degradation diagnostics: %#v", degradation)
+	}
+
+	raw, err := json.Marshal(row)
+	if err != nil {
+		t.Fatalf("marshal failed: %v", err)
+	}
+	for _, forbidden := range []string{"Bearer injected-token", "sk-secret", "raw_upstream_body", "INJECTED_UPSTREAM_TEXT"} {
+		if strings.Contains(string(raw), forbidden) {
+			t.Fatalf("runtime row leaked sensitive material %q: %s", forbidden, string(raw))
+		}
+	}
+}
+
 func TestBuildFallbackEditorChannel_NoKey(t *testing.T) {
 	channel := &dbmodel.Channel{
 		Id:   2,

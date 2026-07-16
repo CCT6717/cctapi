@@ -124,10 +124,22 @@ func TestResetDeploymentStateClearsOnlyTargetModelRuntime(t *testing.T) {
 
 	targetDeploymentID := "free:kilo-001122ff"
 	otherDeploymentID := "free:kilo-aabbccdd"
+	ResetProviderRateLimitDegradation(targetDeploymentID)
+	ResetProviderRateLimitDegradation(otherDeploymentID)
+	t.Cleanup(func() {
+		ResetProviderRateLimitDegradation(targetDeploymentID)
+		ResetProviderRateLimitDegradation(otherDeploymentID)
+	})
 	MarkFreeProviderModelRateLimited(targetDeploymentID, "model-a", "rate limited", RelayCooldownInput{})
 	MarkFreeProviderModelRateLimited(otherDeploymentID, "model-b", "rate limited", RelayCooldownInput{})
 	MarkFreeProviderModelCapabilityFalsePositive(targetDeploymentID, "model-a", "tools")
 	MarkFreeProviderModelCapabilityFalsePositive(otherDeploymentID, "model-b", "tools")
+	RecordProviderRateLimitEpisode(targetDeploymentID, 0)
+	time.Sleep(time.Millisecond)
+	RecordProviderRateLimitEpisode(targetDeploymentID, 0)
+	RecordProviderRateLimitEpisode(otherDeploymentID, 0)
+	time.Sleep(time.Millisecond)
+	RecordProviderRateLimitEpisode(otherDeploymentID, 0)
 
 	if err := ResetDeploymentState(targetDeploymentID); err != nil {
 		t.Fatalf("ResetDeploymentState failed: %v", err)
@@ -145,6 +157,12 @@ func TestResetDeploymentStateClearsOnlyTargetModelRuntime(t *testing.T) {
 	if !IsFreeProviderModelCapabilityFalsePositive(otherDeploymentID, "model-b", "tools") {
 		t.Fatal("reset affected another deployment capability false-positive")
 	}
+	if got := SnapshotProviderRateLimitDegradation(targetDeploymentID); got.Active || got.EpisodeCount != 0 {
+		t.Fatalf("target provider degradation was not reset: %#v", got)
+	}
+	if got := SnapshotProviderRateLimitDegradation(otherDeploymentID); !got.Active || got.EpisodeCount != 2 {
+		t.Fatalf("reset affected another deployment provider degradation: %#v", got)
+	}
 }
 
 func TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails(t *testing.T) {
@@ -158,8 +176,13 @@ func TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails(t *testin
 	}
 
 	deploymentID := "free:kilo-reset-failure"
+	ResetProviderRateLimitDegradation(deploymentID)
+	t.Cleanup(func() { ResetProviderRateLimitDegradation(deploymentID) })
 	MarkFreeProviderModelRateLimited(deploymentID, "model-a", "rate limited", RelayCooldownInput{})
 	MarkFreeProviderModelCapabilityFalsePositive(deploymentID, "model-a", "tools")
+	RecordProviderRateLimitEpisode(deploymentID, 0)
+	time.Sleep(time.Millisecond)
+	RecordProviderRateLimitEpisode(deploymentID, 0)
 	if _, err := EnsureDeploymentState(deploymentID, todayString()); err != nil {
 		t.Fatalf("EnsureDeploymentState failed: %v", err)
 	}
@@ -184,6 +207,9 @@ func TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails(t *testin
 	}
 	if !IsFreeProviderModelCapabilityFalsePositive(deploymentID, "model-a", "tools") {
 		t.Fatal("failed persistent reset cleared capability false-positive")
+	}
+	if got := SnapshotProviderRateLimitDegradation(deploymentID); !got.Active || got.EpisodeCount != 2 {
+		t.Fatalf("failed persistent reset cleared provider degradation: %#v", got)
 	}
 }
 
