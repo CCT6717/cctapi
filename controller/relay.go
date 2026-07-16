@@ -370,18 +370,24 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			upstreamAttemptCount, len(modelAttempts), virtualModel, dep.ID, dep.ChannelID, dep.RealModel)
 
 		// For non-streaming tools requests, buffer the response so we can validate
-		// tool-call arguments before committing them to the client.
+		// tool-call presence and arguments before committing them to the client.
 		needBufferResponse := !caps.Stream && caps.Tools && attempt.ProviderName == "kilo"
+		toolChoice := parseToolChoice(bodyBytes)
 		var bufWriter *bufferedResponseWriter
 		var originalWriter gin.ResponseWriter
 		if needBufferResponse {
 			originalWriter = c.Writer
 			bufWriter = newBufferedResponseWriter(originalWriter)
 			c.Writer = bufWriter
+			c.Set(ctxkey.FallbackDeferPostConsume, true)
+			c.Set(ctxkey.FallbackDeferredPostConsume, nil)
 		}
 
 		// Execute the relay helper
 		bizErr := execute(c, relayMode)
+		if needBufferResponse {
+			c.Set(ctxkey.FallbackDeferPostConsume, false)
+		}
 		durationMs := time.Since(attemptStart).Milliseconds()
 		releaseDeploymentSlot()
 		// Debug: log full attempt details to help diagnose fallback behaviour
@@ -394,10 +400,11 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 		}
 
 		if bizErr == nil {
-			// Validate non-streaming tool-call arguments before writing to client.
+			// Validate non-streaming tool calls before writing to client.
 			if needBufferResponse && bufWriter != nil {
 				c.Writer = originalWriter
-				if !validateToolCalls(bufWriter.buf.Bytes()) {
+				if !validateToolCallsForChoice(bufWriter.buf.Bytes(), toolChoice) {
+					settleDeferredPostConsume(c, false)
 					if attempt.ProviderName == "kilo" {
 						fallback.MarkFreeProviderModelCapabilityFalsePositive(dep.ID, dep.RealModel, "tools")
 						logger.Infof(ctx, "[fallback] model %s tools capability false-positive detected, rotating", dep.RealModel)
@@ -416,6 +423,7 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 						http.StatusBadGateway, fallback.ErrorCategoryTemporary, durationMs, false, i+1, upstreamAttemptCount)
 					continue
 				}
+				settleDeferredPostConsume(c, true)
 				bufWriter.flushTo(originalWriter)
 			}
 
@@ -841,32 +849,110 @@ func (writer *bufferedResponseWriter) flushTo(destination gin.ResponseWriter) {
 	}
 }
 
+func settleDeferredPostConsume(c *gin.Context, accepted bool) {
+	value, exists := c.Get(ctxkey.FallbackDeferredPostConsume)
+	c.Set(ctxkey.FallbackDeferredPostConsume, nil)
+	if !exists {
+		return
+	}
+	if settle, ok := value.(func(bool)); ok {
+		settle(accepted)
+	}
+}
+
+type toolChoiceContract struct {
+	required     bool
+	prohibited   bool
+	selectedName string
+}
+
+func parseToolChoice(body []byte) toolChoiceContract {
+	var request struct {
+		ToolChoice json.RawMessage `json:"tool_choice"`
+	}
+	if json.Unmarshal(body, &request) != nil || len(request.ToolChoice) == 0 {
+		return toolChoiceContract{}
+	}
+
+	var choice string
+	if json.Unmarshal(request.ToolChoice, &choice) == nil {
+		switch choice {
+		case "required":
+			return toolChoiceContract{required: true}
+		case "none":
+			return toolChoiceContract{prohibited: true}
+		default:
+			return toolChoiceContract{}
+		}
+	}
+
+	var selected struct {
+		Type     string `json:"type"`
+		Function *struct {
+			Name string `json:"name"`
+		} `json:"function"`
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(request.ToolChoice, &selected) != nil {
+		return toolChoiceContract{}
+	}
+	switch selected.Type {
+	case "function":
+		name := selected.Name
+		if selected.Function != nil && selected.Function.Name != "" {
+			name = selected.Function.Name
+		}
+		if name != "" {
+			return toolChoiceContract{required: true, selectedName: name}
+		}
+	case "tool":
+		if selected.Name != "" {
+			return toolChoiceContract{required: true, selectedName: selected.Name}
+		}
+	case "any":
+		return toolChoiceContract{required: true}
+	case "none":
+		return toolChoiceContract{prohibited: true}
+	}
+	return toolChoiceContract{}
+}
+
+func requiresToolCall(body []byte) bool {
+	return parseToolChoice(body).required
+}
+
 // validateToolCalls accepts the response schemas emitted by Chat Completions,
-// Responses, and Anthropic Messages. Responses without tool calls are valid;
-// every emitted tool call must contain a non-empty JSON object as arguments.
-func validateToolCalls(body []byte) bool {
+// Responses, and Anthropic Messages. Unless the request explicitly requires a
+// tool call, responses without one are valid. Every emitted tool call must
+// contain a non-empty JSON object as arguments.
+func validateToolCalls(body []byte, requireToolCall bool) bool {
+	return validateToolCallsForChoice(body, toolChoiceContract{required: requireToolCall})
+}
+
+func validateToolCallsForChoice(body []byte, toolChoice toolChoiceContract) bool {
 	var payload map[string]json.RawMessage
 	if err := json.Unmarshal(body, &payload); err != nil {
 		return false
 	}
 	if choices, ok := payload["choices"]; ok {
-		return validateChatCompletionToolCalls(choices)
+		return validateChatCompletionToolCalls(choices, toolChoice)
 	}
 	if output, ok := payload["output"]; ok {
-		return validateResponsesToolCalls(output)
+		return validateResponsesToolCalls(output, toolChoice)
 	}
 	if content, ok := payload["content"]; ok {
-		return validateAnthropicToolCalls(content)
+		return validateAnthropicToolCalls(content, toolChoice)
 	}
 	return false
 }
 
-func validateChatCompletionToolCalls(raw json.RawMessage) bool {
+func validateChatCompletionToolCalls(raw json.RawMessage, toolChoice toolChoiceContract) bool {
 	var choices []struct {
 		FinishReason string `json:"finish_reason"`
 		Message      struct {
 			ToolCalls []struct {
 				Function struct {
+					Name      string `json:"name"`
 					Arguments string `json:"arguments"`
 				} `json:"function"`
 			} `json:"tool_calls"`
@@ -876,10 +962,17 @@ func validateChatCompletionToolCalls(raw json.RawMessage) bool {
 		return false
 	}
 	for _, choice := range choices {
-		if choice.FinishReason == "tool_calls" && len(choice.Message.ToolCalls) == 0 {
+		toolCallCount := len(choice.Message.ToolCalls)
+		if toolChoice.prohibited && toolCallCount > 0 {
+			return false
+		}
+		if (toolChoice.required || choice.FinishReason == "tool_calls") && toolCallCount == 0 {
 			return false
 		}
 		for _, toolCall := range choice.Message.ToolCalls {
+			if toolChoice.selectedName != "" && toolCall.Function.Name != toolChoice.selectedName {
+				return false
+			}
 			if !validToolArguments(toolCall.Function.Arguments) {
 				return false
 			}
@@ -888,40 +981,60 @@ func validateChatCompletionToolCalls(raw json.RawMessage) bool {
 	return true
 }
 
-func validateResponsesToolCalls(raw json.RawMessage) bool {
+func validateResponsesToolCalls(raw json.RawMessage, toolChoice toolChoiceContract) bool {
 	var output []struct {
 		Type      string `json:"type"`
+		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
 	}
 	if err := json.Unmarshal(raw, &output); err != nil || len(output) == 0 {
 		return false
 	}
+	foundToolCall := false
 	for _, item := range output {
-		if item.Type == "function_call" && !validToolArguments(item.Arguments) {
-			return false
+		if item.Type == "function_call" {
+			if toolChoice.prohibited {
+				return false
+			}
+			foundToolCall = true
+			if toolChoice.selectedName != "" && item.Name != toolChoice.selectedName {
+				return false
+			}
+			if !validToolArguments(item.Arguments) {
+				return false
+			}
 		}
 	}
-	return true
+	return !toolChoice.required || foundToolCall
 }
 
-func validateAnthropicToolCalls(raw json.RawMessage) bool {
+func validateAnthropicToolCalls(raw json.RawMessage, toolChoice toolChoiceContract) bool {
 	var content []struct {
 		Type  string          `json:"type"`
+		Name  string          `json:"name"`
 		Input json.RawMessage `json:"input"`
 	}
 	if err := json.Unmarshal(raw, &content); err != nil || len(content) == 0 {
 		return false
 	}
+	foundToolCall := false
 	for _, block := range content {
 		if block.Type != "tool_use" {
 			continue
+		}
+		if toolChoice.prohibited {
+			return false
+		}
+		foundToolCall = true
+		if toolChoice.selectedName != "" && block.Name != toolChoice.selectedName {
+			return false
 		}
 		var arguments map[string]any
 		if len(block.Input) == 0 || json.Unmarshal(block.Input, &arguments) != nil || arguments == nil {
 			return false
 		}
 	}
-	return true
+	return !toolChoice.required || foundToolCall
 }
 
 func validToolArguments(value string) bool {

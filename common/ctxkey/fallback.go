@@ -24,4 +24,12 @@ const (
 
 	// FallbackAttemptCount is the attempt count (1-based)
 	FallbackAttemptCount = "fallback_attempt_count"
+
+	// FallbackDeferPostConsume delays quota settlement until the buffered
+	// fallback response has passed protocol validation.
+	FallbackDeferPostConsume = "fallback_defer_post_consume"
+
+	// FallbackDeferredPostConsume stores a one-shot func(bool) settlement
+	// callback. true commits usage; false returns pre-consumed quota.
+	FallbackDeferredPostConsume = "fallback_deferred_post_consume"
 )

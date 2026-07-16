@@ -36,6 +36,10 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		"free:kilo-00000006",
 		"free:kilo-00000007",
 		"free:kilo-00000008",
+		"free:kilo-00000011",
+		"free:kilo-00000012",
+		"free:kilo-00000013",
+		"free:kilo-00000014",
 	})
 
 	t.Run("rate limit rotates to next Kilo model without provider penalty", func(t *testing.T) {
@@ -272,6 +276,152 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		}
 	})
 
+	t.Run("missing required Kilo tool call rotates before writing without provider penalty", func(t *testing.T) {
+		kiloID := "free:kilo-00000011"
+		pollinationsID := "free:pollinations-00000011"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		missingToolResponse := `{"choices":[{"message":{"role":"assistant","content":"I cannot call tools"},"finish_reason":"stop"}]}`
+		validResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"ok\"}"}}]},"finish_reason":"tool_calls"}]}`
+		switchEventsBefore := fixture.switchEventCount(t)
+		var attempted []string
+		settlementCommitted := 0
+		settlementRolledBack := 0
+		c, recorder := newRelayRotationRequiredToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			modelID := c.GetString(ctxkey.FallbackRealModel)
+			attempted = append(attempted, modelID)
+			c.Set("fallback_deferred_post_consume", func(accepted bool) {
+				if accepted {
+					settlementCommitted++
+				} else {
+					settlementRolledBack++
+				}
+			})
+			if modelID == "kilo/a:free" {
+				_, _ = c.Writer.Write([]byte(missingToolResponse))
+				return nil
+			}
+			_, _ = c.Writer.Write([]byte(validResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free", "kilo/b:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != validResponse {
+			t.Fatalf("client response = %q, want only valid second response", recorder.Body.String())
+		}
+		if !fallback.IsFreeProviderModelCapabilityFalsePositive(kiloID, "kilo/a:free", "tools") {
+			t.Fatal("missing-tool model was not isolated")
+		}
+		providerRuntime := fallback.SnapshotRuntimeState(kiloID)
+		if providerRuntime.FailureCount != 0 || providerRuntime.RateLimitScore != 0 {
+			t.Fatalf("missing required tool call penalized provider: %+v", providerRuntime)
+		}
+		_, requestCount, errorCount, err := fallback.GetDeploymentStats(kiloID)
+		if err != nil {
+			t.Fatalf("GetDeploymentStats: %v", err)
+		}
+		if requestCount != 0 || errorCount != 0 {
+			t.Fatalf("missing required tool call changed persistent provider accounting: requests=%d errors=%d", requestCount, errorCount)
+		}
+		if cooldown := fallback.SnapshotDeploymentCooldown(kiloID); cooldown.CooldownActive {
+			t.Fatalf("missing required tool call cooled provider: %+v", cooldown)
+		}
+		attemptMetrics := fallback.SnapshotAttemptMetrics(kiloID)
+		if attemptMetrics.FailureCount != 1 || attemptMetrics.SuccessCount != 1 {
+			t.Fatalf("required-tools rotation attempt metrics = %+v, want one failure and one success", attemptMetrics)
+		}
+		if settlementCommitted != 1 || settlementRolledBack != 1 {
+			t.Fatalf("deferred settlements committed=%d rolled_back=%d, want 1/1", settlementCommitted, settlementRolledBack)
+		}
+		if count := fixture.switchEventCount(t); count != switchEventsBefore {
+			t.Fatalf("same-deployment required-tools rotation changed switch events from %d to %d", switchEventsBefore, count)
+		}
+	})
+
+	t.Run("selected Kilo tool function mismatch rotates", func(t *testing.T) {
+		kiloID := "free:kilo-00000013"
+		pollinationsID := "free:pollinations-00000013"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		wrongFunctionResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"other","arguments":"{\"q\":\"wrong\"}"}}]},"finish_reason":"tool_calls"}]}`
+		validResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"ok\"}"}}]},"finish_reason":"tool_calls"}]}`
+		var attempted []string
+		c, recorder := newRelayRotationSelectedToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			modelID := c.GetString(ctxkey.FallbackRealModel)
+			attempted = append(attempted, modelID)
+			if modelID == "kilo/a:free" {
+				_, _ = c.Writer.Write([]byte(wrongFunctionResponse))
+				return nil
+			}
+			_, _ = c.Writer.Write([]byte(validResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free", "kilo/b:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != validResponse {
+			t.Fatalf("client response = %q, want selected-function response", recorder.Body.String())
+		}
+	})
+
+	t.Run("Kilo tool call under none rotates", func(t *testing.T) {
+		kiloID := "free:kilo-00000014"
+		pollinationsID := "free:pollinations-00000014"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		unexpectedToolResponse := `{"choices":[{"message":{"tool_calls":[{"function":{"name":"lookup","arguments":"{\"q\":\"unexpected\"}"}}]},"finish_reason":"tool_calls"}]}`
+		textResponse := `{"choices":[{"message":{"role":"assistant","content":"No tool called"},"finish_reason":"stop"}]}`
+		var attempted []string
+		c, recorder := newRelayRotationNoToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			modelID := c.GetString(ctxkey.FallbackRealModel)
+			attempted = append(attempted, modelID)
+			if modelID == "kilo/a:free" {
+				_, _ = c.Writer.Write([]byte(unexpectedToolResponse))
+				return nil
+			}
+			_, _ = c.Writer.Write([]byte(textResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free", "kilo/b:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != textResponse {
+			t.Fatalf("client response = %q, want no-tool response", recorder.Body.String())
+		}
+	})
+
+	t.Run("missing auto Kilo tool call is accepted without isolation", func(t *testing.T) {
+		kiloID := "free:kilo-00000012"
+		pollinationsID := "free:pollinations-00000012"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		textResponse := `{"choices":[{"message":{"role":"assistant","content":"No tool needed"},"finish_reason":"stop"}]}`
+		var attempted []string
+		c, recorder := newRelayRotationAutoToolsContext()
+		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+			attempted = append(attempted, c.GetString(ctxkey.FallbackRealModel))
+			_, _ = c.Writer.Write([]byte(textResponse))
+			return nil
+		})
+
+		if want := []string{"kilo/a:free"}; !reflect.DeepEqual(attempted, want) {
+			t.Fatalf("attempted models = %v, want %v", attempted, want)
+		}
+		if recorder.Body.String() != textResponse {
+			t.Fatalf("client response = %q, want first model response", recorder.Body.String())
+		}
+		if fallback.IsFreeProviderModelCapabilityFalsePositive(kiloID, "kilo/a:free", "tools") {
+			t.Fatal("auto tool choice incorrectly isolated model")
+		}
+	})
+
 	t.Run("all invalid Kilo tool models fall back to Pollinations without provider penalty", func(t *testing.T) {
 		kiloID := "free:kilo-00000007"
 		pollinationsID := "free:pollinations-00000007"
@@ -484,6 +634,46 @@ func newRelayRotationToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
 	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"look up ok"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}]}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationRequiredToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"look up ok"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}],"tool_choice":"required"}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationAutoToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"look up ok"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}],"tool_choice":"auto"}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationSelectedToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"look up ok"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}],"tool_choice":{"type":"function","function":{"name":"lookup"}}}`)
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
+	c.Request.Header.Set("Content-Type", "application/json")
+	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
+	return c, recorder
+}
+
+func newRelayRotationNoToolsContext() (*gin.Context, *httptest.ResponseRecorder) {
+	recorder := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(recorder)
+	body := []byte(`{"model":"test/kilo-rotation","messages":[{"role":"user","content":"answer without tools"}],"tools":[{"type":"function","function":{"name":"lookup","parameters":{"type":"object","properties":{"q":{"type":"string"}},"required":["q"]}}}],"tool_choice":"none"}`)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader(body))
 	c.Request.Header.Set("Content-Type", "application/json")
 	c.Set(ctxkey.RequestModel, relayRotationVirtualModel)
