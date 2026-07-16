@@ -290,7 +290,6 @@ class SoakScriptTests(unittest.TestCase):
                             "episode_count": -3,
                             "consecutive_recovery_successes": True,
                             "reason": "repeated rate limits",
-                            "last_rate_limited_at": "2026-07-16T01:02:03",
                             "next_recovery_at": "2026-07-16T01:02:03Z",
                         },
                     },
@@ -306,6 +305,8 @@ class SoakScriptTests(unittest.TestCase):
                 {
                     "deployment_id": "kilo/free-1",
                     "success_count": 7,
+                    "degradation_valid": True,
+                    "invalid_fields": [],
                     "active": True,
                     "level": 3,
                     "episode_count": 0,
@@ -331,6 +332,8 @@ class SoakScriptTests(unittest.TestCase):
             {
                 "deployment_id": "kilo/free-1",
                 "success_count": 5,
+                "degradation_valid": True,
+                "invalid_fields": [],
                 "active": False,
                 "level": 0,
                 "episode_count": 0,
@@ -381,6 +384,64 @@ class SoakScriptTests(unittest.TestCase):
         self.assertEqual(
             result["missing_deployment_ids"],
             ["kilo/free-1", "kilo/free-2"],
+        )
+        self.assertFalse(result["all_level_zero"])
+        self.assertFalse(result["no_retained_observations"])
+
+    def test_missing_degradation_state_is_invalid_for_successful_deployment(self):
+        post_snapshots = soak.parse_runtime_degradation_snapshots(
+            {
+                "success": True,
+                "data": [
+                    {
+                        "deployment_id": "kilo/free-1",
+                        "success_count": 5,
+                    }
+                ],
+            }
+        )
+
+        self.assertFalse(post_snapshots[0]["degradation_valid"])
+        self.assertEqual(
+            post_snapshots[0]["invalid_fields"],
+            ["provider_rate_limit_degradation"],
+        )
+        result = soak.summarize_successful_deployment_degradation(
+            [{"deployment_id": "kilo/free-1", "success_count": 4}],
+            post_snapshots,
+        )
+        self.assertFalse(result["all_level_zero"])
+        self.assertFalse(result["no_retained_observations"])
+
+    def test_malformed_degradation_timestamp_fails_successful_deployment(self):
+        post_snapshots = soak.parse_runtime_degradation_snapshots(
+            {
+                "success": True,
+                "data": [
+                    {
+                        "deployment_id": "kilo/free-1",
+                        "success_count": 5,
+                        "provider_rate_limit_degradation": {
+                            "active": False,
+                            "level": 0,
+                            "episode_count": 0,
+                            "consecutive_recovery_successes": 0,
+                            "last_rate_limited_at": "not-a-timestamp",
+                            "next_recovery_at": [],
+                        },
+                    }
+                ],
+            }
+        )
+
+        self.assertFalse(post_snapshots[0]["degradation_valid"])
+        self.assertEqual(
+            post_snapshots[0]["invalid_fields"],
+            ["last_rate_limited_at", "next_recovery_at"],
+        )
+        result = soak.summarize_successful_deployment_degradation(
+            [{"deployment_id": "kilo/free-1", "success_count": 4}],
+            post_snapshots,
         )
         self.assertFalse(result["all_level_zero"])
         self.assertFalse(result["no_retained_observations"])

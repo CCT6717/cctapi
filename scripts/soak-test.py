@@ -310,8 +310,10 @@ def parse_runtime_degradation_snapshots(payload):
         ):
             continue
         raw = row.get("provider_rate_limit_degradation")
+        invalid_fields = []
         if not isinstance(raw, dict):
             raw = {}
+            invalid_fields.append("provider_rate_limit_degradation")
 
         def safe_nonnegative_int(key, maximum=None):
             value = raw.get(key, 0)
@@ -329,6 +331,8 @@ def parse_runtime_degradation_snapshots(payload):
             if not isinstance(row.get("success_count"), bool)
             and str(row.get("success_count", "")).lstrip("+-").isdigit()
             else 0,
+            "degradation_valid": not invalid_fields,
+            "invalid_fields": invalid_fields,
             "active": raw.get("active") is True,
             "level": safe_nonnegative_int("level", 3),
             "episode_count": safe_nonnegative_int("episode_count"),
@@ -339,16 +343,22 @@ def parse_runtime_degradation_snapshots(payload):
         if snapshot["active"] and raw.get("reason") == "repeated rate limits":
             snapshot["reason"] = "repeated rate limits"
         for key in ("last_rate_limited_at", "next_recovery_at"):
-            value = raw.get(key)
+            if key not in raw:
+                continue
+            value = raw[key]
             if not isinstance(value, str):
+                invalid_fields.append(key)
                 continue
             try:
                 parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
             except ValueError:
+                invalid_fields.append(key)
                 continue
             if parsed.tzinfo is None:
+                invalid_fields.append(key)
                 continue
             snapshot[key] = parsed.astimezone(timezone.utc).isoformat()
+        snapshot["degradation_valid"] = not invalid_fields
         snapshots.append(snapshot)
 
     return sorted(snapshots, key=lambda item: item["deployment_id"])
@@ -403,11 +413,16 @@ def summarize_successful_deployment_degradation(pre_snapshots, post_snapshots):
         set(pre_snapshots_by_id).symmetric_difference(post_snapshots_by_id)
     )
     all_level_zero = bool(deployment_ids) and not missing_deployment_ids and all(
-        not snapshot.get("active") and snapshot.get("level") == 0
+        snapshot.get("degradation_valid") is True
+        and snapshot.get("invalid_fields") == []
+        and not snapshot.get("active")
+        and snapshot.get("level") == 0
         for snapshot in snapshots
     )
     no_retained_observations = bool(deployment_ids) and not missing_deployment_ids and all(
-        snapshot.get("episode_count") == 0
+        snapshot.get("degradation_valid") is True
+        and snapshot.get("invalid_fields") == []
+        and snapshot.get("episode_count") == 0
         and snapshot.get("consecutive_recovery_successes") == 0
         and "last_rate_limited_at" not in snapshot
         and "next_recovery_at" not in snapshot
