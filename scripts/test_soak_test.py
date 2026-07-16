@@ -1,6 +1,7 @@
 import copy
 import importlib.util
 import io
+import json
 import sqlite3
 import tempfile
 import unittest
@@ -272,6 +273,117 @@ class SoakScriptTests(unittest.TestCase):
         self.assertEqual(record["status"], 429)
         self.assertEqual(record["request_id"], "request-429")
         self.assertEqual(record["retry_after"], "60")
+
+    def test_runtime_degradation_snapshots_allowlist_and_clamp_safe_fields(self):
+        snapshots = soak.parse_runtime_degradation_snapshots(
+            {
+                "success": True,
+                "data": [
+                    {
+                        "deployment_id": "kilo/free-1",
+                        "success_count": "7",
+                        "access_token": "secret",
+                        "raw_body": {"secret": "secret"},
+                        "provider_rate_limit_degradation": {
+                            "active": True,
+                            "level": 99,
+                            "episode_count": -3,
+                            "consecutive_recovery_successes": True,
+                            "reason": "repeated rate limits",
+                            "last_rate_limited_at": "2026-07-16T01:02:03",
+                            "next_recovery_at": "2026-07-16T01:02:03Z",
+                        },
+                    },
+                    "not-a-row",
+                    {"deployment_id": "invalid deployment id"},
+                ],
+            }
+        )
+
+        self.assertEqual(
+            snapshots,
+            [
+                {
+                    "deployment_id": "kilo/free-1",
+                    "success_count": 7,
+                    "active": True,
+                    "level": 3,
+                    "episode_count": 0,
+                    "consecutive_recovery_successes": 0,
+                    "reason": "repeated rate limits",
+                    "next_recovery_at": "2026-07-16T01:02:03+00:00",
+                }
+            ],
+        )
+        self.assertNotIn("access_token", json.dumps(snapshots))
+        self.assertNotIn("raw_body", json.dumps(snapshots))
+
+    def test_runtime_degradation_snapshots_reject_invalid_top_level_shapes(self):
+        with self.assertRaisesRegex(RuntimeError, "invalid data shape"):
+            soak.parse_runtime_degradation_snapshots({"success": True, "data": {}})
+
+    def test_successful_deployments_come_from_success_count_delta(self):
+        pre_snapshots = [
+            {"deployment_id": "kilo/free-1", "success_count": 4},
+            {"deployment_id": "kilo/free-2", "success_count": 9},
+        ]
+        post_snapshots = [
+            {
+                "deployment_id": "kilo/free-1",
+                "success_count": 5,
+                "active": False,
+                "level": 0,
+                "episode_count": 0,
+                "consecutive_recovery_successes": 0,
+            },
+            {
+                "deployment_id": "kilo/free-2",
+                "success_count": 9,
+                "active": True,
+                "level": 3,
+                "episode_count": 2,
+                "last_rate_limited_at": "2026-07-16T01:02:03+00:00",
+            },
+        ]
+
+        result = soak.summarize_successful_deployment_degradation(
+            pre_snapshots,
+            post_snapshots,
+        )
+
+        self.assertEqual(result["deployment_ids"], ["kilo/free-1"])
+        self.assertEqual(result["missing_deployment_ids"], [])
+        self.assertTrue(result["all_level_zero"])
+        self.assertTrue(result["no_retained_observations"])
+
+    def test_degradation_validation_fails_closed_without_success_delta_snapshots(self):
+        result = soak.summarize_successful_deployment_degradation([], [])
+
+        self.assertEqual(result["deployment_ids"], [])
+        self.assertFalse(result["all_level_zero"])
+        self.assertFalse(result["no_retained_observations"])
+
+    def test_degradation_validation_fails_closed_for_missing_snapshot(self):
+        result = soak.summarize_successful_deployment_degradation(
+            [{"deployment_id": "kilo/free-1", "success_count": 4}],
+            [
+                {
+                    "deployment_id": "kilo/free-2",
+                    "success_count": 5,
+                    "active": False,
+                    "level": 0,
+                    "episode_count": 0,
+                    "consecutive_recovery_successes": 0,
+                }
+            ],
+        )
+
+        self.assertEqual(
+            result["missing_deployment_ids"],
+            ["kilo/free-1", "kilo/free-2"],
+        )
+        self.assertFalse(result["all_level_zero"])
+        self.assertFalse(result["no_retained_observations"])
 
 
 if __name__ == "__main__":
