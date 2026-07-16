@@ -65,7 +65,7 @@ func ensureRuntimeStateLocked(deploymentID string, now time.Time) *DeploymentRun
 }
 
 func recordProviderRateLimitEpisodeAtLocked(state *DeploymentRuntimeState, now, cooldownUntil time.Time) {
-	if !state.LastProviderRateLimitedAt.IsZero() && now.Sub(state.LastProviderRateLimitedAt) > providerRateLimitObservationWindow {
+	if !state.LastProviderRateLimitedAt.IsZero() && now.Sub(state.LastProviderRateLimitedAt) >= providerRateLimitObservationWindow {
 		resetProviderRateLimitDegradationLocked(state)
 	}
 

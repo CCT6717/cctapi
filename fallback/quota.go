@@ -192,12 +192,13 @@ func RecordFailure(deploymentID, errMsg string, isRateLimit bool) {
 func DecayRateLimitScores() {
 	runtimeStatesMu.Lock()
 	defer runtimeStatesMu.Unlock()
-	cutoff := time.Now().Add(-2 * time.Minute)
+	now := time.Now()
+	cutoff := now.Add(-2 * time.Minute)
 	for _, s := range runtimeStates {
 		if s.RateLimitScore > 0 && s.LastErrorAt.Before(cutoff) {
 			s.RateLimitScore--
 		}
-		decayProviderRateLimitDegradationAtLocked(s, time.Now())
+		decayProviderRateLimitDegradationAtLocked(s, now)
 	}
 }
 

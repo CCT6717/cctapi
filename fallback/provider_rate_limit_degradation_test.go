@@ -45,6 +45,16 @@ func TestProviderRateLimitDegradationEpisodeTransitions(t *testing.T) {
 			},
 		},
 		{
+			name: "observation expires exactly at fifteen minutes",
+			records: []time.Time{
+				base,
+				base.Add(15 * time.Minute),
+			},
+			want: ProviderRateLimitDegradationSnapshot{
+				EpisodeCount: 1,
+			},
+		},
+		{
 			name: "observation expires after fifteen minutes",
 			records: []time.Time{
 				base,
