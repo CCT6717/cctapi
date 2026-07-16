@@ -191,6 +191,37 @@ func TestProviderRateLimitDegradationDecayConsumesEveryElapsedWindow(t *testing.
 	}
 }
 
+func TestProviderRateLimitDegradationSuccessConsumesOverdueRecoveryFirst(t *testing.T) {
+	base := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	state := &DeploymentRuntimeState{DeploymentID: "provider-rate-limit-overdue-success"}
+	for i := 0; i < 4; i++ {
+		now := base.Add(time.Duration(i) * time.Minute)
+		recordProviderRateLimitEpisodeAtLocked(state, now, now.Add(time.Minute-time.Nanosecond))
+	}
+
+	recordProviderRateLimitDegradationSuccessAtLocked(state, base.Add(23*time.Minute))
+	got := snapshotProviderRateLimitDegradationLocked(state)
+	if got.Active || got.Level != 0 || got.EpisodeCount != 0 {
+		t.Fatalf("snapshot = %#v, want two overdue windows plus success to clear level three", got)
+	}
+}
+
+func TestProviderRateLimitDegradationDecayPreservesRecoverySuccesses(t *testing.T) {
+	base := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	state := &DeploymentRuntimeState{DeploymentID: "provider-rate-limit-decay-success-counter"}
+	for i := 0; i < 4; i++ {
+		now := base.Add(time.Duration(i) * time.Minute)
+		recordProviderRateLimitEpisodeAtLocked(state, now, now.Add(time.Minute-time.Nanosecond))
+	}
+	recordProviderRateLimitDegradationSuccessAtLocked(state, base.Add(4*time.Minute))
+
+	decayProviderRateLimitDegradationAtLocked(state, base.Add(13*time.Minute))
+	got := snapshotProviderRateLimitDegradationLocked(state)
+	if got.Level != 1 || got.ConsecutiveRecoverySuccesses != 1 {
+		t.Fatalf("snapshot = %#v, want time decay to preserve one recovery success", got)
+	}
+}
+
 func TestProviderRateLimitDegradationSnapshotUsesSafeReason(t *testing.T) {
 	base := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	state := &DeploymentRuntimeState{DeploymentID: "provider-rate-limit-safe-reason"}

@@ -234,7 +234,7 @@
     },
     "deterministic_transition_verification": {
       "source": "deterministic_go_tests",
-      "verified_at": "2026-07-16T19:13:19.8549849+08:00",
+      "verified_at": "2026-07-16T19:22:34.5345614+08:00",
       "commands": [
         "go test ./fallback -run 'TestProviderRateLimitDegradation|TestResetProviderRateLimitDegradation|TestResetDeploymentState' -count=1 -v",
         "go test ./controller -run TestRelayWithFallbackRotatesKiloModels -count=1 -v"
@@ -290,6 +290,14 @@
           "kilo_provider_episode_count": 1,
           "pollinations_success": true,
           "intermediate_model_429_isolated": true
+        },
+        {
+          "scenario": "overdue_quiet_windows_before_success",
+          "starting_level": 3,
+          "elapsed_windows": 2,
+          "successes": 1,
+          "final_level": 0,
+          "recovery_success_counter_preserved_by_decay": true
         }
       ],
       "test_names": [
@@ -298,7 +306,9 @@
         "TestProviderRateLimitDegradationDecayConsumesEveryElapsedWindow",
         "TestResetProviderRateLimitDegradationResetsOnlyTarget",
         "TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails",
-        "TestRelayWithFallbackRotatesKiloModels"
+        "TestRelayWithFallbackRotatesKiloModels",
+        "TestProviderRateLimitDegradationSuccessConsumesOverdueRecoveryFirst",
+        "TestProviderRateLimitDegradationDecayPreservesRecoverySuccesses"
       ]
     }
   },

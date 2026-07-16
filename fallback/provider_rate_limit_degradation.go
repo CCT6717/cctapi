@@ -87,6 +87,7 @@ func recordProviderRateLimitEpisodeAtLocked(state *DeploymentRuntimeState, now, 
 }
 
 func recordProviderRateLimitDegradationSuccessAtLocked(state *DeploymentRuntimeState, now time.Time) {
+	decayProviderRateLimitDegradationAtLocked(state, now)
 	if state.RateLimitDegradationLevel == 0 {
 		resetProviderRateLimitDegradationLocked(state)
 		return
@@ -98,7 +99,9 @@ func recordProviderRateLimitDegradationSuccessAtLocked(state *DeploymentRuntimeS
 		resetProviderRateLimitDegradationLocked(state)
 		return
 	}
-	state.NextDegradationRecoveryAt = now.Add(providerRateLimitRecoveryInterval)
+	if state.NextDegradationRecoveryAt.IsZero() {
+		state.NextDegradationRecoveryAt = now.Add(providerRateLimitRecoveryInterval)
+	}
 }
 
 func decayProviderRateLimitDegradationAtLocked(state *DeploymentRuntimeState, now time.Time) {
@@ -113,7 +116,6 @@ func decayProviderRateLimitDegradationAtLocked(state *DeploymentRuntimeState, no
 	}
 
 	state.RateLimitDegradationLevel -= elapsedWindows
-	state.ConsecutiveRecoverySuccesses = 0
 	state.NextDegradationRecoveryAt = state.NextDegradationRecoveryAt.Add(time.Duration(elapsedWindows) * providerRateLimitRecoveryInterval)
 }
 
