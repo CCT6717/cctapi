@@ -75,9 +75,10 @@ Last verified handoff: 2026-07-16.
 - Provider rate-limit degradation validation completed on 2026-07-16:
   - Repeated confirmed provider-level HTTP 429 episodes lower automatic-routing priority while keeping degraded deployments eligible; normal successes recover the degradation state.
   - Fresh backend validation passed focused tests, scoped race tests, full Go tests, `go vet ./...`, and `go build ./...`.
-  - Fresh frontend validation passed ESLint, 10 Vitest suites / 45 tests, Vite production build, Storybook build, and 16/16 isolated Playwright desktop/mobile checks.
+  - Fresh frontend validation passed ESLint, 10 Vitest suites / 45 tests, Vite production build, Storybook build, and 18/18 isolated Playwright desktop/mobile checks, including the responsive degradation diagnostic.
   - A paced `openrouter/auto` soak through Kilo completed 20/20 requests across chat, stream, tools, and Responses. Two internal model-level 429 events were rotated transparently; the successful Kilo deployment remained inactive at degradation L0 with zero retained episodes.
-  - Sanitized evidence: `docs/evidence/provider-rate-limit-degradation-2026-07-16.json`.
+  - Deterministic Go tests separately verified cross-cooldown escalation, exact 15-minute boundary handling, success/quiet-window/manual recovery, and provider fallback.
+  - Sanitized live and deterministic evidence: `docs/evidence/provider-rate-limit-degradation-2026-07-16.json`.
 - Preview release tag for this handoff: `v0.1.0-freellmapi-preview`.
 - Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 10.5.0.
 - react-scripts and Webpack dependency chain fully removed.

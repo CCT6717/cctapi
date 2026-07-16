@@ -45,13 +45,16 @@ func TestProviderRateLimitDegradationEpisodeTransitions(t *testing.T) {
 			},
 		},
 		{
-			name: "observation expires exactly at fifteen minutes",
+			name: "observation includes exactly fifteen minutes",
 			records: []time.Time{
 				base,
 				base.Add(15 * time.Minute),
 			},
 			want: ProviderRateLimitDegradationSnapshot{
-				EpisodeCount: 1,
+				Active:       true,
+				Level:        1,
+				EpisodeCount: 2,
+				Reason:       providerRateLimitDegradationReason,
 			},
 		},
 		{
@@ -132,7 +135,7 @@ func TestProviderRateLimitDegradationLongCooldownDefersObservationExpiry(t *test
 	}
 }
 
-func TestProviderRateLimitDegradationRecoversOneLevelAfterThreeSuccesses(t *testing.T) {
+func TestProviderRateLimitDegradationRecoversOneLevelPerSuccess(t *testing.T) {
 	base := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	state := &DeploymentRuntimeState{DeploymentID: "provider-rate-limit-success-recovery"}
 	for i := 0; i < 4; i++ {
@@ -140,13 +143,18 @@ func TestProviderRateLimitDegradationRecoversOneLevelAfterThreeSuccesses(t *test
 		recordProviderRateLimitEpisodeAtLocked(state, now, now.Add(time.Minute-time.Nanosecond))
 	}
 
-	for i := 1; i <= 3; i++ {
+	for i, wantLevel := range []int{2, 1, 0} {
 		recordProviderRateLimitDegradationSuccessAtLocked(state, base.Add(5*time.Minute+time.Duration(i)*time.Second))
-	}
-
-	got := snapshotProviderRateLimitDegradationLocked(state)
-	if got.Level != 2 || got.ConsecutiveRecoverySuccesses != 0 {
-		t.Fatalf("snapshot = %#v, want level 2 with cleared recovery successes", got)
+		got := snapshotProviderRateLimitDegradationLocked(state)
+		if got.Level != wantLevel {
+			t.Fatalf("success %d snapshot = %#v, want level %d", i+1, got, wantLevel)
+		}
+		if wantLevel > 0 && got.ConsecutiveRecoverySuccesses != i+1 {
+			t.Fatalf("success %d recovery successes = %d, want %d", i+1, got.ConsecutiveRecoverySuccesses, i+1)
+		}
+		if wantLevel == 0 && (got.Active || got.EpisodeCount != 0 || got.ConsecutiveRecoverySuccesses != 0) {
+			t.Fatalf("cleared snapshot = %#v, want all degradation fields reset", got)
+		}
 	}
 }
 
@@ -165,6 +173,21 @@ func TestProviderRateLimitDegradationDecaysAfterTenMinutes(t *testing.T) {
 	}
 	if got.NextRecoveryAt == nil || !got.NextRecoveryAt.Equal(base.Add(22*time.Minute)) {
 		t.Fatalf("next recovery = %v, want %v", got.NextRecoveryAt, base.Add(22*time.Minute))
+	}
+}
+
+func TestProviderRateLimitDegradationDecayConsumesEveryElapsedWindow(t *testing.T) {
+	base := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	state := &DeploymentRuntimeState{DeploymentID: "provider-rate-limit-multi-window-decay"}
+	for i := 0; i < 4; i++ {
+		now := base.Add(time.Duration(i) * time.Minute)
+		recordProviderRateLimitEpisodeAtLocked(state, now, now.Add(time.Minute-time.Nanosecond))
+	}
+
+	decayProviderRateLimitDegradationAtLocked(state, base.Add(33*time.Minute))
+	got := snapshotProviderRateLimitDegradationLocked(state)
+	if got.Active || got.Level != 0 || got.EpisodeCount != 0 || got.NextRecoveryAt != nil {
+		t.Fatalf("snapshot = %#v, want three elapsed windows to clear level three", got)
 	}
 }
 
@@ -224,6 +247,11 @@ func TestProviderRateLimitDegradationConcurrentAccess(t *testing.T) {
 				RecordSuccess(deploymentID)
 				_ = SnapshotProviderRateLimitDegradation(deploymentID)
 				DecayRateLimitScores()
+				ResetProviderRateLimitDegradation(deploymentID)
+				_ = SortByStrategy([]DeploymentConfig{
+					{ID: deploymentID, Pool: "free", RealModel: "m1"},
+					{ID: deploymentID + "-peer", Pool: "free", RealModel: "m2"},
+				}, StrategyFreeFirst)
 			}
 		}()
 	}

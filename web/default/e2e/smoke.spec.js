@@ -86,4 +86,48 @@ test.describe('Responsive admin pages', () => {
       );
     }
   });
+
+  test('provider degradation diagnostic fits the mobile viewport', async ({ page }) => {
+    await login(page);
+    await page.route('**/api/fallback/virtual-models', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: [{ name: 'free/auto', strategy: 'free_first', enabled: true, pools: ['free'] }],
+        }),
+      }),
+    );
+    await page.route('**/api/fallback/deployments/runtime-status', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          success: true,
+          data: [{
+            deployment_id: 'free:active',
+            pool: 'free',
+            health: 'rate_limited',
+            provider_rate_limit_degradation: {
+              active: true,
+              level: 2,
+              episode_count: 3,
+              next_recovery_at: '2026-07-16T08:30:00Z',
+            },
+          }],
+        }),
+      }),
+    );
+
+    await page.goto('/fallback/status');
+    await page.locator('.gw-row-top').click();
+    const diagnostic = page.locator('.gw-degradation');
+    await expect(diagnostic).toBeVisible();
+    await expect(diagnostic).toContainText('持续限流降权 L2');
+    if (page.viewportSize().width <= 768) {
+      await expect(diagnostic).toHaveCSS('flex-direction', 'column');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    }
+  });
 });

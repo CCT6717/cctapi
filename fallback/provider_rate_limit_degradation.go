@@ -8,7 +8,6 @@ const (
 	providerRateLimitDegradationMax     = 3
 	providerRateLimitDegradationPenalty = 25
 	providerRateLimitDegradationReason  = "repeated rate limits"
-	providerRateLimitRecoverySuccesses  = 3
 )
 
 type ProviderRateLimitDegradationSnapshot struct {
@@ -70,7 +69,7 @@ func recordProviderRateLimitEpisodeAtLocked(state *DeploymentRuntimeState, now, 
 			return
 		}
 	}
-	if !state.LastProviderRateLimitedAt.IsZero() && now.Sub(state.LastProviderRateLimitedAt) >= providerRateLimitObservationWindow {
+	if !state.LastProviderRateLimitedAt.IsZero() && now.Sub(state.LastProviderRateLimitedAt) > providerRateLimitObservationWindow {
 		resetProviderRateLimitDegradationLocked(state)
 	}
 
@@ -94,12 +93,7 @@ func recordProviderRateLimitDegradationSuccessAtLocked(state *DeploymentRuntimeS
 	}
 
 	state.ConsecutiveRecoverySuccesses++
-	if state.ConsecutiveRecoverySuccesses < providerRateLimitRecoverySuccesses {
-		return
-	}
-
 	state.RateLimitDegradationLevel--
-	state.ConsecutiveRecoverySuccesses = 0
 	if state.RateLimitDegradationLevel == 0 {
 		resetProviderRateLimitDegradationLocked(state)
 		return
@@ -112,13 +106,15 @@ func decayProviderRateLimitDegradationAtLocked(state *DeploymentRuntimeState, no
 		return
 	}
 
-	state.RateLimitDegradationLevel--
-	state.ConsecutiveRecoverySuccesses = 0
-	if state.RateLimitDegradationLevel == 0 {
+	elapsedWindows := int(now.Sub(state.NextDegradationRecoveryAt)/providerRateLimitRecoveryInterval) + 1
+	if elapsedWindows >= state.RateLimitDegradationLevel {
 		resetProviderRateLimitDegradationLocked(state)
 		return
 	}
-	state.NextDegradationRecoveryAt = now.Add(providerRateLimitRecoveryInterval)
+
+	state.RateLimitDegradationLevel -= elapsedWindows
+	state.ConsecutiveRecoverySuccesses = 0
+	state.NextDegradationRecoveryAt = state.NextDegradationRecoveryAt.Add(time.Duration(elapsedWindows) * providerRateLimitRecoveryInterval)
 }
 
 func resetProviderRateLimitDegradationLocked(state *DeploymentRuntimeState) {

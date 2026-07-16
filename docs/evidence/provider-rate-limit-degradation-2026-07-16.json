@@ -1,10 +1,10 @@
 {
   "meta": {
-    "generated_at": "2026-07-16T11:00:01.950452+00:00",
+    "generated_at": "2026-07-16T19:00:01.950452+08:00",
     "version": "soak-v1",
     "sensitive": false,
-    "soak_start": "2026-07-16T10:57:36.875163+00:00",
-    "soak_end": "2026-07-16T11:00:01.911554+00:00",
+    "soak_start": "2026-07-16T18:57:36.875163+08:00",
+    "soak_end": "2026-07-16T19:00:01.911554+08:00",
     "protocol_validation": "strict",
     "request_contract": {
       "version": 2,
@@ -231,11 +231,80 @@
       "invalid_degradation_deployment_ids": [],
       "all_level_zero": true,
       "no_retained_observations": true
+    },
+    "deterministic_transition_verification": {
+      "source": "deterministic_go_tests",
+      "verified_at": "2026-07-16T19:13:19.8549849+08:00",
+      "commands": [
+        "go test ./fallback -run 'TestProviderRateLimitDegradation|TestResetProviderRateLimitDegradation|TestResetDeploymentState' -count=1 -v",
+        "go test ./controller -run TestRelayWithFallbackRotatesKiloModels -count=1 -v"
+      ],
+      "result": "passed",
+      "transitions": [
+        {
+          "scenario": "cross_cooldown_escalation",
+          "levels": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "episode_counts": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "exact_15_minute_boundary": "included"
+        },
+        {
+          "scenario": "success_recovery",
+          "levels": [
+            3,
+            2,
+            1,
+            0
+          ],
+          "successes": 3,
+          "final_state_cleared": true
+        },
+        {
+          "scenario": "quiet_window_recovery",
+          "levels": [
+            3,
+            2,
+            1,
+            0
+          ],
+          "elapsed_windows": 3,
+          "deadline_anchor_preserved": true
+        },
+        {
+          "scenario": "manual_recovery",
+          "target_state_cleared": true,
+          "other_deployment_unchanged": true,
+          "persistent_failure_preserves_runtime": true
+        },
+        {
+          "scenario": "provider_fallback",
+          "kilo_provider_episode_count": 1,
+          "pollinations_success": true,
+          "intermediate_model_429_isolated": true
+        }
+      ],
+      "test_names": [
+        "TestProviderRateLimitDegradationEpisodeTransitions",
+        "TestProviderRateLimitDegradationRecoversOneLevelPerSuccess",
+        "TestProviderRateLimitDegradationDecayConsumesEveryElapsedWindow",
+        "TestResetProviderRateLimitDegradationResetsOnlyTarget",
+        "TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails",
+        "TestRelayWithFallbackRotatesKiloModels"
+      ]
     }
   },
   "records": [
     {
-      "timestamp": "2026-07-16T10:57:40.115235+00:00",
+      "timestamp": "2026-07-16T18:57:40.115235+08:00",
       "type": "chat",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -255,7 +324,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:57:48.329176+00:00",
+      "timestamp": "2026-07-16T18:57:48.329176+08:00",
       "type": "stream",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -275,7 +344,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:57:56.188633+00:00",
+      "timestamp": "2026-07-16T18:57:56.188633+08:00",
       "type": "tools",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -295,7 +364,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:58:03.609597+00:00",
+      "timestamp": "2026-07-16T18:58:03.609597+08:00",
       "type": "responses",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -315,7 +384,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:58:10.763491+00:00",
+      "timestamp": "2026-07-16T18:58:10.763491+08:00",
       "type": "chat",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -335,7 +404,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:58:18.189855+00:00",
+      "timestamp": "2026-07-16T18:58:18.189855+08:00",
       "type": "stream",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -355,7 +424,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:58:25.659275+00:00",
+      "timestamp": "2026-07-16T18:58:25.659275+08:00",
       "type": "tools",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -375,7 +444,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:58:32.832373+00:00",
+      "timestamp": "2026-07-16T18:58:32.832373+08:00",
       "type": "responses",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -395,7 +464,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:58:40.939483+00:00",
+      "timestamp": "2026-07-16T18:58:40.939483+08:00",
       "type": "chat",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -415,7 +484,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:58:48.393059+00:00",
+      "timestamp": "2026-07-16T18:58:48.393059+08:00",
       "type": "stream",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -435,7 +504,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:58:56.354896+00:00",
+      "timestamp": "2026-07-16T18:58:56.354896+08:00",
       "type": "tools",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -455,7 +524,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:59:03.952448+00:00",
+      "timestamp": "2026-07-16T18:59:03.952448+08:00",
       "type": "responses",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -475,7 +544,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:59:10.598517+00:00",
+      "timestamp": "2026-07-16T18:59:10.598517+08:00",
       "type": "chat",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -495,7 +564,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:59:18.196266+00:00",
+      "timestamp": "2026-07-16T18:59:18.196266+08:00",
       "type": "stream",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -515,7 +584,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:59:25.813283+00:00",
+      "timestamp": "2026-07-16T18:59:25.813283+08:00",
       "type": "tools",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -535,7 +604,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:59:33.346490+00:00",
+      "timestamp": "2026-07-16T18:59:33.34649+08:00",
       "type": "responses",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -555,7 +624,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:59:40.754188+00:00",
+      "timestamp": "2026-07-16T18:59:40.754188+08:00",
       "type": "chat",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -575,7 +644,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:59:47.337140+00:00",
+      "timestamp": "2026-07-16T18:59:47.33714+08:00",
       "type": "stream",
       "virtual_model": "openrouter/auto",
       "real_model": "cohere/north-mini-code:free",
@@ -595,7 +664,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T10:59:54.689609+00:00",
+      "timestamp": "2026-07-16T18:59:54.689609+08:00",
       "type": "tools",
       "virtual_model": "openrouter/auto",
       "real_model": "tencent/hy3:free",
@@ -615,7 +684,7 @@
       "outcome": "success"
     },
     {
-      "timestamp": "2026-07-16T11:00:01.908620+00:00",
+      "timestamp": "2026-07-16T19:00:01.90862+08:00",
       "type": "responses",
       "virtual_model": "openrouter/auto",
       "real_model": "cohere/north-mini-code:free",
@@ -638,7 +707,7 @@
   "state_checks": [
     {
       "after_request": 10,
-      "timestamp": "2026-07-16T10:58:48.398766+00:00",
+      "timestamp": "2026-07-16T18:58:48.398766+08:00",
       "deployment_states": {
         "free:kilo-e3b0c442": {
           "request_count": 75,
@@ -653,7 +722,7 @@
     },
     {
       "after_request": 20,
-      "timestamp": "2026-07-16T11:00:01.910521+00:00",
+      "timestamp": "2026-07-16T19:00:01.910521+08:00",
       "deployment_states": {
         "free:kilo-e3b0c442": {
           "request_count": 85,

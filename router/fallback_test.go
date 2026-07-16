@@ -697,6 +697,8 @@ func TestBuildFallbackRuntimeStatusRowsIncludesProviderRateLimitDegradation(t *t
 	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
 	time.Sleep(time.Millisecond)
 	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
+	time.Sleep(time.Millisecond)
+	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
 	fallback.RecordSuccess(deploymentID)
 	const outerErrorSentinel = "Bearer sk-task4-sensitive-key raw_upstream_body INJECTED_UPSTREAM_TEXT"
 	fallback.RecordFailure(deploymentID, outerErrorSentinel, false)
@@ -717,7 +719,7 @@ func TestBuildFallbackRuntimeStatusRowsIncludesProviderRateLimitDegradation(t *t
 	if !ok {
 		t.Fatalf("expected provider degradation field, got %#v", row["provider_rate_limit_degradation"])
 	}
-	if !degradation.Active || degradation.Level != 1 || degradation.EpisodeCount != 2 {
+	if !degradation.Active || degradation.Level != 1 || degradation.EpisodeCount != 3 {
 		t.Fatalf("unexpected provider degradation state: %#v", degradation)
 	}
 	if degradation.Reason != "repeated rate limits" || degradation.LastRateLimitedAt == nil || degradation.NextRecoveryAt == nil || degradation.ConsecutiveRecoverySuccesses != 1 {

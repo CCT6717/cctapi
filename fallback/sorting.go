@@ -285,13 +285,20 @@ func deterministicJitter(deploymentID string, max float64) float64 {
 
 // SortByStrategy sorts a copy of deployments by the given strategy and returns it.
 func SortByStrategy(deployments []DeploymentConfig, strategy string) []DeploymentConfig {
+	today := todayString()
+	scores := make(map[string]float64, len(deployments))
+	for _, deployment := range deployments {
+		state, _ := GetDeploymentState(deployment.ID, today)
+		scores[deployment.ID] = strategyScore(deployment, state, strategy)
+	}
+	return sortDeploymentsByStrategyScores(deployments, scores)
+}
+
+func sortDeploymentsByStrategyScores(deployments []DeploymentConfig, scores map[string]float64) []DeploymentConfig {
 	out := make([]DeploymentConfig, len(deployments))
 	copy(out, deployments)
-	today := todayString()
 	sort.SliceStable(out, func(i, j int) bool {
-		si, _ := GetDeploymentState(out[i].ID, today)
-		sj, _ := GetDeploymentState(out[j].ID, today)
-		return strategyScore(out[i], si, strategy) > strategyScore(out[j], sj, strategy)
+		return scores[out[i].ID] > scores[out[j].ID]
 	})
 	return out
 }

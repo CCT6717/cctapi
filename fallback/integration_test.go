@@ -318,6 +318,21 @@ func TestIntegrationProviderDegradationDemotesHealthyPeersAcrossStrategies(t *te
 	}
 }
 
+func TestSortDeploymentsByStrategyScoresUsesImmutableScores(t *testing.T) {
+	deployments := []DeploymentConfig{
+		{ID: "first", RealModel: "m1"},
+		{ID: "second", RealModel: "m2"},
+	}
+	scores := map[string]float64{"first": 10, "second": 20}
+
+	sorted := sortDeploymentsByStrategyScores(deployments, scores)
+	scores["first"] = 30
+
+	if sorted[0].ID != "second" || sorted[1].ID != "first" {
+		t.Fatalf("sorted deployments = %#v, want immutable precomputed order", sorted)
+	}
+}
+
 func TestIntegrationProviderDegradationPenalizesCalculateScore(t *testing.T) {
 	resetRuntimeForTest()
 	t.Cleanup(resetRuntimeForTest)
@@ -367,7 +382,7 @@ func TestIntegrationPreferredDeploymentPromotesDegradedCandidateAfterAutomaticSo
 			},
 		},
 		Deployments: map[string]DeploymentConfig{
-			"healthy":     {ID: "healthy", Enabled: true, Pool: "paid_high", RealModel: "healthy-model", QualityTier: "high"},
+			"healthy":   {ID: "healthy", Enabled: true, Pool: "paid_high", RealModel: "healthy-model", QualityTier: "high"},
 			preferredID: {ID: preferredID, Enabled: true, Pool: "paid_high", RealModel: "preferred-model", QualityTier: "high"},
 		},
 	})
