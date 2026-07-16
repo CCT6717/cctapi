@@ -536,6 +536,9 @@ func relayWithFallbackUsing(c *gin.Context, execute fallbackRelayExecutor) {
 			RetryAfterSeconds: bizErr.RetryAfterSeconds,
 			Attempt:           upstreamAttemptCount,
 		})
+		if isConfirmedHTTPRateLimit && cooldownErr == nil && cooldownDuration > 0 {
+			fallback.RecordProviderRateLimitEpisode(dep.ID, cooldownDuration)
+		}
 		if cooldownErr != nil {
 			logger.SysError(fmt.Sprintf("[fallback] failed to apply cooldown state for %s: %v", dep.ID, cooldownErr))
 		} else if errClass.Category == fallback.ErrorCategoryQuota {
