@@ -507,7 +507,19 @@ class SoakScriptTests(unittest.TestCase):
             ["provider_rate_limit_degradation"],
         )
         result = soak.summarize_successful_deployment_degradation(
-            [{"deployment_id": "kilo/free-1", "success_count": 4}],
+            [
+                {
+                    "deployment_id": "kilo/free-1",
+                    "success_count": 4,
+                    "success_count_valid": True,
+                    "degradation_valid": True,
+                    "invalid_fields": [],
+                    "active": False,
+                    "level": 0,
+                    "episode_count": 0,
+                    "consecutive_recovery_successes": 0,
+                }
+            ],
             post_snapshots,
         )
         self.assertFalse(result["all_level_zero"])
@@ -540,7 +552,19 @@ class SoakScriptTests(unittest.TestCase):
             ["last_rate_limited_at", "next_recovery_at"],
         )
         result = soak.summarize_successful_deployment_degradation(
-            [{"deployment_id": "kilo/free-1", "success_count": 4}],
+            [
+                {
+                    "deployment_id": "kilo/free-1",
+                    "success_count": 4,
+                    "success_count_valid": True,
+                    "degradation_valid": True,
+                    "invalid_fields": [],
+                    "active": False,
+                    "level": 0,
+                    "episode_count": 0,
+                    "consecutive_recovery_successes": 0,
+                }
+            ],
             post_snapshots,
         )
         self.assertFalse(result["all_level_zero"])
