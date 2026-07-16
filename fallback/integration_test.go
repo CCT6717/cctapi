@@ -333,6 +333,22 @@ func TestIntegrationProviderDegradationPenalizesCalculateScore(t *testing.T) {
 	}
 }
 
+func TestIntegrationProviderDegradationPenalizesCalculateScoreWithHistory(t *testing.T) {
+	resetRuntimeForTest()
+	t.Cleanup(resetRuntimeForTest)
+
+	healthy := DeploymentConfig{ID: "healthy-admin-score-history", Priority: 1}
+	degraded := DeploymentConfig{ID: "degraded-admin-score-history", Priority: 1}
+	state := &DeploymentState{RequestCount: 10, SuccessCount: 8, ErrorCount: 2}
+	setProviderRateLimitDegradationLevelForTest(degraded.ID, 1)
+
+	healthyScore := CalculateScore(healthy, state, DefaultScoreWeights())
+	degradedScore := CalculateScore(degraded, state, DefaultScoreWeights())
+	if healthyScore-degradedScore != 25 {
+		t.Fatalf("historical admin score difference = %v, want 25", healthyScore-degradedScore)
+	}
+}
+
 func TestIntegrationPreferredDeploymentPromotesDegradedCandidateAfterAutomaticSorting(t *testing.T) {
 	t.Cleanup(func() { resetConfigForTest(nil) })
 	resetRuntimeForTest()
