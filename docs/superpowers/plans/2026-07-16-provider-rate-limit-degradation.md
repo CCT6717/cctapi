@@ -241,8 +241,10 @@ git commit -m "feat(fallback): record provider rate-limit episodes"
 Extend runtime-row tests to assert the nested
 `provider_rate_limit_degradation` object contains active, level, episode count,
 fixed reason, last-rate-limit time, next-recovery time, and recovery-success
-count. Marshal the row and reject bearer values, keys, raw bodies, and injected
-upstream text.
+count. Inject sentinel text into the existing outer runtime-error fields, then
+marshal the nested degradation object and reject bearer values, keys, raw bodies,
+and that sentinel. Existing sanitized outer runtime-error diagnostics remain
+unchanged by this feature.
 
 Extend state reset tests to prove successful manual recovery clears the target
 provider degradation and leaves another deployment unchanged. Preserve the
@@ -389,4 +391,3 @@ Record fresh verification and soak results in `AGENTS.md`, run `git diff --check
 and a credential-pattern scan, commit with conventional commits, push the branch,
 create a non-draft PR, and wait for every required CI job. Merge only after green
 CI, then delete local and remote feature branches.
-
