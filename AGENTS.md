@@ -72,6 +72,13 @@ Last verified handoff: 2026-07-16.
 - The 2026-07-16 post-merge local quality gate passed: frontend ESLint, 9 Vitest suites with 44 tests, Vite production build, full Go tests, full Go build, and scoped race tests for `./fallback`, `./controller`, `./relay/controller`, and `./router`.
 - The rebuilt `one-api.exe` is running on port `3008` and returns HTTP 200. A paced 12-request `openrouter/auto` run passed 12/12 across Chat Completions, streaming, Responses, and required tool calls with zero protocol errors. All 3 tool requests returned valid JSON arguments, 3 real Kilo models were observed, and one live model HTTP 429 was rotated transparently to a successful response.
 - The post-merge live run did not naturally produce an invalid required-tool response, so that recovery branch remains verified by the fresh full Go regression suite and CI rather than by forced production traffic.
+- Provider rate-limit degradation validation completed on 2026-07-16:
+  - Repeated confirmed provider-level HTTP 429 episodes lower automatic-routing priority while keeping degraded deployments eligible; normal successes recover the degradation state.
+  - Fresh backend validation passed focused tests, scoped race tests, full Go tests, `go vet ./...`, and `go build ./...`.
+  - Fresh frontend validation passed ESLint, 10 Vitest suites / 45 tests, Vite production build, Storybook build, and 18/18 isolated Playwright desktop/mobile checks, including the responsive degradation diagnostic.
+  - A paced `openrouter/auto` soak through Kilo completed 20/20 requests across chat, stream, tools, and Responses. Two internal model-level 429 events were rotated transparently; the successful Kilo deployment remained inactive at degradation L0 with zero retained episodes.
+  - Deterministic Go tests separately verified cross-cooldown escalation, exact 15-minute boundary handling, success/quiet-window/manual recovery, and provider fallback.
+  - Sanitized live and deterministic evidence: `docs/evidence/provider-rate-limit-degradation-2026-07-16.json`.
 - Preview release tag for this handoff: `v0.1.0-freellmapi-preview`.
 - Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 10.5.0.
 - react-scripts and Webpack dependency chain fully removed.

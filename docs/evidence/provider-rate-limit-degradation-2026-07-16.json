@@ -1,0 +1,749 @@
+{
+  "meta": {
+    "generated_at": "2026-07-16T19:00:01.950452+08:00",
+    "version": "soak-v1",
+    "sensitive": false,
+    "soak_start": "2026-07-16T18:57:36.875163+08:00",
+    "soak_end": "2026-07-16T19:00:01.911554+08:00",
+    "protocol_validation": "strict",
+    "request_contract": {
+      "version": 2,
+      "chat_max_tokens": 256,
+      "stream_max_tokens": 256,
+      "responses_max_output_tokens": 512,
+      "tools_max_tokens": 50,
+      "required_tool_choice": {
+        "type": "function",
+        "function": {
+          "name": "get_weather"
+        }
+      }
+    }
+  },
+  "summary": {
+    "provider": "kilo",
+    "virtual_model": "openrouter/auto",
+    "total_requests": 20,
+    "success": 20,
+    "http_200": 20,
+    "protocol_errors": 0,
+    "rate_limited": 0,
+    "other_errors": 0,
+    "success_rate": 100.0,
+    "avg_latency_ms": 2250.17,
+    "p95_latency_ms": 3150,
+    "real_models_used": {
+      "tencent/hy3:free": 18,
+      "cohere/north-mini-code:free": 2
+    },
+    "pre_deployment_states": {
+      "free:kilo-e3b0c442": {
+        "request_count": 66,
+        "success_count": 66,
+        "error_count": 0,
+        "cooldown_until": null,
+        "exhausted_until": null,
+        "last_error_code": ""
+      }
+    },
+    "post_deployment_states": {
+      "free:kilo-e3b0c442": {
+        "request_count": 85,
+        "success_count": 85,
+        "error_count": 0,
+        "cooldown_until": null,
+        "exhausted_until": null,
+        "last_error_code": ""
+      }
+    },
+    "pre_deployment_cooldowns": [],
+    "post_deployment_cooldowns": [],
+    "validation_contract": {
+      "chat": "HTTP 200, JSON choices, and non-empty assistant content",
+      "stream": "HTTP 200, parsed SSE frames, content, and [DONE]",
+      "responses": "HTTP 200, response id, and non-empty output_text",
+      "tools": "HTTP 200, tool_calls, and valid JSON arguments"
+    },
+    "attempt_events_verification": {
+      "count": 2,
+      "distinct_requests": 2,
+      "breakdown": {
+        "kilo": {
+          "model_rate_limited": 2
+        }
+      },
+      "request_paths": {
+        "2026071618573688419230073915280": [
+          {
+            "provider": "kilo",
+            "real_model": "cohere/north-mini-code:free",
+            "outcome": "model_rate_limited",
+            "status_code": 429,
+            "plan_index": 1,
+            "upstream_attempt_index": 1
+          }
+        ],
+        "2026071618583818166230032575524": [
+          {
+            "provider": "kilo",
+            "real_model": "cohere/north-mini-code:free",
+            "outcome": "model_rate_limited",
+            "status_code": 429,
+            "plan_index": 1,
+            "upstream_attempt_index": 1
+          }
+        ]
+      }
+    },
+    "pre_provider_rate_limit_degradation": [
+      {
+        "deployment_id": "auto-openrouter",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 0
+      },
+      {
+        "deployment_id": "free:kilo-e3b0c442",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 4
+      },
+      {
+        "deployment_id": "free:openrouter-1f9cf7de",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 0
+      },
+      {
+        "deployment_id": "free:ovh-e3b0c442",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 0
+      },
+      {
+        "deployment_id": "free:pollinations-e3b0c442",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 0
+      }
+    ],
+    "post_provider_rate_limit_degradation": [
+      {
+        "deployment_id": "auto-openrouter",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 0
+      },
+      {
+        "deployment_id": "free:kilo-e3b0c442",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 24
+      },
+      {
+        "deployment_id": "free:openrouter-1f9cf7de",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 0
+      },
+      {
+        "deployment_id": "free:ovh-e3b0c442",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 0
+      },
+      {
+        "deployment_id": "free:pollinations-e3b0c442",
+        "success_count_valid": true,
+        "degradation_valid": true,
+        "invalid_fields": [],
+        "active": false,
+        "level": 0,
+        "episode_count": 0,
+        "consecutive_recovery_successes": 0,
+        "success_count": 0
+      }
+    ],
+    "successful_deployment_degradation": {
+      "deployment_ids": [
+        "free:kilo-e3b0c442"
+      ],
+      "snapshots": [
+        {
+          "deployment_id": "free:kilo-e3b0c442",
+          "success_count_valid": true,
+          "degradation_valid": true,
+          "invalid_fields": [],
+          "active": false,
+          "level": 0,
+          "episode_count": 0,
+          "consecutive_recovery_successes": 0,
+          "success_count": 24
+        }
+      ],
+      "missing_deployment_ids": [],
+      "invalid_success_count_deployment_ids": [],
+      "invalid_degradation_deployment_ids": [],
+      "all_level_zero": true,
+      "no_retained_observations": true
+    },
+    "deterministic_transition_verification": {
+      "source": "deterministic_go_tests",
+      "verified_at": "2026-07-16T19:22:34.5345614+08:00",
+      "commands": [
+        "go test ./fallback -run 'TestProviderRateLimitDegradation|TestResetProviderRateLimitDegradation|TestResetDeploymentState' -count=1 -v",
+        "go test ./controller -run TestRelayWithFallbackRotatesKiloModels -count=1 -v"
+      ],
+      "result": "passed",
+      "transitions": [
+        {
+          "scenario": "cross_cooldown_escalation",
+          "levels": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "episode_counts": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "exact_15_minute_boundary": "included"
+        },
+        {
+          "scenario": "success_recovery",
+          "levels": [
+            3,
+            2,
+            1,
+            0
+          ],
+          "successes": 3,
+          "final_state_cleared": true
+        },
+        {
+          "scenario": "quiet_window_recovery",
+          "levels": [
+            3,
+            2,
+            1,
+            0
+          ],
+          "elapsed_windows": 3,
+          "deadline_anchor_preserved": true
+        },
+        {
+          "scenario": "manual_recovery",
+          "target_state_cleared": true,
+          "other_deployment_unchanged": true,
+          "persistent_failure_preserves_runtime": true
+        },
+        {
+          "scenario": "provider_fallback",
+          "kilo_provider_episode_count": 1,
+          "pollinations_success": true,
+          "intermediate_model_429_isolated": true
+        },
+        {
+          "scenario": "overdue_quiet_windows_before_success",
+          "starting_level": 3,
+          "elapsed_windows": 2,
+          "successes": 1,
+          "final_level": 0,
+          "recovery_success_counter_preserved_by_decay": true
+        }
+      ],
+      "test_names": [
+        "TestProviderRateLimitDegradationEpisodeTransitions",
+        "TestProviderRateLimitDegradationRecoversOneLevelPerSuccess",
+        "TestProviderRateLimitDegradationDecayConsumesEveryElapsedWindow",
+        "TestResetProviderRateLimitDegradationResetsOnlyTarget",
+        "TestResetDeploymentStateKeepsModelRuntimeWhenPersistentResetFails",
+        "TestRelayWithFallbackRotatesKiloModels",
+        "TestProviderRateLimitDegradationSuccessConsumesOverdueRecoveryFirst",
+        "TestProviderRateLimitDegradationDecayPreservesRecoverySuccesses"
+      ]
+    }
+  },
+  "records": [
+    {
+      "timestamp": "2026-07-16T18:57:40.115235+08:00",
+      "type": "chat",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 3231.89,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618573688419230073915280",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:57:48.329176+08:00",
+      "type": "stream",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2624.82,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618574570520400075348905",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 4,
+      "stream_done": true,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:57:56.188633+08:00",
+      "type": "tools",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2235.33,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618575395438050041603146",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": true,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:58:03.609597+08:00",
+      "type": "responses",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2197.04,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618580141287260058242967",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": true,
+      "response_output_count": 1,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:58:10.763491+08:00",
+      "type": "chat",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 1871.79,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618580889202000035860298",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:58:18.189855+08:00",
+      "type": "stream",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2104.84,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "202607161858168543980087582445",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 8,
+      "stream_done": true,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:58:25.659275+08:00",
+      "type": "tools",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2324.99,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618582333525120098013636",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": true,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:58:32.832373+08:00",
+      "type": "responses",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2353.02,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618583048027470007121330",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": true,
+      "response_output_count": 1,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:58:40.939483+08:00",
+      "type": "chat",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2758.25,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618583818166230032575524",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:58:48.393059+08:00",
+      "type": "stream",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 1786.67,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618584661773760079814107",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 4,
+      "stream_done": true,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:58:56.354896+08:00",
+      "type": "tools",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 3150.41,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618585320552290019027784",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": true,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:59:03.952448+08:00",
+      "type": "responses",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2060.87,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618590189167160044403763",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": true,
+      "response_output_count": 1,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:59:10.598517+08:00",
+      "type": "chat",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 1849.31,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618590874944070074426040",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:59:18.196266+08:00",
+      "type": "stream",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 1996.05,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618591620147950016322047",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 6,
+      "stream_done": true,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:59:25.813283+08:00",
+      "type": "tools",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2331.94,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618592348197590009050325",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": true,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:59:33.34649+08:00",
+      "type": "responses",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2136.21,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618593121139340074269825",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": true,
+      "response_output_count": 1,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:59:40.754188+08:00",
+      "type": "chat",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 1854.66,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618593889984330083448075",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:59:47.33714+08:00",
+      "type": "stream",
+      "virtual_model": "openrouter/auto",
+      "real_model": "cohere/north-mini-code:free",
+      "status": 200,
+      "latency_ms": 1540.37,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618594579790470092894140",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 42,
+      "stream_done": true,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T18:59:54.689609+08:00",
+      "type": "tools",
+      "virtual_model": "openrouter/auto",
+      "real_model": "tencent/hy3:free",
+      "status": 200,
+      "latency_ms": 2306.45,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618595238399700010242615",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 1,
+      "tool_arguments_valid_json": true,
+      "response_id_present": false,
+      "response_output_count": 0,
+      "outcome": "success"
+    },
+    {
+      "timestamp": "2026-07-16T19:00:01.90862+08:00",
+      "type": "responses",
+      "virtual_model": "openrouter/auto",
+      "real_model": "cohere/north-mini-code:free",
+      "status": 200,
+      "latency_ms": 2288.52,
+      "safe_error_reason": null,
+      "retry_after": null,
+      "request_id": "2026071618595962095900098465567",
+      "protocol_valid": true,
+      "content_present": true,
+      "stream_frame_count": 0,
+      "stream_done": false,
+      "tool_call_count": 0,
+      "tool_arguments_valid_json": false,
+      "response_id_present": true,
+      "response_output_count": 1,
+      "outcome": "success"
+    }
+  ],
+  "state_checks": [
+    {
+      "after_request": 10,
+      "timestamp": "2026-07-16T18:58:48.398766+08:00",
+      "deployment_states": {
+        "free:kilo-e3b0c442": {
+          "request_count": 75,
+          "success_count": 75,
+          "error_count": 0,
+          "cooldown_until": null,
+          "exhausted_until": null,
+          "last_error_code": ""
+        }
+      },
+      "deployment_cooldowns": []
+    },
+    {
+      "after_request": 20,
+      "timestamp": "2026-07-16T19:00:01.910521+08:00",
+      "deployment_states": {
+        "free:kilo-e3b0c442": {
+          "request_count": 85,
+          "success_count": 85,
+          "error_count": 0,
+          "cooldown_until": null,
+          "exhausted_until": null,
+          "last_error_code": ""
+        }
+      },
+      "deployment_cooldowns": []
+    }
+  ]
+}

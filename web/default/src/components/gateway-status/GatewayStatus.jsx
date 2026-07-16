@@ -71,6 +71,18 @@ function QuotaCell({ used, limit }) {
   );
 }
 
+function ProviderDegradationDiagnostic({ degradation }) {
+  if (!degradation?.active) return null;
+
+  return (
+    <div className='gw-degradation'>
+      <span className='gw-degradation-level'>持续限流降权 L{degradation.level}</span>
+      <span>跨冷却限流 {formatNumber(degradation.episode_count)} 次</span>
+      <span>预计恢复 {formatTime(degradation.next_recovery_at)}</span>
+    </div>
+  );
+}
+
 /* ---- Deployment 子卡片 ---- */
 function DeploymentCard({ dep, actingId, onAction }) {
   const health = dep.health || 'unknown';
@@ -91,6 +103,7 @@ function DeploymentCard({ dep, actingId, onAction }) {
         <QuotaCell used={dep.minute_tokens} limit={dep.tpm_limit} />
         <QuotaCell used={dep.day_tokens} limit={dep.tpd_limit} />
       </div>
+      <ProviderDegradationDiagnostic degradation={dep.provider_rate_limit_degradation} />
       {dep.last_error && (
         <div className='gw-error'>
           {dep.last_error}

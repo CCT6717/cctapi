@@ -689,6 +689,65 @@ func TestBuildFallbackRuntimeStatusRowsIncludesModelRuntime(t *testing.T) {
 	}
 }
 
+func TestBuildFallbackRuntimeStatusRowsIncludesProviderRateLimitDegradation(t *testing.T) {
+	deploymentID := "free:provider-degradation-runtime"
+	fallback.ResetProviderRateLimitDegradation(deploymentID)
+	t.Cleanup(func() { fallback.ResetProviderRateLimitDegradation(deploymentID) })
+
+	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
+	time.Sleep(time.Millisecond)
+	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
+	time.Sleep(time.Millisecond)
+	fallback.RecordProviderRateLimitEpisode(deploymentID, 0)
+	fallback.RecordSuccess(deploymentID)
+	const outerErrorSentinel = "Bearer sk-task4-sensitive-key raw_upstream_body INJECTED_UPSTREAM_TEXT"
+	fallback.RecordFailure(deploymentID, outerErrorSentinel, false)
+
+	rows := buildFallbackRuntimeStatusRows(&fallback.Config{
+		Enabled: true,
+		Deployments: map[string]fallback.DeploymentConfig{
+			deploymentID: {
+				Enabled:   true,
+				Pool:      "free",
+				RealModel: "provider-free",
+			},
+		},
+	})
+
+	row := findRuntimeStatusRow(t, rows, deploymentID)
+	degradation, ok := row["provider_rate_limit_degradation"].(fallback.ProviderRateLimitDegradationSnapshot)
+	if !ok {
+		t.Fatalf("expected provider degradation field, got %#v", row["provider_rate_limit_degradation"])
+	}
+	if !degradation.Active || degradation.Level != 1 || degradation.EpisodeCount != 3 {
+		t.Fatalf("unexpected provider degradation state: %#v", degradation)
+	}
+	if degradation.Reason != "repeated rate limits" || degradation.LastRateLimitedAt == nil || degradation.NextRecoveryAt == nil || degradation.ConsecutiveRecoverySuccesses != 1 {
+		t.Fatalf("unexpected provider degradation diagnostics: %#v", degradation)
+	}
+
+	outerRaw, err := json.Marshal(row)
+	if err != nil {
+		t.Fatalf("marshal outer runtime row: %v", err)
+	}
+	if !strings.Contains(string(outerRaw), outerErrorSentinel) {
+		t.Fatalf("outer runtime error fixture did not retain sentinel: %s", string(outerRaw))
+	}
+
+	nestedRaw, err := json.Marshal(row["provider_rate_limit_degradation"])
+	if err != nil {
+		t.Fatalf("marshal provider degradation: %v", err)
+	}
+	if !strings.Contains(string(nestedRaw), `"reason":"repeated rate limits"`) {
+		t.Fatalf("provider degradation did not retain fixed safe reason: %s", string(nestedRaw))
+	}
+	for _, forbidden := range []string{outerErrorSentinel, "Bearer", "sk-task4-sensitive-key", "raw_upstream_body", "INJECTED_UPSTREAM_TEXT"} {
+		if strings.Contains(string(nestedRaw), forbidden) {
+			t.Fatalf("provider degradation leaked sensitive material %q: %s", forbidden, string(nestedRaw))
+		}
+	}
+}
+
 func TestBuildFallbackEditorChannel_NoKey(t *testing.T) {
 	channel := &dbmodel.Channel{
 		Id:   2,

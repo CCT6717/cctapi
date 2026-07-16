@@ -40,6 +40,7 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		"free:kilo-00000012",
 		"free:kilo-00000013",
 		"free:kilo-00000014",
+		"free:kilo-00000015",
 	})
 
 	t.Run("rate limit rotates to next Kilo model without provider penalty", func(t *testing.T) {
@@ -64,6 +65,10 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		providerRuntime := fallback.SnapshotRuntimeState(kiloID)
 		if providerRuntime.FailureCount != 0 || providerRuntime.RateLimitScore != 0 {
 			t.Fatalf("intermediate model 429 penalized provider: %+v", providerRuntime)
+		}
+		providerDegradation := fallback.SnapshotProviderRateLimitDegradation(kiloID)
+		if providerDegradation.EpisodeCount != 0 || providerDegradation.Level != 0 || providerDegradation.Active {
+			t.Fatalf("intermediate model 429 recorded provider degradation: %+v", providerDegradation)
 		}
 		_, requestCount, errorCount, err := fallback.GetDeploymentStats(kiloID)
 		if err != nil {
@@ -93,6 +98,11 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		kiloID := "free:kilo-00000002"
 		pollinationsID := "free:pollinations-00000002"
 		loadRelayRotationConfig(t, kiloID, pollinationsID)
+		fallback.RecordProviderRateLimitEpisode(pollinationsID, time.Minute)
+		pollinationsBefore := fallback.SnapshotProviderRateLimitDegradation(pollinationsID)
+		if pollinationsBefore.EpisodeCount != 1 || pollinationsBefore.Level != 0 || pollinationsBefore.Active {
+			t.Fatalf("Pollinations recovery precondition = %+v, want one level-zero episode", pollinationsBefore)
+		}
 
 		var attempted []string
 		c, _ := newRelayRotationContext()
@@ -112,6 +122,14 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		if providerRuntime.FailureCount != 1 || providerRuntime.RateLimitScore != 1 {
 			t.Fatalf("provider accounting = %+v, want one rate-limit failure", providerRuntime)
 		}
+		providerDegradation := fallback.SnapshotProviderRateLimitDegradation(kiloID)
+		if providerDegradation.EpisodeCount != 1 || providerDegradation.Level != 0 || providerDegradation.Active {
+			t.Fatalf("provider degradation = %+v, want one level-zero episode", providerDegradation)
+		}
+		pollinationsDegradation := fallback.SnapshotProviderRateLimitDegradation(pollinationsID)
+		if pollinationsDegradation.EpisodeCount != 0 || pollinationsDegradation.Level != 0 || pollinationsDegradation.Active {
+			t.Fatalf("Pollinations success did not clear only its recovery observation: %+v", pollinationsDegradation)
+		}
 		_, requestCount, errorCount, err := fallback.GetDeploymentStats(kiloID)
 		if err != nil {
 			t.Fatalf("GetDeploymentStats: %v", err)
@@ -130,6 +148,39 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		events := fixture.switchEvents(t)
 		if len(events) != 1 || events[0].FromDeployment != kiloID || events[0].ToDeployment != pollinationsID {
 			t.Fatalf("provider switch events = %+v, want one Kilo-to-Pollinations event", events)
+		}
+	})
+
+	t.Run("second provider rate-limit episode after cooldown expiry enters L1", func(t *testing.T) {
+		kiloID := "free:kilo-00000015"
+		pollinationsID := "free:pollinations-00000015"
+		loadRelayRotationConfig(t, kiloID, pollinationsID)
+
+		originalPolicy := fallback.DefaultCooldownPolicy
+		fallback.DefaultCooldownPolicy.RateLimitShort = time.Nanosecond
+		t.Cleanup(func() {
+			fallback.DefaultCooldownPolicy = originalPolicy
+		})
+
+		for request := 1; request <= 2; request++ {
+			c, _ := newRelayRotationContext()
+			relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
+				if c.GetString(ctxkey.FallbackDeploymentID) == kiloID {
+					return relayRotationRateLimitErrorWithoutRetryAfter()
+				}
+				return nil
+			})
+
+			degradation := fallback.SnapshotProviderRateLimitDegradation(kiloID)
+			wantActive := request == 2
+			if degradation.EpisodeCount != request || degradation.Level != request-1 || degradation.Active != wantActive {
+				t.Fatalf("request %d provider degradation = %+v, want episodes=%d level=%d active=%t", request, degradation, request, request-1, wantActive)
+			}
+
+			if request == 1 {
+				time.Sleep(time.Millisecond)
+				fallback.ClearStickyDeployment(relayRotationVirtualModel)
+			}
 		}
 	})
 
@@ -218,6 +269,10 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 				"non-429 rate-limit-shaped failure accounting = %+v, want one ordinary failure and zero rate-limit score",
 				providerRuntime,
 			)
+		}
+		providerDegradation := fallback.SnapshotProviderRateLimitDegradation(kiloID)
+		if providerDegradation.EpisodeCount != 0 || providerDegradation.Level != 0 || providerDegradation.Active {
+			t.Fatalf("non-429 rate-limit-shaped failure recorded provider degradation: %+v", providerDegradation)
 		}
 		if modelRuntime := fallback.SnapshotFreeProviderModelRuntime(kiloID); len(modelRuntime.Models) != 0 {
 			t.Fatalf("non-429 rate-limit-shaped failure changed model cooldowns: %+v", modelRuntime)
@@ -563,6 +618,8 @@ func setupRelayRotationFixture(t *testing.T, kiloDeploymentIDs []string) relayRo
 func loadRelayRotationConfig(t *testing.T, kiloID, pollinationsID string) {
 	t.Helper()
 	fallback.ClearStickyDeployment(relayRotationVirtualModel)
+	fallback.ResetProviderRateLimitDegradation(kiloID)
+	fallback.ResetProviderRateLimitDegradation(pollinationsID)
 	fallback.ResetFreeProviderModelRuntime(kiloID)
 	fallback.ResetFreeProviderModelCapabilityFalsePositive(kiloID, "")
 	cfg := fallback.Config{
@@ -689,6 +746,12 @@ func relayRotationRateLimitError() *relaymodel.ErrorWithStatusCode {
 			Message: "model limited", Type: "rate_limit_error", Code: "rate_limit",
 		},
 	}
+}
+
+func relayRotationRateLimitErrorWithoutRetryAfter() *relaymodel.ErrorWithStatusCode {
+	err := relayRotationRateLimitError()
+	err.RetryAfterSeconds = nil
+	return err
 }
 
 func (fixture relayRotationFixture) switchEvents(t *testing.T) []fallback.SwitchEvent {

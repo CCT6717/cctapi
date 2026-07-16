@@ -299,6 +299,27 @@
   font-size: 11px;
 }
 
+/* ---- 提供商限流降权 ---- */
+.gw-degradation {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 8px;
+  padding: 7px 9px;
+  border: 0.5px solid color-mix(in srgb, var(--gw-warning) 32%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--gw-warning) 9%, transparent);
+  color: var(--gw-t2);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.gw-degradation-level {
+  color: var(--gw-warning);
+  font-weight: 600;
+}
+
 /* ---- 最近错误 ---- */
 .gw-error {
   margin-top: 8px;
@@ -380,5 +401,13 @@
 
   .gw-code {
     background: rgba(255, 255, 255, 0.08);
+  }
+}
+
+@media (max-width: 560px) {
+  .gw-degradation {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
 }
