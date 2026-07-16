@@ -31,13 +31,13 @@ func DefaultScoreWeights() ScoreWeights {
 // static priority and historical performance.
 // Higher score = preferred earlier in the fallback chain.
 func CalculateScore(dep DeploymentConfig, state *DeploymentState, weights ScoreWeights) float64 {
+	baseScore := float64(100 - (dep.Priority-1)*int(weights.BasePriorityPenalty))
 	if state == nil {
 		// No history yet — rely on static priority
-		return float64(100 - (dep.Priority-1)*int(weights.BasePriorityPenalty))
+		return math.Max(baseScore-providerRateLimitDegradationScorePenalty(dep.ID), -500)
 	}
 
 	// 1. Base: derived from static priority (lower number = higher score)
-	baseScore := float64(100 - (dep.Priority-1)*int(weights.BasePriorityPenalty))
 
 	totalReqs := state.RequestCount
 	if totalReqs == 0 {
@@ -82,7 +82,7 @@ func CalculateScore(dep DeploymentConfig, state *DeploymentState, weights ScoreW
 	}
 
 	// Floor at -500 to prevent extreme negative scores from breaking sort
-	return math.Max(score, -500)
+	return math.Max(score-providerRateLimitDegradationScorePenalty(dep.ID), -500)
 }
 
 // ——————— Smart-sorted deployment retrieval ———————
@@ -146,18 +146,24 @@ func strategyScore(dep DeploymentConfig, state *DeploymentState, strategy string
 	healthScore := healthScore(dep, state)
 	rlPenalty := rateLimitPenalty(dep.ID)
 
+	var score float64
 	switch strategy {
 	case StrategyCostFirst:
 		costScore := costTierScore(dep.CostTier)
-		return costScore*0.35 + healthScore*0.25 + headroom*0.20 + successRate*0.10 + jitter*0.10
+		score = costScore*0.35 + healthScore*0.25 + headroom*0.20 + successRate*0.10 + jitter*0.10
 	case StrategyFreeFirst:
-		return headroom*0.35 + healthScore*0.25 + rlPenalty*0.20 + successRate*0.10 + jitter*0.10
+		score = headroom*0.35 + healthScore*0.25 + rlPenalty*0.20 + successRate*0.10 + jitter*0.10
 	case StrategyQualityFirst:
 		fallthrough
 	default:
 		qualityScore := qualityTierScore(dep.QualityTier)
-		return qualityScore*0.40 + healthScore*0.25 + successRate*0.20 + jitter*0.10 + headroom*0.05
+		score = qualityScore*0.40 + healthScore*0.25 + successRate*0.20 + jitter*0.10 + headroom*0.05
 	}
+	return score - providerRateLimitDegradationScorePenalty(dep.ID)
+}
+
+func providerRateLimitDegradationScorePenalty(deploymentID string) float64 {
+	return float64(SnapshotProviderRateLimitDegradation(deploymentID).Level * providerRateLimitDegradationPenalty)
 }
 
 func qualityTierScore(tier string) float64 {

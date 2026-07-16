@@ -235,6 +235,140 @@ func TestIntegrationQualityFirstSortPrefersHigh(t *testing.T) {
 	}
 }
 
+func setProviderRateLimitDegradationLevelForTest(deploymentID string, level int) {
+	runtimeStatesMu.Lock()
+	defer runtimeStatesMu.Unlock()
+	runtimeStates[deploymentID] = &DeploymentRuntimeState{
+		DeploymentID:              deploymentID,
+		RateLimitDegradationLevel: level,
+	}
+}
+
+func TestIntegrationProviderDegradationPenaltyLevels(t *testing.T) {
+	resetRuntimeForTest()
+	t.Cleanup(resetRuntimeForTest)
+
+	for _, tt := range []struct {
+		name  string
+		level int
+		want  float64
+	}{
+		{name: "healthy", level: 0, want: 0},
+		{name: "level one", level: 1, want: 25},
+		{name: "level two", level: 2, want: 50},
+		{name: "level three", level: 3, want: 75},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			deploymentID := "provider-degradation-" + tt.name
+			setProviderRateLimitDegradationLevelForTest(deploymentID, tt.level)
+
+			if got := providerRateLimitDegradationScorePenalty(deploymentID); got != tt.want {
+				t.Fatalf("penalty = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIntegrationProviderDegradationDemotesHealthyPeersAcrossStrategies(t *testing.T) {
+	resetRuntimeForTest()
+	t.Cleanup(resetRuntimeForTest)
+
+	for _, tt := range []struct {
+		name     string
+		strategy string
+		dep      DeploymentConfig
+	}{
+		{
+			name:     "quality first",
+			strategy: StrategyQualityFirst,
+			dep:      DeploymentConfig{Pool: "paid_high", QualityTier: "high", CostTier: "paid"},
+		},
+		{
+			name:     "cost first",
+			strategy: StrategyCostFirst,
+			dep:      DeploymentConfig{Pool: "free", QualityTier: "medium", CostTier: "free"},
+		},
+		{
+			name:     "free first",
+			strategy: StrategyFreeFirst,
+			dep:      DeploymentConfig{Pool: "free", QualityTier: "medium", CostTier: "free"},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			healthy := tt.dep
+			healthy.ID = "healthy-" + tt.strategy
+			healthy.RealModel = "healthy-model"
+
+			degraded := tt.dep
+			degraded.ID = "degraded-" + tt.strategy
+			degraded.RealModel = "degraded-model"
+			setProviderRateLimitDegradationLevelForTest(degraded.ID, 1)
+
+			sorted := SortByStrategy([]DeploymentConfig{degraded, healthy}, tt.strategy)
+			if len(sorted) != 2 {
+				t.Fatalf("candidate count = %d, want 2", len(sorted))
+			}
+			if sorted[0].ID != healthy.ID {
+				t.Fatalf("first candidate = %s, want healthy peer %s", sorted[0].ID, healthy.ID)
+			}
+			if sorted[1].ID != degraded.ID {
+				t.Fatalf("degraded candidate must remain eligible, got %#v", sorted)
+			}
+		})
+	}
+}
+
+func TestIntegrationProviderDegradationPenalizesCalculateScore(t *testing.T) {
+	resetRuntimeForTest()
+	t.Cleanup(resetRuntimeForTest)
+
+	healthy := DeploymentConfig{ID: "healthy-admin-score", Priority: 1}
+	degraded := DeploymentConfig{ID: "degraded-admin-score", Priority: 1}
+	setProviderRateLimitDegradationLevelForTest(degraded.ID, 1)
+
+	healthyScore := CalculateScore(healthy, nil, DefaultScoreWeights())
+	degradedScore := CalculateScore(degraded, nil, DefaultScoreWeights())
+	if healthyScore-degradedScore != 25 {
+		t.Fatalf("admin score difference = %v, want 25", healthyScore-degradedScore)
+	}
+}
+
+func TestIntegrationPreferredDeploymentPromotesDegradedCandidateAfterAutomaticSorting(t *testing.T) {
+	t.Cleanup(func() { resetConfigForTest(nil) })
+	resetRuntimeForTest()
+	t.Cleanup(resetRuntimeForTest)
+
+	const virtualModel = "cct/high"
+	const preferredID = "preferred-degraded"
+	resetConfigForTest(&Config{
+		Enabled: true,
+		VirtualModels: map[string]VirtualModelConfig{
+			virtualModel: {
+				Enabled:             true,
+				Strategy:            StrategyQualityFirst,
+				Pools:               []string{"paid_high"},
+				PreferredDeployment: preferredID,
+			},
+		},
+		Deployments: map[string]DeploymentConfig{
+			"healthy":     {ID: "healthy", Enabled: true, Pool: "paid_high", RealModel: "healthy-model", QualityTier: "high"},
+			preferredID: {ID: preferredID, Enabled: true, Pool: "paid_high", RealModel: "preferred-model", QualityTier: "high"},
+		},
+	})
+	setProviderRateLimitDegradationLevelForTest(preferredID, 1)
+
+	plan, err := PrepareDeploymentPlanForRequest(virtualModel, RequestCapabilities{})
+	if err != nil {
+		t.Fatalf("prepare deployment plan: %v", err)
+	}
+	if len(plan.Deployments) != 2 {
+		t.Fatalf("candidate count = %d, want 2", len(plan.Deployments))
+	}
+	if plan.Deployments[0].ID != preferredID {
+		t.Fatalf("first candidate = %s, want preferred deployment %s", plan.Deployments[0].ID, preferredID)
+	}
+}
+
 func TestIntegrationCooldownPolicyDurations(t *testing.T) {
 	// Verify the policy durations are sensible without touching the DB-backed
 	// cooldown state machine (which requires a live DB connection).
