@@ -31,6 +31,13 @@ type DeploymentRuntimeState struct {
 	RateLimitScore int
 	LastError      string
 	LastErrorAt    time.Time
+
+	RateLimitEpisodeCount         int
+	RateLimitDegradationLevel     int
+	LastProviderRateLimitedAt     time.Time
+	RateLimitEpisodeCooldownUntil time.Time
+	NextDegradationRecoveryAt     time.Time
+	ConsecutiveRecoverySuccesses  int
 }
 
 var (
@@ -141,6 +148,7 @@ func RecordSuccess(deploymentID string) {
 	if s, ok := runtimeStates[deploymentID]; ok {
 		s.SuccessCount++
 		s.LastError = ""
+		recordProviderRateLimitDegradationSuccessAtLocked(s, time.Now())
 	}
 }
 
@@ -189,21 +197,23 @@ func DecayRateLimitScores() {
 		if s.RateLimitScore > 0 && s.LastErrorAt.Before(cutoff) {
 			s.RateLimitScore--
 		}
+		decayProviderRateLimitDegradationAtLocked(s, time.Now())
 	}
 }
 
 // SnapshotRuntimeState returns a safe copy for API responses / UI.
 type RuntimeStateSnapshot struct {
-	DeploymentID   string    `json:"deployment_id"`
-	MinuteRequests int       `json:"minute_requests"`
-	DayRequests    int       `json:"day_requests"`
-	MinuteTokens   int       `json:"minute_tokens"`
-	DayTokens      int       `json:"day_tokens"`
-	SuccessCount   int       `json:"success_count"`
-	FailureCount   int       `json:"failure_count"`
-	RateLimitScore int       `json:"rate_limit_score"`
-	LastError      string    `json:"last_error"`
-	LastErrorAt    time.Time `json:"last_error_at"`
+	DeploymentID                 string                               `json:"deployment_id"`
+	MinuteRequests               int                                  `json:"minute_requests"`
+	DayRequests                  int                                  `json:"day_requests"`
+	MinuteTokens                 int                                  `json:"minute_tokens"`
+	DayTokens                    int                                  `json:"day_tokens"`
+	SuccessCount                 int                                  `json:"success_count"`
+	FailureCount                 int                                  `json:"failure_count"`
+	RateLimitScore               int                                  `json:"rate_limit_score"`
+	LastError                    string                               `json:"last_error"`
+	LastErrorAt                  time.Time                            `json:"last_error_at"`
+	ProviderRateLimitDegradation ProviderRateLimitDegradationSnapshot `json:"provider_rate_limit_degradation"`
 }
 
 func SnapshotRuntimeState(deploymentID string) RuntimeStateSnapshot {
@@ -214,15 +224,16 @@ func SnapshotRuntimeState(deploymentID string) RuntimeStateSnapshot {
 		return RuntimeStateSnapshot{DeploymentID: deploymentID}
 	}
 	return RuntimeStateSnapshot{
-		DeploymentID:   s.DeploymentID,
-		MinuteRequests: s.MinuteRequests,
-		DayRequests:    s.DayRequests,
-		MinuteTokens:   s.MinuteTokens,
-		DayTokens:      s.DayTokens,
-		SuccessCount:   s.SuccessCount,
-		FailureCount:   s.FailureCount,
-		RateLimitScore: s.RateLimitScore,
-		LastError:      s.LastError,
-		LastErrorAt:    s.LastErrorAt,
+		DeploymentID:                 s.DeploymentID,
+		MinuteRequests:               s.MinuteRequests,
+		DayRequests:                  s.DayRequests,
+		MinuteTokens:                 s.MinuteTokens,
+		DayTokens:                    s.DayTokens,
+		SuccessCount:                 s.SuccessCount,
+		FailureCount:                 s.FailureCount,
+		RateLimitScore:               s.RateLimitScore,
+		LastError:                    s.LastError,
+		LastErrorAt:                  s.LastErrorAt,
+		ProviderRateLimitDegradation: snapshotProviderRateLimitDegradationLocked(s),
 	}
 }

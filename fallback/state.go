@@ -523,6 +523,7 @@ func ResetDeploymentState(deploymentID string) error {
 	if err := clearDeploymentCooldownState(deploymentID); err != nil {
 		return err
 	}
+	ResetProviderRateLimitDegradation(deploymentID)
 	ResetFreeProviderModelRuntime(deploymentID)
 	ResetFreeProviderModelCapabilityFalsePositive(deploymentID, "")
 	return nil
