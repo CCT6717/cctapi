@@ -281,14 +281,14 @@ class SoakScriptTests(unittest.TestCase):
                 "data": [
                     {
                         "deployment_id": "kilo/free-1",
-                        "success_count": "7",
+                        "success_count": 7,
                         "access_token": "secret",
                         "raw_body": {"secret": "secret"},
                         "provider_rate_limit_degradation": {
                             "active": True,
-                            "level": 99,
-                            "episode_count": -3,
-                            "consecutive_recovery_successes": True,
+                            "level": 0,
+                            "episode_count": 0,
+                            "consecutive_recovery_successes": 0,
                             "reason": "repeated rate limits",
                             "next_recovery_at": "2026-07-16T01:02:03Z",
                         },
@@ -305,10 +305,11 @@ class SoakScriptTests(unittest.TestCase):
                 {
                     "deployment_id": "kilo/free-1",
                     "success_count": 7,
+                    "success_count_valid": True,
                     "degradation_valid": True,
                     "invalid_fields": [],
                     "active": True,
-                    "level": 3,
+                    "level": 0,
                     "episode_count": 0,
                     "consecutive_recovery_successes": 0,
                     "reason": "repeated rate limits",
@@ -325,13 +326,26 @@ class SoakScriptTests(unittest.TestCase):
 
     def test_successful_deployments_come_from_success_count_delta(self):
         pre_snapshots = [
-            {"deployment_id": "kilo/free-1", "success_count": 4},
-            {"deployment_id": "kilo/free-2", "success_count": 9},
+            {
+                "deployment_id": "kilo/free-1",
+                "success_count": 4,
+                "success_count_valid": True,
+                "degradation_valid": True,
+                "invalid_fields": [],
+            },
+            {
+                "deployment_id": "kilo/free-2",
+                "success_count": 9,
+                "success_count_valid": True,
+                "degradation_valid": True,
+                "invalid_fields": [],
+            },
         ]
         post_snapshots = [
             {
                 "deployment_id": "kilo/free-1",
                 "success_count": 5,
+                "success_count_valid": True,
                 "degradation_valid": True,
                 "invalid_fields": [],
                 "active": False,
@@ -342,6 +356,9 @@ class SoakScriptTests(unittest.TestCase):
             {
                 "deployment_id": "kilo/free-2",
                 "success_count": 9,
+                "success_count_valid": True,
+                "degradation_valid": True,
+                "invalid_fields": [],
                 "active": True,
                 "level": 3,
                 "episode_count": 2,
@@ -365,6 +382,89 @@ class SoakScriptTests(unittest.TestCase):
         self.assertEqual(result["deployment_ids"], [])
         self.assertFalse(result["all_level_zero"])
         self.assertFalse(result["no_retained_observations"])
+
+    def test_degradation_object_requires_complete_core_fields(self):
+        valid_core = {
+            "active": False,
+            "level": 0,
+            "episode_count": 0,
+            "consecutive_recovery_successes": 0,
+        }
+        cases = {
+            "missing": None,
+            "null": None,
+            "list": [],
+            "empty dict": {},
+            "partial dict": {"active": False},
+            "non-bool active": {**valid_core, "active": 0},
+            "negative level": {**valid_core, "level": -1},
+            "level above maximum": {**valid_core, "level": 4},
+            "string episode count": {**valid_core, "episode_count": "0"},
+            "boolean recovery count": {**valid_core, "consecutive_recovery_successes": True},
+        }
+
+        for name, degradation in cases.items():
+            with self.subTest(name=name):
+                row = {"deployment_id": "kilo/free-1", "success_count": 5}
+                if name != "missing":
+                    row["provider_rate_limit_degradation"] = degradation
+                snapshot = soak.parse_runtime_degradation_snapshots(
+                    {"success": True, "data": [row]}
+                )[0]
+                self.assertFalse(snapshot["degradation_valid"])
+                self.assertTrue(snapshot["invalid_fields"])
+
+    def test_invalid_success_counts_fail_closed_without_delta(self):
+        valid_degradation = {
+            "active": False,
+            "level": 0,
+            "episode_count": 0,
+            "consecutive_recovery_successes": 0,
+        }
+        cases = {
+            "missing pre": ({}, {"success_count": 5}, "pre"),
+            "boolean pre": ({"success_count": True}, {"success_count": 5}, "pre"),
+            "missing post": ({"success_count": 4}, {}, "post"),
+            "negative post": ({"success_count": 4}, {"success_count": -1}, "post"),
+            "null post": ({"success_count": 4}, {"success_count": None}, "post"),
+        }
+
+        for name, (pre_fields, post_fields, invalid_side) in cases.items():
+            with self.subTest(name=name):
+                pre_row = {
+                    "deployment_id": "kilo/free-1",
+                    "provider_rate_limit_degradation": valid_degradation,
+                }
+                post_row = {
+                    "deployment_id": "kilo/free-1",
+                    "provider_rate_limit_degradation": valid_degradation,
+                }
+                pre_row.update(pre_fields)
+                post_row.update(post_fields)
+                pre_snapshot = soak.parse_runtime_degradation_snapshots(
+                    {"success": True, "data": [pre_row]}
+                )
+                post_snapshot = soak.parse_runtime_degradation_snapshots(
+                    {"success": True, "data": [post_row]}
+                )
+
+                invalid_snapshot = (
+                    pre_snapshot[0] if invalid_side == "pre" else post_snapshot[0]
+                )
+                self.assertFalse(invalid_snapshot["success_count_valid"])
+                self.assertIn("success_count", invalid_snapshot["invalid_fields"])
+                self.assertNotIn("success_count", invalid_snapshot)
+                result = soak.summarize_successful_deployment_degradation(
+                    pre_snapshot,
+                    post_snapshot,
+                )
+                self.assertEqual(result["deployment_ids"], [])
+                self.assertEqual(
+                    result["invalid_success_count_deployment_ids"],
+                    ["kilo/free-1"],
+                )
+                self.assertFalse(result["all_level_zero"])
+                self.assertFalse(result["no_retained_observations"])
 
     def test_degradation_validation_fails_closed_for_missing_snapshot(self):
         result = soak.summarize_successful_deployment_degradation(

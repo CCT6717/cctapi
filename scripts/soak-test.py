@@ -314,6 +314,21 @@ def parse_runtime_degradation_snapshots(payload):
         if not isinstance(raw, dict):
             raw = {}
             invalid_fields.append("provider_rate_limit_degradation")
+        else:
+            if type(raw.get("active")) is not bool:
+                invalid_fields.append("active")
+            for key, maximum in (
+                ("level", 3),
+                ("episode_count", None),
+                ("consecutive_recovery_successes", None),
+            ):
+                value = raw.get(key)
+                if (
+                    type(value) is not int
+                    or value < 0
+                    or (maximum is not None and value > maximum)
+                ):
+                    invalid_fields.append(key)
 
         def safe_nonnegative_int(key, maximum=None):
             value = raw.get(key, 0)
@@ -325,12 +340,13 @@ def parse_runtime_degradation_snapshots(payload):
                 value = 0
             return min(value, maximum) if maximum is not None else value
 
+        success_count = row.get("success_count")
+        success_count_valid = type(success_count) is int and success_count >= 0
+        if not success_count_valid:
+            invalid_fields.append("success_count")
         snapshot = {
             "deployment_id": deployment_id,
-            "success_count": max(0, int(row.get("success_count", 0)))
-            if not isinstance(row.get("success_count"), bool)
-            and str(row.get("success_count", "")).lstrip("+-").isdigit()
-            else 0,
+            "success_count_valid": success_count_valid,
             "degradation_valid": not invalid_fields,
             "invalid_fields": invalid_fields,
             "active": raw.get("active") is True,
@@ -340,6 +356,8 @@ def parse_runtime_degradation_snapshots(payload):
                 "consecutive_recovery_successes"
             ),
         }
+        if success_count_valid:
+            snapshot["success_count"] = success_count
         if snapshot["active"] and raw.get("reason") == "repeated rate limits":
             snapshot["reason"] = "repeated rate limits"
         for key in ("last_rate_limited_at", "next_recovery_at"):
@@ -398,10 +416,43 @@ def summarize_successful_deployment_degradation(pre_snapshots, post_snapshots):
         for snapshot in post_snapshots
         if snapshot.get("deployment_id")
     }
+    snapshot_ids = set(pre_snapshots_by_id).union(post_snapshots_by_id)
+
+    def has_valid_success_count(snapshot):
+        return (
+            snapshot.get("success_count_valid") is True
+            and type(snapshot.get("success_count")) is int
+            and snapshot["success_count"] >= 0
+        )
+
+    invalid_success_count_deployment_ids = sorted(
+        deployment_id
+        for deployment_id in snapshot_ids
+        if deployment_id in pre_snapshots_by_id
+        and deployment_id in post_snapshots_by_id
+        and (
+            not has_valid_success_count(pre_snapshots_by_id[deployment_id])
+            or not has_valid_success_count(post_snapshots_by_id[deployment_id])
+        )
+    )
+    invalid_degradation_deployment_ids = sorted(
+        deployment_id
+        for deployment_id in snapshot_ids
+        if (
+            deployment_id in pre_snapshots_by_id
+            and pre_snapshots_by_id[deployment_id].get("degradation_valid") is not True
+        )
+        or (
+            deployment_id in post_snapshots_by_id
+            and post_snapshots_by_id[deployment_id].get("degradation_valid") is not True
+        )
+    )
     deployment_ids = sorted(
         deployment_id
         for deployment_id, post_snapshot in post_snapshots_by_id.items()
         if deployment_id in pre_snapshots_by_id
+        and has_valid_success_count(post_snapshot)
+        and has_valid_success_count(pre_snapshots_by_id[deployment_id])
         and post_snapshot.get("success_count", 0)
         > pre_snapshots_by_id[deployment_id].get("success_count", 0)
     )
@@ -412,14 +463,25 @@ def summarize_successful_deployment_degradation(pre_snapshots, post_snapshots):
     missing_deployment_ids = sorted(
         set(pre_snapshots_by_id).symmetric_difference(post_snapshots_by_id)
     )
-    all_level_zero = bool(deployment_ids) and not missing_deployment_ids and all(
+    all_level_zero = (
+        bool(deployment_ids)
+        and not missing_deployment_ids
+        and not invalid_success_count_deployment_ids
+        and not invalid_degradation_deployment_ids
+        and all(
         snapshot.get("degradation_valid") is True
         and snapshot.get("invalid_fields") == []
         and not snapshot.get("active")
         and snapshot.get("level") == 0
         for snapshot in snapshots
+        )
     )
-    no_retained_observations = bool(deployment_ids) and not missing_deployment_ids and all(
+    no_retained_observations = (
+        bool(deployment_ids)
+        and not missing_deployment_ids
+        and not invalid_success_count_deployment_ids
+        and not invalid_degradation_deployment_ids
+        and all(
         snapshot.get("degradation_valid") is True
         and snapshot.get("invalid_fields") == []
         and snapshot.get("episode_count") == 0
@@ -427,11 +489,14 @@ def summarize_successful_deployment_degradation(pre_snapshots, post_snapshots):
         and "last_rate_limited_at" not in snapshot
         and "next_recovery_at" not in snapshot
         for snapshot in snapshots
+        )
     )
     return {
         "deployment_ids": deployment_ids,
         "snapshots": snapshots,
         "missing_deployment_ids": missing_deployment_ids,
+        "invalid_success_count_deployment_ids": invalid_success_count_deployment_ids,
+        "invalid_degradation_deployment_ids": invalid_degradation_deployment_ids,
         "all_level_zero": all_level_zero,
         "no_retained_observations": no_retained_observations,
     }
