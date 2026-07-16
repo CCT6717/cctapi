@@ -111,6 +111,27 @@ func TestProviderRateLimitDegradationLevelZeroSuccessResetsObservation(t *testin
 	}
 }
 
+func TestProviderRateLimitDegradationLongCooldownDefersObservationExpiry(t *testing.T) {
+	base := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
+	cooldownUntil := base.Add(20 * time.Minute)
+	state := &DeploymentRuntimeState{DeploymentID: "provider-rate-limit-long-cooldown"}
+
+	recordProviderRateLimitEpisodeAtLocked(state, base, cooldownUntil)
+	recordProviderRateLimitEpisodeAtLocked(state, base.Add(15*time.Minute), cooldownUntil)
+
+	ignored := snapshotProviderRateLimitDegradationLocked(state)
+	if ignored.EpisodeCount != 1 || ignored.LastRateLimitedAt == nil || !ignored.LastRateLimitedAt.Equal(base) {
+		t.Fatalf("ignored snapshot = %#v, want the original first observation unchanged", ignored)
+	}
+
+	nextEvent := cooldownUntil.Add(time.Nanosecond)
+	recordProviderRateLimitEpisodeAtLocked(state, nextEvent, nextEvent.Add(time.Minute))
+	got := snapshotProviderRateLimitDegradationLocked(state)
+	if got.Active || got.Level != 0 || got.EpisodeCount != 1 || got.LastRateLimitedAt == nil || !got.LastRateLimitedAt.Equal(nextEvent) {
+		t.Fatalf("snapshot = %#v, want a fresh first observation after the long cooldown", got)
+	}
+}
+
 func TestProviderRateLimitDegradationRecoversOneLevelAfterThreeSuccesses(t *testing.T) {
 	base := time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC)
 	state := &DeploymentRuntimeState{DeploymentID: "provider-rate-limit-success-recovery"}
