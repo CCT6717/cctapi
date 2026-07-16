@@ -58,7 +58,7 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 
 ## Current Handoff
 
-Last verified handoff: 2026-07-14.
+Last verified handoff: 2026-07-16.
 
 - Branch `main` is pushed to `origin/main`.
 - Architecture-boundary release candidate is on `codex/fallback-routing-boundaries` in PR `#1`. Validated code commit `a898b59373c57a74bf622b03294d7c96a0ba3171` passed CI run `29345985697` across frontend, Go, repository, and E2E jobs.
@@ -68,6 +68,10 @@ Last verified handoff: 2026-07-14.
 - Sanitized release evidence: `docs/evidence/fallback-routing-boundaries-2026-07-14.json`. No token, password, raw upstream body, or temporary acceptance database is retained.
 - Security hardening is merged through `5409921`: default root credentials are removed, session cookies and browser mutations are protected, token CORS is scoped, internal errors are sanitized, JWT/dependencies use patched releases, and CI runs pinned `govulncheck` v1.6.0.
 - Latest smoke hardening commit: `36a6dc5 fix(smoke): wait for complete usage accounting`.
+- Kilo required-tool-call resilience is merged through PR `#4` at `c4fdd95`. Required tool calls are validated before settlement, and Kilo model capability false positives rotate to the next compatible model without incorrectly settling usage or penalizing the provider for an intermediate model failure.
+- The 2026-07-16 post-merge local quality gate passed: frontend ESLint, 9 Vitest suites with 44 tests, Vite production build, full Go tests, full Go build, and scoped race tests for `./fallback`, `./controller`, `./relay/controller`, and `./router`.
+- The rebuilt `one-api.exe` is running on port `3008` and returns HTTP 200. A paced 12-request `openrouter/auto` run passed 12/12 across Chat Completions, streaming, Responses, and required tool calls with zero protocol errors. All 3 tool requests returned valid JSON arguments, 3 real Kilo models were observed, and one live model HTTP 429 was rotated transparently to a successful response.
+- The post-merge live run did not naturally produce an invalid required-tool response, so that recovery branch remains verified by the fresh full Go regression suite and CI rather than by forced production traffic.
 - Preview release tag for this handoff: `v0.1.0-freellmapi-preview`.
 - Frontend build toolchain migrated from CRA to Vite 6.4.3 + Vitest 3.2.7 + Storybook Vite builder 10.5.0.
 - react-scripts and Webpack dependency chain fully removed.
