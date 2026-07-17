@@ -88,7 +88,7 @@ func SnapshotRecentAttemptChains(limit int) []AttemptRequestChain {
 			RealModel:            event.RealModel,
 			Outcome:              event.Outcome,
 			StatusCode:           event.StatusCode,
-			ErrorCategory:        event.ErrorCategory,
+			ErrorCategory:        safeAttemptErrorCategory(event.ErrorCategory),
 			DurationMs:           event.DurationMs,
 			StreamWritten:        event.StreamWritten,
 			PlanIndex:            event.PlanIndex,

@@ -22,6 +22,15 @@ var attemptFailureOutcomes = []AttemptOutcome{
 
 const safeErrorCategoryExpression = "CASE WHEN error_category IN ('none', 'client', 'quota', 'rate_limit', 'temporary', 'model_access') THEN error_category ELSE 'unknown' END"
 
+func safeAttemptErrorCategory(category string) string {
+	switch category {
+	case "none", "client", "quota", "rate_limit", "temporary", "model_access":
+		return category
+	default:
+		return "unknown"
+	}
+}
+
 // AttemptAggregateItem is a safe, grouped summary of persisted attempt events.
 type AttemptAggregateItem struct {
 	Key          string    `json:"key"`
