@@ -233,12 +233,20 @@ for ($i = 1; $i -le $totalIterations; $i++) {
   try {
     if ($useResp) {
       $ok = Send-ResponsesRequest
-      if ($ok) { $stats.responsesCount++ }
+      if ($ok) {
+        $stats.successCount++
+        $stats.responsesCount++
+      } else {
+        $stats.failureCount++
+      }
     } else {
       $ok = Send-ChatRequest -Stream $useStream -WithTools $useTools
       if ($ok) {
+        $stats.successCount++
         if ($useStream) { $stats.streamCount++ }
         if ($useTools)  { $stats.toolCount++ }
+      } else {
+        $stats.failureCount++
       }
     }
   } catch {
@@ -355,7 +363,8 @@ $evidence = [pscustomobject]@{
 if (-not (Test-Path $OutputDir)) { New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null }
 $stamp = $startedAt.ToString("yyyy-MM-dd-HHmm")
 $evidencePath = Join-Path $OutputDir "production-soak-$stamp.json"
-$evidence | ConvertTo-Json -Depth 12 | Set-Content -Encoding utf8 $evidencePath
+$evidenceJson = $evidence | ConvertTo-Json -Depth 12
+[System.IO.File]::WriteAllText($evidencePath, $evidenceJson, (New-Object System.Text.UTF8Encoding $false))
 
 $passed = $successRate -ge $MinSuccessRate -and $stats.totalRequests -gt 0
 
