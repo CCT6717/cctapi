@@ -60,37 +60,14 @@ const encodeAttemptKeyPart = (value) => {
   return `${text.length}:${text}`;
 };
 
-const getAttemptStepKeyBase = (step) =>
+const getAttemptChainKeyBase = (chain) =>
   [
-    step.created_at,
-    step.provider,
-    step.deployment_id,
-    step.real_model,
-    step.outcome,
-    step.status_code,
-    step.error_category,
-    step.duration_ms,
-    step.stream_written,
-    step.plan_index,
-    step.upstream_attempt_index,
-  ]
-    .map(encodeAttemptKeyPart)
-    .join('');
-
-const getAttemptChainKeyBase = (chain) => {
-  const stepsKey = (chain.steps || [])
-    .map((step) => encodeAttemptKeyPart(getAttemptStepKeyBase(step)))
-    .join('');
-  return [
     chain.request_id,
     chain.virtual_model,
-    chain.started_at,
-    chain.finished_at,
-    stepsKey,
+    chain.started_at || chain.steps?.[0]?.created_at,
   ]
     .map(encodeAttemptKeyPart)
     .join('');
-};
 
 const AttemptAggregateList = ({ title, items, valueField, emptyText }) => (
   <article className='fallback-attempt-diagnostic-card'>

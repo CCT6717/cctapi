@@ -256,4 +256,54 @@ describe('MetricsPanel precise attempt diagnostics', () => {
       )
     ).toBe(false);
   });
+
+  test('keeps the chain article mounted as completion fields and steps update', () => {
+    const initialChain = {
+      ...attemptData.recent_chains[0],
+      finished_at: '2026-07-17T03:00:00.500Z',
+      steps: [attemptData.recent_chains[0].steps[0]],
+    };
+    useAttemptObservability.mockReturnValue({
+      data: {
+        ...emptyAttemptData,
+        recent_chains: [initialChain],
+      },
+      error: '',
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderPanel();
+
+    const initialArticle = container.querySelector(
+      'article.fallback-attempt-chain-card'
+    );
+    expect(initialArticle.textContent).toContain('kilo/model-a:free');
+    expect(initialArticle.textContent).not.toContain('kilo/model-b:free');
+
+    useAttemptObservability.mockReturnValue({
+      data: {
+        ...emptyAttemptData,
+        recent_chains: [
+          {
+            ...initialChain,
+            finished_at: '2026-07-17T03:00:01Z',
+            steps: attemptData.recent_chains[0].steps,
+          },
+        ],
+      },
+      error: '',
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderPanel();
+
+    const updatedArticle = container.querySelector(
+      'article.fallback-attempt-chain-card'
+    );
+    expect(updatedArticle).toBe(initialArticle);
+    expect(updatedArticle.textContent).toContain('kilo/model-b:free');
+    expect(updatedArticle.textContent).toContain('成功');
+  });
 });
