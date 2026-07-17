@@ -2310,6 +2310,279 @@
   line-height: 1.35;
 }
 
+/* --- Precise Attempt Diagnostics --- */
+.fallback-attempt-section > .ui.message {
+  margin: 10px 0;
+}
+
+.fallback-attempt-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.fallback-attempt-stat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  min-width: 0;
+  padding: 13px 14px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+}
+
+.fallback-attempt-stat.failure {
+  border-color: var(--fb-danger-border);
+  background: var(--fb-danger-bg);
+}
+
+.fallback-attempt-stat.skipped {
+  border-color: var(--fb-warning-border);
+  background: var(--fb-warning-bg);
+}
+
+.fallback-attempt-stat div {
+  min-width: 0;
+}
+
+.fallback-attempt-stat span,
+.fallback-attempt-stat small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.fallback-attempt-stat span {
+  color: var(--fb-text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.fallback-attempt-stat small {
+  margin-top: 3px;
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.fallback-attempt-stat strong {
+  flex: 0 0 auto;
+  color: var(--fb-text);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.fallback-attempt-diagnostic-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fallback-attempt-diagnostic-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+}
+
+.fallback-attempt-diagnostic-card h4,
+.fallback-attempt-chain-head h4 {
+  margin: 0;
+  color: var(--fb-text);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.fallback-attempt-diagnostic-list {
+  display: grid;
+  gap: 7px;
+  margin-top: 9px;
+}
+
+.fallback-attempt-diagnostic-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 7px;
+  border-top: 1px solid var(--fb-border-light);
+}
+
+.fallback-attempt-diagnostic-row:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.fallback-attempt-diagnostic-row > span {
+  min-width: 0;
+  color: var(--fb-text-secondary);
+  font-family: var(--fb-font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.fallback-attempt-diagnostic-row .ui.label {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.fallback-attempt-empty {
+  display: block;
+  margin-top: 9px;
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+}
+
+.fallback-attempt-chain-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 16px 0 9px;
+}
+
+.fallback-attempt-chain-head span {
+  color: var(--fb-text-secondary);
+  font-size: 12px;
+}
+
+.fallback-attempt-chain-list {
+  display: grid;
+  gap: 10px;
+}
+
+.fallback-attempt-chain-card {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--fb-border);
+  border-radius: var(--fb-radius-sm);
+  background: var(--fb-surface);
+  box-shadow: var(--fb-shadow-sm);
+}
+
+.fallback-attempt-chain-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--fb-border-light);
+}
+
+.fallback-attempt-chain-title > div {
+  min-width: 0;
+}
+
+.fallback-attempt-chain-title strong,
+.fallback-attempt-chain-title span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.fallback-attempt-chain-title strong {
+  color: var(--fb-text);
+  font-size: 13px;
+}
+
+.fallback-attempt-chain-title span {
+  margin-top: 3px;
+  color: var(--fb-text-secondary);
+  font-family: var(--fb-font-mono);
+  font-size: 11px;
+}
+
+.fallback-attempt-chain-title .ui.label {
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.fallback-attempt-steps {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.fallback-attempt-step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+}
+
+.fallback-attempt-step-index {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  color: var(--fb-text-secondary);
+  background: var(--fb-border-light);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.fallback-attempt-step.success .fallback-attempt-step-index {
+  color: #047857;
+  background: #dcfce7;
+}
+
+.fallback-attempt-step.failure .fallback-attempt-step-index {
+  color: #be123c;
+  background: var(--fb-danger-bg);
+}
+
+.fallback-attempt-step.skipped .fallback-attempt-step-index {
+  color: #c2410c;
+  background: var(--fb-warning-bg);
+}
+
+.fallback-attempt-step-body {
+  min-width: 0;
+}
+
+.fallback-attempt-step-body > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fallback-attempt-step-body strong,
+.fallback-attempt-step-body span,
+.fallback-attempt-step-body small {
+  overflow-wrap: anywhere;
+}
+
+.fallback-attempt-step-body strong {
+  min-width: 0;
+  color: var(--fb-text);
+  font-family: var(--fb-font-mono);
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.fallback-attempt-step-body .ui.label {
+  margin: 0;
+}
+
+.fallback-attempt-step-body span,
+.fallback-attempt-step-body small {
+  display: block;
+  margin-top: 3px;
+  color: var(--fb-text-secondary);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
 /* ============================================================
    Responsive
    ============================================================ */
@@ -2435,6 +2708,44 @@
   .fallback-trend-grid,
   .fallback-top3-grid {
     grid-template-columns: 1fr;
+  }
+
+  .fallback-attempt-summary,
+  .fallback-attempt-diagnostic-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .fallback-attempt-stat,
+  .fallback-attempt-diagnostic-card,
+  .fallback-attempt-chain-card,
+  .fallback-attempt-chain-title,
+  .fallback-attempt-step,
+  .fallback-attempt-step-body {
+    min-width: 0;
+  }
+
+  .fallback-attempt-stat,
+  .fallback-attempt-chain-title,
+  .fallback-attempt-chain-head {
+    align-items: flex-start;
+  }
+
+  .fallback-attempt-chain-head {
+    display: block;
+  }
+
+  .fallback-attempt-chain-head span {
+    display: block;
+    margin-top: 4px;
+  }
+
+  .fallback-attempt-diagnostic-row > span,
+  .fallback-attempt-chain-title strong,
+  .fallback-attempt-chain-title span,
+  .fallback-attempt-step-body strong,
+  .fallback-attempt-step-body span,
+  .fallback-attempt-step-body small {
+    overflow-wrap: anywhere;
   }
 
   .fallback-summary-bar {
