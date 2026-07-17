@@ -107,6 +107,8 @@ func RecordAttemptEvent(event AttemptEvent) error {
 // the Phase 4 principle: persist failures, skips, and model_rate_limited; do NOT persist
 // routine successes (they are aggregated into memory metrics instead).
 func RecordAttemptEventIfWorthy(event AttemptEvent) error {
+	recordRecentAttempt(event)
+
 	switch event.Outcome {
 	case AttemptOutcomeSuccess:
 		// Success events are aggregated into memory metrics, not persisted
