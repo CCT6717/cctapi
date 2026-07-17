@@ -560,7 +560,11 @@ func triggerDeploymentHealthCheck(c *gin.Context) {
 }
 
 func getAttemptObservability(c *gin.Context) {
-	snapshot, err := fallback.SnapshotAttemptObservability()
+	getAttemptObservabilityWithSnapshot(c, fallback.SnapshotAttemptObservability)
+}
+
+func getAttemptObservabilityWithSnapshot(c *gin.Context, snapshotFn func() (fallback.AttemptObservabilitySnapshot, error)) {
+	snapshot, err := snapshotFn()
 	if err != nil {
 		logger.SysError("[fallback] snapshot attempt observability failed: " + err.Error())
 		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "attempt observability unavailable"})
