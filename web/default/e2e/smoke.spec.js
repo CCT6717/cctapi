@@ -2,11 +2,13 @@ import { test, expect } from '@playwright/test';
 
 const username = process.env.CCT_E2E_USERNAME || 'root';
 const password = process.env.CCT_E2E_PASSWORD || '123456';
-const baseURL = process.env.CCT_E2E_BASE_URL || '';
-const appURL = (path) => (baseURL ? new URL(path, baseURL).toString() : path);
+
+test.use({
+  baseURL: process.env.CCT_E2E_BASE_URL || 'http://127.0.0.1:3008',
+});
 
 async function login(page) {
-  await page.goto(appURL('/login'));
+  await page.goto('/login');
   await page.locator('input[name="username"]').fill(username);
   await page.locator('input[name="password"]').fill(password);
 
@@ -90,6 +92,7 @@ test.describe('Responsive admin pages', () => {
   });
 
   test('fallback status diagnostics fit the mobile viewport', async ({ page }) => {
+    let attemptObservabilityRequestCount = 0;
     await login(page);
     await page.route('**/api/fallback/virtual-models', (route) =>
       route.fulfill({
@@ -121,8 +124,9 @@ test.describe('Responsive admin pages', () => {
         }),
       }),
     );
-    await page.route('**/api/fallback/attempt-observability', (route) =>
-      route.fulfill({
+    await page.route('**/api/fallback/attempt-observability', (route) => {
+      attemptObservabilityRequestCount += 1;
+      return route.fulfill({
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
@@ -198,10 +202,10 @@ test.describe('Responsive admin pages', () => {
             }],
           },
         }),
-      }),
-    );
+      });
+    });
 
-    await page.goto(appURL('/fallback/status'));
+    await page.goto('/fallback/status');
     await page.locator('.gw-row-top').click();
     const diagnostic = page.locator('.gw-degradation');
     await expect(diagnostic).toBeVisible();
@@ -219,13 +223,18 @@ test.describe('Responsive admin pages', () => {
     await expect(
       attemptDiagnostic.getByRole('heading', { name: '最近请求链路' })
     ).toBeVisible();
-    await expect(attemptDiagnostic).toContainText('e2e-attempt-request-429');
-    await expect(attemptDiagnostic).toContainText('kilo/e2e-primary:free');
-    await expect(attemptDiagnostic).toContainText('HTTP 429');
-    await expect(attemptDiagnostic).toContainText('限速');
-    await expect(attemptDiagnostic).toContainText('kilo/e2e-recovery:free');
-    await expect(attemptDiagnostic).toContainText('成功');
-    await expect(page.locator('.fallback-attempt-chain-card')).toContainText('2 步');
+    expect(attemptObservabilityRequestCount).toBeGreaterThan(0);
+    const attemptChain = page.locator('.fallback-attempt-chain-card').filter({
+      hasText: 'e2e-attempt-request-429',
+    });
+    await expect(attemptChain).toHaveCount(1);
+    await expect(attemptChain).toContainText('e2e-attempt-request-429');
+    await expect(attemptChain).toContainText('kilo/e2e-primary:free');
+    await expect(attemptChain).toContainText('HTTP 429');
+    await expect(attemptChain).toContainText('限速');
+    await expect(attemptChain).toContainText('kilo/e2e-recovery:free');
+    await expect(attemptChain).toContainText('成功');
+    await expect(attemptChain).toContainText('2 步');
     if (page.viewportSize().width <= 768) {
       expect(
         await page.evaluate(
