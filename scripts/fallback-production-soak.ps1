@@ -392,6 +392,25 @@ $evidencePath = Join-Path $OutputDir "production-soak-$stamp.json"
 $evidenceJson = $evidence | ConvertTo-Json -Depth 12
 [System.IO.File]::WriteAllText($evidencePath, $evidenceJson, (New-Object System.Text.UTF8Encoding $false))
 
+# Sidecar: append raw per-request latencies so a downstream aggregator can compute
+# TRUE overall percentiles across multiple cumulative soak segments. Sanitized: no
+# tokens, bodies, or provider identities beyond what the summary already exposes.
+$latLine = [pscustomobject]@{
+  stamp = $stamp
+  started_at = $startedAt.ToString("o")
+  duration_minutes = $evidence.duration_minutes
+  interval_sec = $IntervalSec
+  total_requests = $stats.totalRequests
+  success_count = $stats.successCount
+  failure_count = $stats.failureCount
+  latencies_ms = $stats.latenciesMs
+} | ConvertTo-Json -Depth 4 -Compress
+[System.IO.File]::AppendAllText(
+  (Join-Path $OutputDir "latency-log.jsonl"),
+  $latLine + [Environment]::NewLine,
+  (New-Object System.Text.UTF8Encoding $false)
+)
+
 $passed = $successRate -ge $MinSuccessRate -and $stats.totalRequests -gt 0
 
 if ($OutputJson) {
