@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common/ctxkey"
+	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/fallback"
 	dbmodel "github.com/songquanpeng/one-api/model"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
@@ -50,6 +51,8 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 
 		var attempted []string
 		c, _ := newRelayRotationContext()
+		requestID := "req-kilo-429-success-chain"
+		c.Set(helper.RequestIdKey, requestID)
 		relayWithFallbackUsing(c, func(c *gin.Context, _ int) *relaymodel.ErrorWithStatusCode {
 			attempted = append(attempted, c.GetString(ctxkey.FallbackRealModel))
 			if len(attempted) == 1 {
@@ -61,6 +64,31 @@ func TestRelayWithFallbackRotatesKiloModels(t *testing.T) {
 		wantAttempts := []string{"kilo/a:free", "kilo/b:free"}
 		if !reflect.DeepEqual(attempted, wantAttempts) {
 			t.Fatalf("attempted models = %v, want %v", attempted, wantAttempts)
+		}
+		var requestChain *fallback.AttemptRequestChain
+		for _, chain := range fallback.SnapshotRecentAttemptChains(20) {
+			if chain.RequestID == requestID {
+				chainCopy := chain
+				requestChain = &chainCopy
+				break
+			}
+		}
+		if requestChain == nil {
+			t.Fatalf("missing process-local attempt chain for request %q", requestID)
+		}
+		if len(requestChain.Steps) != 2 {
+			t.Fatalf("attempt chain steps = %#v, want model 429 followed by success", requestChain.Steps)
+		}
+		if first, second := requestChain.Steps[0], requestChain.Steps[1]; first.RealModel != "kilo/a:free" || first.Outcome != fallback.AttemptOutcomeModelRateLimited ||
+			second.RealModel != "kilo/b:free" || second.Outcome != fallback.AttemptOutcomeSuccess {
+			t.Fatalf("attempt chain steps = %#v, want ordered kilo/a 429 then kilo/b success", requestChain.Steps)
+		}
+		persisted, err := fallback.GetAttemptEventsByRequestID(requestID, 100)
+		if err != nil {
+			t.Fatalf("GetAttemptEventsByRequestID: %v", err)
+		}
+		if len(persisted) != 1 || persisted[0].Outcome != fallback.AttemptOutcomeModelRateLimited {
+			t.Fatalf("persisted attempt events = %#v, want only model 429", persisted)
 		}
 		providerRuntime := fallback.SnapshotRuntimeState(kiloID)
 		if providerRuntime.FailureCount != 0 || providerRuntime.RateLimitScore != 0 {

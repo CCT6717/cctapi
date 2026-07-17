@@ -171,6 +171,54 @@ describe('MetricsPanel precise attempt diagnostics', () => {
     expect(text).not.toContain(unsafeToken);
   });
 
+  test('does not render the legacy approximate deployment ranking', () => {
+    const legacySentinel = 'LEGACY_APPROXIMATE_RANKING_SENTINEL';
+    act(() => {
+      root.render(
+        <MetricsPanel
+          {...props}
+          runtimeHealth={{
+            ...props.runtimeHealth,
+            topDeploymentFailures: [
+              {
+                key: 'legacy-ranking',
+                deployment: legacySentinel,
+                model: 'legacy-model',
+                count: 99,
+              },
+            ],
+          }}
+        />
+      );
+    });
+
+    expect(container.textContent).not.toContain('Top 3 失败模型');
+    expect(container.textContent).not.toContain(legacySentinel);
+  });
+
+  test('renders every supported local skip outcome label', () => {
+    useAttemptObservability.mockReturnValue({
+      data: {
+        ...emptyAttemptData,
+        skip_event_count: 3,
+        outcomes: [
+          { outcome: 'skipped_concurrency', count: 1 },
+          { outcome: 'skipped_channel', count: 1 },
+          { outcome: 'skipped_model_state', count: 1 },
+        ],
+      },
+      error: '',
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderPanel();
+
+    expect(container.textContent).toContain('并发跳过 1 次');
+    expect(container.textContent).toContain('渠道跳过 1 次');
+    expect(container.textContent).toContain('模型状态跳过 1 次');
+  });
+
   test('shows one safe hook error when no precise snapshot is available', () => {
     useAttemptObservability.mockReturnValue({
       data: null,

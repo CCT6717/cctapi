@@ -8,9 +8,10 @@ import (
 )
 
 const (
-	attemptFailureWindow     = time.Hour
-	attemptAggregateLimit    = 5
-	recentAttemptChainScope  = "process"
+	attemptFailureWindow        = time.Hour
+	attemptTopAggregateLimit    = 5
+	attemptDetailAggregateLimit = 10
+	recentAttemptChainScope     = "process"
 )
 
 var attemptFailureOutcomes = []AttemptOutcome{
@@ -18,6 +19,14 @@ var attemptFailureOutcomes = []AttemptOutcome{
 	AttemptOutcomeModelRateLimited,
 	AttemptOutcomeNonFallbackable,
 	AttemptOutcomeModelCapabilityFalsePositive,
+}
+
+var attemptSkipOutcomes = []AttemptOutcome{
+	AttemptOutcomeSkippedUnavailable,
+	AttemptOutcomeSkippedQuota,
+	AttemptOutcomeSkippedConcurrency,
+	AttemptOutcomeSkippedChannel,
+	AttemptOutcomeSkippedModelState,
 }
 
 const safeErrorCategoryExpression = "CASE WHEN error_category IN ('none', 'client', 'quota', 'rate_limit', 'temporary', 'model_access') THEN error_category ELSE 'unknown' END"
@@ -96,40 +105,40 @@ func snapshotAttemptObservabilityAt(now time.Time) (AttemptObservabilitySnapshot
 	}
 	if err := db.Model(&AttemptEvent{}).
 		Where("created_at >= ?", cutoff).
-		Where("outcome LIKE ?", "skipped_%").
+		Where("outcome IN ?", attemptSkipOutcomes).
 		Count(&snapshot.SkipEventCount).Error; err != nil {
 		return AttemptObservabilitySnapshot{}, err
 	}
 
-	if snapshot.TopDeployments, err = scanAttemptAggregates(failureEvents, "deployment_id AS key, deployment_id, COUNT(*) AS count, MAX(created_at) AS last_seen_at", "deployment_id"); err != nil {
+	if snapshot.TopDeployments, err = scanAttemptAggregates(failureEvents, "deployment_id AS key, deployment_id, COUNT(*) AS count, MAX(created_at) AS last_seen_at", "deployment_id", attemptTopAggregateLimit); err != nil {
 		return AttemptObservabilitySnapshot{}, err
 	}
-	if snapshot.TopProviders, err = scanAttemptAggregates(failureEvents, "provider AS key, provider, COUNT(*) AS count, MAX(created_at) AS last_seen_at", "provider"); err != nil {
+	if snapshot.TopProviders, err = scanAttemptAggregates(failureEvents, "provider AS key, provider, COUNT(*) AS count, MAX(created_at) AS last_seen_at", "provider", attemptTopAggregateLimit); err != nil {
 		return AttemptObservabilitySnapshot{}, err
 	}
-	if snapshot.TopModels, err = scanAttemptAggregates(failureEvents, "real_model AS key, real_model, COUNT(*) AS count, MAX(created_at) AS last_seen_at", "real_model"); err != nil {
+	if snapshot.TopModels, err = scanAttemptAggregates(failureEvents, "real_model AS key, real_model, COUNT(*) AS count, MAX(created_at) AS last_seen_at", "real_model", attemptTopAggregateLimit); err != nil {
 		return AttemptObservabilitySnapshot{}, err
 	}
-	if snapshot.ErrorCategories, err = scanAttemptAggregates(failureEvents, safeErrorCategoryExpression+" AS key, "+safeErrorCategoryExpression+" AS category, COUNT(*) AS count, MAX(created_at) AS last_seen_at", safeErrorCategoryExpression); err != nil {
+	if snapshot.ErrorCategories, err = scanAttemptAggregates(failureEvents, safeErrorCategoryExpression+" AS key, "+safeErrorCategoryExpression+" AS category, COUNT(*) AS count, MAX(created_at) AS last_seen_at", safeErrorCategoryExpression, attemptDetailAggregateLimit); err != nil {
 		return AttemptObservabilitySnapshot{}, err
 	}
 
 	outcomeEvents := db.Model(&AttemptEvent{}).
 		Where("created_at >= ?", cutoff).
-		Where("("+failureCondition+") OR outcome LIKE ?", attemptFailureOutcomes, "skipped_%")
-	if snapshot.Outcomes, err = scanAttemptAggregates(outcomeEvents, "outcome AS key, outcome, COUNT(*) AS count, MAX(created_at) AS last_seen_at", "outcome"); err != nil {
+		Where("("+failureCondition+") OR outcome IN ?", attemptFailureOutcomes, attemptSkipOutcomes)
+	if snapshot.Outcomes, err = scanAttemptAggregates(outcomeEvents, "outcome AS key, outcome, COUNT(*) AS count, MAX(created_at) AS last_seen_at", "outcome", attemptDetailAggregateLimit); err != nil {
 		return AttemptObservabilitySnapshot{}, err
 	}
 
 	return snapshot, nil
 }
 
-func scanAttemptAggregates(query *gorm.DB, selectClause, groupClause string) ([]AttemptAggregateItem, error) {
+func scanAttemptAggregates(query *gorm.DB, selectClause, groupClause string, limit int) ([]AttemptAggregateItem, error) {
 	rows := make([]attemptAggregateRow, 0)
 	result := query.Select(selectClause).
 		Group(groupClause).
 		Order("count DESC, last_seen_at DESC, key ASC").
-		Limit(attemptAggregateLimit).
+		Limit(limit).
 		Scan(&rows)
 	if result.Error != nil {
 		return nil, result.Error

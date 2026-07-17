@@ -121,4 +121,28 @@ describe('useAttemptObservability', () => {
 
     expect(vi.getTimerCount()).toBe(0);
   });
+
+  test('does not update state when a deferred request resolves after unmount', async () => {
+    let resolveRequest;
+    const request = new Promise((resolve) => {
+      resolveRequest = resolve;
+    });
+    const onChange = vi.fn();
+    API.get.mockReturnValueOnce(request);
+
+    await act(async () => {
+      root.render(<Harness onChange={onChange} />);
+    });
+    const renderCountAtUnmount = onChange.mock.calls.length;
+
+    act(() => {
+      root.unmount();
+    });
+    await act(async () => {
+      resolveRequest({ data: { success: true, data: successfulPayload } });
+      await request;
+    });
+
+    expect(onChange).toHaveBeenCalledTimes(renderCountAtUnmount);
+  });
 });

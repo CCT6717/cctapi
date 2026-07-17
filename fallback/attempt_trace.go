@@ -19,6 +19,7 @@ var recentAttemptTrace = struct {
 
 // AttemptTraceStep is a safe, request-chain view of one upstream attempt.
 type AttemptTraceStep struct {
+	id                   int
 	CreatedAt            time.Time      `json:"created_at"`
 	Provider             string         `json:"provider"`
 	DeploymentID         string         `json:"deployment_id"`
@@ -82,6 +83,7 @@ func SnapshotRecentAttemptChains(limit int) []AttemptRequestChain {
 		}
 		chain.FinishedAt = event.CreatedAt
 		chain.Steps = append(chain.Steps, AttemptTraceStep{
+			id:                   event.ID,
 			CreatedAt:            event.CreatedAt,
 			Provider:             event.Provider,
 			DeploymentID:         event.DeploymentID,
@@ -98,6 +100,22 @@ func SnapshotRecentAttemptChains(limit int) []AttemptRequestChain {
 
 	chains := make([]AttemptRequestChain, 0, len(byRequest))
 	for _, chain := range byRequest {
+		sort.SliceStable(chain.Steps, func(i, j int) bool {
+			left, right := chain.Steps[i], chain.Steps[j]
+			if left.PlanIndex != right.PlanIndex {
+				return left.PlanIndex < right.PlanIndex
+			}
+			if left.UpstreamAttemptIndex != right.UpstreamAttemptIndex {
+				return left.UpstreamAttemptIndex < right.UpstreamAttemptIndex
+			}
+			if !left.CreatedAt.Equal(right.CreatedAt) {
+				return left.CreatedAt.Before(right.CreatedAt)
+			}
+			if left.id != right.id {
+				return left.id < right.id
+			}
+			return false
+		})
 		if len(chain.Steps) > recentAttemptStepLimit {
 			chain.Steps = chain.Steps[len(chain.Steps)-recentAttemptStepLimit:]
 		}

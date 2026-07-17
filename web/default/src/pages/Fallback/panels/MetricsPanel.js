@@ -30,7 +30,9 @@ const ATTEMPT_OUTCOME_LABELS = {
   model_capability_false_positive: '模型能力不匹配',
   skipped_unavailable: '不可用跳过',
   skipped_quota: '配额跳过',
-  skipped_cooldown: '冷却跳过',
+  skipped_concurrency: '并发跳过',
+  skipped_channel: '渠道跳过',
+  skipped_model_state: '模型状态跳过',
 };
 
 const ATTEMPT_CATEGORY_LABELS = {
@@ -263,30 +265,6 @@ const MetricsPanel = ({
         </small>
       </article>
     </div>
-
-    {runtimeHealth.topDeploymentFailures.length > 0 && (
-      <section className='fallback-runtime-section'>
-        <div className='fallback-runtime-section-head'>
-          <h3>Top 3 失败模型</h3>
-          <span>当前失败率最高的 3 个部署</span>
-        </div>
-        <div className='fallback-top3-grid'>
-          {runtimeHealth.topDeploymentFailures.slice(0, 3).map((item, index) => {
-            const rankClass = `rank-${index + 1}`;
-            return (
-              <div className={`fallback-top3-card ${rankClass}`} key={item.key}>
-                <span className='fallback-top3-badge'>{index + 1}</span>
-                <div className='fallback-top3-body'>
-                  <strong>{item.deployment}</strong>
-                  <span>{item.model}</span>
-                  <em>失败 {formatNumber(item.count)} 次</em>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    )}
 
     <section className='fallback-runtime-section fallback-attempt-section'>
       <div className='fallback-runtime-section-head'>

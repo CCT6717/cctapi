@@ -64,6 +64,51 @@ func TestAttemptEventSuccessNotPersisted(t *testing.T) {
 	}
 }
 
+func TestRecordAttemptEventIfWorthyNormalizesTimestampBeforeTraceAndPersistence(t *testing.T) {
+	cleanupDB := setupFreeProviderLedgerTestDB(t)
+	defer cleanupDB()
+	resetRecentAttemptTrace()
+	defer resetRecentAttemptTrace()
+
+	requestID := "req-zero-created-at"
+	before := time.Now().UTC()
+	if err := RecordAttemptEventIfWorthy(AttemptEvent{
+		RequestID:            requestID,
+		VirtualModel:         "test/model",
+		Provider:             "test",
+		DeploymentID:         "free:test-zero-created-at",
+		RealModel:            "real-model",
+		Outcome:              AttemptOutcomeFailure,
+		StatusCode:           500,
+		ErrorCategory:        ErrorCategoryTemporary.String(),
+		PlanIndex:            1,
+		UpstreamAttemptIndex: 1,
+	}); err != nil {
+		t.Fatalf("RecordAttemptEventIfWorthy failed: %v", err)
+	}
+	after := time.Now().UTC()
+
+	chains := SnapshotRecentAttemptChains(1)
+	if len(chains) != 1 || len(chains[0].Steps) != 1 {
+		t.Fatalf("recent chains = %#v, want one recorded step", chains)
+	}
+	traceCreatedAt := chains[0].Steps[0].CreatedAt
+	if traceCreatedAt.IsZero() || traceCreatedAt.Before(before) || traceCreatedAt.After(after) {
+		t.Fatalf("trace created_at = %s, want normalized timestamp between %s and %s", traceCreatedAt, before, after)
+	}
+
+	persisted, err := GetAttemptEventsByRequestID(requestID, 10)
+	if err != nil {
+		t.Fatalf("GetAttemptEventsByRequestID failed: %v", err)
+	}
+	if len(persisted) != 1 {
+		t.Fatalf("persisted events = %#v, want one failure", persisted)
+	}
+	if !persisted[0].CreatedAt.Equal(traceCreatedAt) {
+		t.Fatalf("persisted created_at = %s, trace created_at = %s; want one normalized timestamp", persisted[0].CreatedAt, traceCreatedAt)
+	}
+}
+
 func TestAttemptEventFailurePersistedAndMetrics(t *testing.T) {
 	cleanupDB := setupFreeProviderLedgerTestDB(t)
 	defer cleanupDB()

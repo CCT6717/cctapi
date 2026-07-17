@@ -161,6 +161,79 @@ func TestAttemptObservabilityReturnsStableTopFiveAndEmptySlices(t *testing.T) {
 	}
 }
 
+func TestAttemptObservabilityKeepsTenDetailsAndUsesExactSkipOutcomes(t *testing.T) {
+	db := setupAttemptObservabilityTestDB(t)
+	now := time.Date(2026, time.July, 17, 12, 0, 0, 0, time.UTC)
+
+	failures := []struct {
+		outcome  AttemptOutcome
+		category string
+	}{
+		{AttemptOutcomeFailure, "none"},
+		{AttemptOutcomeModelRateLimited, "client"},
+		{AttemptOutcomeNonFallbackable, "quota"},
+		{AttemptOutcomeModelCapabilityFalsePositive, "rate_limit"},
+		{AttemptOutcomeFailure, "temporary"},
+		{AttemptOutcomeFailure, "model_access"},
+		{AttemptOutcomeFailure, "unsafe-category"},
+	}
+	events := make([]AttemptEvent, 0, len(failures)+6)
+	for index, failure := range failures {
+		events = append(events, AttemptEvent{
+			CreatedAt:            now.Add(-time.Duration(index+1) * time.Minute),
+			Provider:             "provider",
+			DeploymentID:         "deployment",
+			RealModel:            "model",
+			Outcome:              failure.outcome,
+			ErrorCategory:        failure.category,
+			UpstreamAttemptIndex: 1,
+		})
+	}
+	validSkips := []AttemptOutcome{
+		AttemptOutcomeSkippedUnavailable,
+		AttemptOutcomeSkippedQuota,
+		AttemptOutcomeSkippedConcurrency,
+		AttemptOutcomeSkippedChannel,
+		AttemptOutcomeSkippedModelState,
+	}
+	for index, outcome := range validSkips {
+		events = append(events, AttemptEvent{
+			CreatedAt:    now.Add(-time.Duration(index+10) * time.Minute),
+			Provider:     "provider",
+			DeploymentID: "deployment",
+			RealModel:    "model",
+			Outcome:      outcome,
+		})
+	}
+	events = append(events, AttemptEvent{
+		CreatedAt: now.Add(-20 * time.Minute),
+		Outcome:   AttemptOutcome("skippedXfoo"),
+	})
+	createAttemptObservabilityEvents(t, db, events)
+
+	snapshot, err := snapshotAttemptObservabilityAt(now)
+	if err != nil {
+		t.Fatalf("snapshot attempt observability: %v", err)
+	}
+	if len(snapshot.ErrorCategories) != 7 {
+		t.Fatalf("error category rows = %#v, want all 7 safe categories", snapshot.ErrorCategories)
+	}
+	if len(snapshot.Outcomes) != 9 {
+		t.Fatalf("outcome rows = %#v, want 4 failure and 5 skip outcomes", snapshot.Outcomes)
+	}
+	if snapshot.SkipEventCount != int64(len(validSkips)) {
+		t.Fatalf("skip event count = %d, want exactly %d valid skips", snapshot.SkipEventCount, len(validSkips))
+	}
+	for _, outcome := range validSkips {
+		if _, ok := findAggregateItem(snapshot.Outcomes, string(outcome)); !ok {
+			t.Fatalf("missing valid skip outcome %q from %#v", outcome, snapshot.Outcomes)
+		}
+	}
+	if containsAggregateKey(snapshot.Outcomes, "skippedXfoo") {
+		t.Fatalf("unsupported skippedXfoo was counted as a skip: %#v", snapshot.Outcomes)
+	}
+}
+
 func TestAttemptObservabilitySanitizesRecentChains(t *testing.T) {
 	resetRecentAttemptTrace()
 	t.Cleanup(resetRecentAttemptTrace)

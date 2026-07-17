@@ -750,7 +750,6 @@ func recordFallbackAttempt(
 	case fallback.AttemptOutcomeSuccess:
 		fallback.RecordAttemptSuccess(attempt.Deployment.ID, durationMs)
 	default:
-		fallback.RecordAttemptEventIfWorthy(event)
 		if outcome == fallback.AttemptOutcomeFailure ||
 			outcome == fallback.AttemptOutcomeModelCapabilityFalsePositive {
 			fallback.RecordAttemptFailure(attempt.Deployment.ID, durationMs)
@@ -763,6 +762,7 @@ func recordFallbackAttempt(
 			fallback.RecordAttemptSkip(attempt.Deployment.ID)
 		}
 	}
+	fallback.RecordAttemptEventIfWorthy(event)
 }
 
 // estimateTokenCount estimates the token count of a request using character-based approximation.

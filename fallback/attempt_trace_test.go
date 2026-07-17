@@ -52,6 +52,60 @@ func TestRecentAttemptChainsOrderAndTerminalSuccess(t *testing.T) {
 	}
 }
 
+func TestRecentAttemptChainsSortStepsByRouteOrder(t *testing.T) {
+	base := time.Date(2026, time.July, 17, 8, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name   string
+		events []AttemptEvent
+		want   []string
+	}{
+		{
+			name: "plan index wins over reversed timestamps",
+			events: []AttemptEvent{
+				{ID: 2, CreatedAt: base, RequestID: "req-plan-order", RealModel: "plan-two", PlanIndex: 2, UpstreamAttemptIndex: 1},
+				{ID: 1, CreatedAt: base.Add(time.Second), RequestID: "req-plan-order", RealModel: "plan-one", PlanIndex: 1, UpstreamAttemptIndex: 1},
+			},
+			want: []string{"plan-one", "plan-two"},
+		},
+		{
+			name: "upstream attempt index wins when timestamps are equal",
+			events: []AttemptEvent{
+				{ID: 2, CreatedAt: base, RequestID: "req-upstream-order", RealModel: "upstream-two", PlanIndex: 1, UpstreamAttemptIndex: 2},
+				{ID: 1, CreatedAt: base, RequestID: "req-upstream-order", RealModel: "upstream-one", PlanIndex: 1, UpstreamAttemptIndex: 1},
+			},
+			want: []string{"upstream-one", "upstream-two"},
+		},
+		{
+			name: "exact ties preserve insertion order",
+			events: []AttemptEvent{
+				{CreatedAt: base, RequestID: "req-stable-tie", RealModel: "first", PlanIndex: 1, UpstreamAttemptIndex: 1},
+				{CreatedAt: base, RequestID: "req-stable-tie", RealModel: "second", PlanIndex: 1, UpstreamAttemptIndex: 1},
+			},
+			want: []string{"first", "second"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetRecentAttemptTrace()
+			defer resetRecentAttemptTrace()
+			for _, event := range tt.events {
+				recordRecentAttempt(event)
+			}
+
+			chains := SnapshotRecentAttemptChains(1)
+			if len(chains) != 1 || len(chains[0].Steps) != len(tt.want) {
+				t.Fatalf("recent chains = %#v, want one chain with %d steps", chains, len(tt.want))
+			}
+			for index, wantModel := range tt.want {
+				if got := chains[0].Steps[index].RealModel; got != wantModel {
+					t.Fatalf("step %d model = %q, want %q; steps=%#v", index, got, wantModel, chains[0].Steps)
+				}
+			}
+		})
+	}
+}
+
 func TestRecentAttemptTraceBoundsAndLimits(t *testing.T) {
 	resetRecentAttemptTrace()
 	defer resetRecentAttemptTrace()
