@@ -55,6 +55,43 @@ const getAttemptOutcomeTone = (outcome) => {
   return 'failure';
 };
 
+const encodeAttemptKeyPart = (value) => {
+  const text = String(value ?? '');
+  return `${text.length}:${text}`;
+};
+
+const getAttemptStepKeyBase = (step) =>
+  [
+    step.created_at,
+    step.provider,
+    step.deployment_id,
+    step.real_model,
+    step.outcome,
+    step.status_code,
+    step.error_category,
+    step.duration_ms,
+    step.stream_written,
+    step.plan_index,
+    step.upstream_attempt_index,
+  ]
+    .map(encodeAttemptKeyPart)
+    .join('');
+
+const getAttemptChainKeyBase = (chain) => {
+  const stepsKey = (chain.steps || [])
+    .map((step) => encodeAttemptKeyPart(getAttemptStepKeyBase(step)))
+    .join('');
+  return [
+    chain.request_id,
+    chain.virtual_model,
+    chain.started_at,
+    chain.finished_at,
+    stepsKey,
+  ]
+    .map(encodeAttemptKeyPart)
+    .join('');
+};
+
 const AttemptAggregateList = ({ title, items, valueField, emptyText }) => (
   <article className='fallback-attempt-diagnostic-card'>
     <h4>{title}</h4>
@@ -93,6 +130,7 @@ const MetricsPanel = ({
   const skippedOutcomes = (attemptData?.outcomes || []).filter((item) =>
     item.outcome?.startsWith('skipped_')
   );
+  const chainKeyOccurrences = new Map();
 
   return (
     <>
@@ -282,7 +320,7 @@ const MetricsPanel = ({
       {attemptLoading && !attemptData ? (
         <Message>正在加载精准尝试数据...</Message>
       ) : !attemptData ? (
-        <Message>精准尝试数据暂时不可用</Message>
+        !attemptError && <Message>精准尝试数据暂时不可用</Message>
       ) : (
         <>
           <div className='fallback-attempt-summary'>
@@ -362,11 +400,22 @@ const MetricsPanel = ({
             <Message>暂无最近请求链路</Message>
           ) : (
             <div className='fallback-attempt-chain-list'>
-              {attemptData.recent_chains.map((chain) => (
-                <article
-                  className='fallback-attempt-chain-card'
-                  key={chain.request_id}
-                >
+              {attemptData.recent_chains.map((chain, chainIndex) => {
+                const chainKeyBase = getAttemptChainKeyBase(chain);
+                const chainOccurrence = chainKeyOccurrences.get(chainKeyBase) || 0;
+                chainKeyOccurrences.set(chainKeyBase, chainOccurrence + 1);
+                const chainKey = `${chainKeyBase}#${chainOccurrence}`;
+                const chainAccessibleName = `请求链路 ${
+                  chain.request_id || '未提供请求 ID'
+                }，${chain.virtual_model || '未知虚拟模型'}，第 ${
+                  chainIndex + 1
+                } 条`;
+                return (
+                  <article
+                    aria-label={chainAccessibleName}
+                    className='fallback-attempt-chain-card'
+                    key={chainKey}
+                  >
                   <div className='fallback-attempt-chain-title'>
                     <div>
                       <strong>{chain.virtual_model || '-'}</strong>
@@ -376,7 +425,7 @@ const MetricsPanel = ({
                       {formatNumber(chain.steps?.length || 0)} 步
                     </Label>
                   </div>
-                  <div className='fallback-attempt-steps'>
+                  <ol className='fallback-attempt-steps'>
                     {(chain.steps || []).map((step, index) => {
                       const outcomeTone = getAttemptOutcomeTone(step.outcome);
                       const stepMeta = [step.provider, step.deployment_id]
@@ -394,7 +443,7 @@ const MetricsPanel = ({
                         .filter(Boolean)
                         .join(' · ');
                       return (
-                        <div
+                        <li
                           className={`fallback-attempt-step ${outcomeTone}`}
                           key={`${step.upstream_attempt_index}-${index}`}
                         >
@@ -421,12 +470,13 @@ const MetricsPanel = ({
                             {stepMeta && <span>{stepMeta}</span>}
                             {stepDetails && <small>{stepDetails}</small>}
                           </div>
-                        </div>
+                        </li>
                       );
                     })}
-                  </div>
-                </article>
-              ))}
+                  </ol>
+                  </article>
+                );
+              })}
             </div>
           )}
         </>

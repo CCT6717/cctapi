@@ -72,6 +72,18 @@ const attemptData = {
   token: unsafeToken,
 };
 
+const emptyAttemptData = {
+  failure_event_count: 0,
+  skip_event_count: 0,
+  top_deployments: [],
+  top_providers: [],
+  top_models: [],
+  error_categories: [],
+  outcomes: [],
+  recent_chains: [],
+  recent_chain_scope: 'process',
+};
+
 const props = {
   runtimeMetrics: {
     requests: 12,
@@ -126,12 +138,17 @@ describe('MetricsPanel precise attempt diagnostics', () => {
     });
     container.remove();
     vi.clearAllMocks();
+    vi.restoreAllMocks();
   });
 
-  test('shows precise failures, separate skips, safe route chains, and existing switch counts', () => {
+  const renderPanel = () => {
     act(() => {
       root.render(<MetricsPanel {...props} />);
     });
+  };
+
+  test('shows precise failures, separate skips, safe route chains, and existing switch counts', () => {
+    renderPanel();
 
     const text = container.textContent;
     expect(text).toContain('精准失败诊断');
@@ -141,9 +158,102 @@ describe('MetricsPanel precise attempt diagnostics', () => {
     expect(text).toContain('kilo/model-a:free');
     expect(text).toContain('kilo/model-b:free');
     expect(text).toContain('成功');
+    expect(text).toContain('HTTP 429');
+    expect(text).toContain('模型限速');
+    expect(text).toContain('配额跳过');
+    expect(text).toContain('错误类别限速1 次');
+    expect(
+      container.querySelector('.fallback-attempt-stat.skipped').textContent
+    ).toContain('本地跳过配额跳过 1 次1');
     expect(text).toContain('切换次数7近 1 小时 4 次');
     expect(text).not.toContain('Top 失败模型/渠道');
     expect(text).not.toContain(unsafeError);
     expect(text).not.toContain(unsafeToken);
+  });
+
+  test('shows one safe hook error when no precise snapshot is available', () => {
+    useAttemptObservability.mockReturnValue({
+      data: null,
+      error: '精准尝试数据暂时不可用',
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderPanel();
+
+    expect(container.textContent.match(/精准尝试数据暂时不可用/g)).toHaveLength(
+      1
+    );
+    expect(container.textContent).toContain('精准失败诊断');
+  });
+
+  test('renders independent empty states for all aggregates and recent chains', () => {
+    useAttemptObservability.mockReturnValue({
+      data: emptyAttemptData,
+      error: '',
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderPanel();
+
+    const text = container.textContent;
+    expect(text).toContain('真实上游失败已实际发往上游的失败尝试0');
+    expect(text).toContain('本地跳过未调用上游的本地路由判断0');
+    expect(text).toContain('暂无真实部署失败');
+    expect(text).toContain('暂无提供商失败');
+    expect(text).toContain('暂无真实模型失败');
+    expect(text).toContain('暂无错误类别');
+    expect(text).toContain('暂无最近请求链路');
+  });
+
+  test('uses collision-free chain keys and accessible ordered step lists', () => {
+    const duplicateChain = {
+      request_id: 'request-duplicate',
+      virtual_model: 'openrouter/auto',
+      started_at: '2026-07-17T03:00:00Z',
+      finished_at: '2026-07-17T03:00:01Z',
+      steps: attemptData.recent_chains[0].steps,
+    };
+    const missingIDChain = {
+      virtual_model: 'openrouter/auto',
+      started_at: '2026-07-17T03:01:00Z',
+      finished_at: '2026-07-17T03:01:01Z',
+      steps: attemptData.recent_chains[0].steps,
+    };
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    useAttemptObservability.mockReturnValue({
+      data: {
+        ...emptyAttemptData,
+        recent_chains: [
+          duplicateChain,
+          { ...duplicateChain },
+          missingIDChain,
+          { ...missingIDChain },
+        ],
+      },
+      error: '',
+      loading: false,
+      refresh: vi.fn(),
+    });
+
+    renderPanel();
+
+    const chainArticles = container.querySelectorAll(
+      'article.fallback-attempt-chain-card[aria-label]'
+    );
+    expect(chainArticles).toHaveLength(4);
+    chainArticles.forEach((article) => {
+      expect(article.getAttribute('aria-label')).not.toBe('');
+      expect(article.querySelector('ol.fallback-attempt-steps')).not.toBeNull();
+      expect(article.querySelectorAll('ol.fallback-attempt-steps > li')).toHaveLength(
+        2
+      );
+    });
+    expect(
+      consoleError.mock.calls.some((call) =>
+        /same key|unique.*key/i.test(call.map(String).join(' '))
+      )
+    ).toBe(false);
   });
 });

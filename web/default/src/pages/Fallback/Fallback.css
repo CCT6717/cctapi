@@ -2508,6 +2508,9 @@
   display: grid;
   gap: 8px;
   margin-top: 10px;
+  margin-bottom: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .fallback-attempt-step {
