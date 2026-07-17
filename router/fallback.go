@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/fallback"
 	"github.com/songquanpeng/one-api/middleware"
 )
@@ -436,6 +437,7 @@ func SetFallbackRouter(router *gin.Engine) {
 			rows := buildFallbackRuntimeStatusRows(cfg)
 			c.JSON(http.StatusOK, gin.H{"success": true, "data": rows, "health": healthSnap})
 		})
+		adminGroup.GET("/attempt-observability", getAttemptObservability)
 
 		adminGroup.GET("/deployments/:id/health", func(c *gin.Context) {
 			deploymentID := c.Param("id")
@@ -555,4 +557,14 @@ func triggerDeploymentHealthCheck(c *gin.Context) {
 			"runtime":       fallback.SnapshotRuntimeState(deploymentID),
 		},
 	})
+}
+
+func getAttemptObservability(c *gin.Context) {
+	snapshot, err := fallback.SnapshotAttemptObservability()
+	if err != nil {
+		logger.SysError("[fallback] snapshot attempt observability failed: " + err.Error())
+		c.JSON(http.StatusServiceUnavailable, gin.H{"success": false, "message": "attempt observability unavailable"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": snapshot})
 }
