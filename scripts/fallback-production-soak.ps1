@@ -178,6 +178,31 @@ function Send-ResponsesRequest {
   return $true
 }
 
+# Persist a partial evidence file on every snapshot so an externally killed run
+# (e.g. task-runner reaping) still leaves usable, sanitized progress on disk.
+function Write-PartialEvidence {
+  $partialPath = Join-Path $OutputDir "production-soak-partial.json"
+  $sr = if ($stats.totalRequests -gt 0) { $stats.successCount / $stats.totalRequests } else { 0 }
+  $pEvidence = [pscustomobject]@{
+    generated_at = [DateTime]::UtcNow.ToString("o")
+    kind = "production-capacity-soak-partial"
+    base_url = $BaseUrl
+    model = $Model
+    summary = [pscustomobject]@{
+      total_requests = $stats.totalRequests
+      success_count = $stats.successCount
+      failure_count = $stats.failureCount
+      success_rate = [Math]::Round($sr, 4)
+      distinct_providers = @($distinctProviders.Keys | Sort-Object)
+      distinct_real_models = @($distinctModels.Keys | Sort-Object)
+    }
+    observability_snapshots = $observabilitySnapshots
+    request_errors = $stats.errors
+  }
+  $pj = $pEvidence | ConvertTo-Json -Depth 12
+  [System.IO.File]::WriteAllText($partialPath, $pj, (New-Object System.Text.UTF8Encoding $false))
+}
+
 # ---------------------------------------------------------------------------
 # Setup
 # ---------------------------------------------------------------------------
@@ -289,6 +314,7 @@ for ($i = 1; $i -le $totalIterations; $i++) {
           if (-not [string]::IsNullOrWhiteSpace($step.real_model)) { $distinctModels[$step.real_model] = $true }
         }
       }
+      Write-PartialEvidence
     } catch {
       if (-not $OutputJson) { Write-Warning "Observability snapshot $i failed: $($_.Exception.Message)" }
     }
