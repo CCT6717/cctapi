@@ -20,6 +20,76 @@ import {
   getSuccessRateLevel,
   getWindowRateNote,
 } from '../utils/fallbackHelpers';
+import { useAttemptObservability } from '../hooks/useAttemptObservability';
+
+const ATTEMPT_OUTCOME_LABELS = {
+  success: '成功',
+  failure: '失败',
+  model_rate_limited: '模型限速',
+  non_fallbackable: '不可回退',
+  model_capability_false_positive: '模型能力不匹配',
+  skipped_unavailable: '不可用跳过',
+  skipped_quota: '配额跳过',
+  skipped_concurrency: '并发跳过',
+  skipped_channel: '渠道跳过',
+  skipped_model_state: '模型状态跳过',
+};
+
+const ATTEMPT_CATEGORY_LABELS = {
+  none: '无错误',
+  client: '客户端错误',
+  quota: '配额',
+  rate_limit: '限速',
+  temporary: '临时错误',
+  model_access: '模型访问',
+  unknown: '未知类别',
+};
+
+const getAttemptOutcomeLabel = (outcome) =>
+  ATTEMPT_OUTCOME_LABELS[outcome] || '未知结果';
+
+const getAttemptCategoryLabel = (category) =>
+  ATTEMPT_CATEGORY_LABELS[category] || '未知类别';
+
+const getAttemptOutcomeTone = (outcome) => {
+  if (outcome === 'success') return 'success';
+  if (outcome?.startsWith('skipped_')) return 'skipped';
+  return 'failure';
+};
+
+const encodeAttemptKeyPart = (value) => {
+  const text = String(value ?? '');
+  return `${text.length}:${text}`;
+};
+
+const getAttemptChainKeyBase = (chain) =>
+  [
+    chain.request_id,
+    chain.virtual_model,
+    chain.started_at || chain.steps?.[0]?.created_at,
+  ]
+    .map(encodeAttemptKeyPart)
+    .join('');
+
+const AttemptAggregateList = ({ title, items, valueField, emptyText }) => (
+  <article className='fallback-attempt-diagnostic-card'>
+    <h4>{title}</h4>
+    {items.length === 0 ? (
+      <span className='fallback-attempt-empty'>{emptyText}</span>
+    ) : (
+      <div className='fallback-attempt-diagnostic-list'>
+        {items.map((item) => (
+          <div className='fallback-attempt-diagnostic-row' key={item.key}>
+            <span>{item[valueField] || '-'}</span>
+            <Label basic size='mini'>
+              {formatNumber(item.count)} 次
+            </Label>
+          </div>
+        ))}
+      </div>
+    )}
+  </article>
+);
 
 const MetricsPanel = ({
   runtimeMetrics,
@@ -30,8 +100,19 @@ const MetricsPanel = ({
   metricRows,
   summary,
   exportMetricsCSV,
-}) => (
-  <>
+}) => {
+  const {
+    data: attemptData,
+    error: attemptError,
+    loading: attemptLoading,
+  } = useAttemptObservability();
+  const skippedOutcomes = (attemptData?.outcomes || []).filter((item) =>
+    item.outcome?.startsWith('skipped_')
+  );
+  const chainKeyOccurrences = new Map();
+
+  return (
+    <>
     <div className='fallback-content-toolbar'>
       <div>
         <h2>运行数据</h2>
@@ -185,81 +266,175 @@ const MetricsPanel = ({
       </article>
     </div>
 
-    {runtimeHealth.topDeploymentFailures.length > 0 && (
-      <section className='fallback-runtime-section'>
-        <div className='fallback-runtime-section-head'>
-          <h3>Top 3 失败模型</h3>
-          <span>当前失败率最高的 3 个部署</span>
-        </div>
-        <div className='fallback-top3-grid'>
-          {runtimeHealth.topDeploymentFailures.slice(0, 3).map((item, index) => {
-            const rankClass = `rank-${index + 1}`;
-            return (
-              <div className={`fallback-top3-card ${rankClass}`} key={item.key}>
-                <span className='fallback-top3-badge'>{index + 1}</span>
-                <div className='fallback-top3-body'>
-                  <strong>{item.deployment}</strong>
-                  <span>{item.model}</span>
-                  <em>失败 {formatNumber(item.count)} 次</em>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-    )}
-
-    <section className='fallback-runtime-section fallback-health-section'>
+    <section className='fallback-runtime-section fallback-attempt-section'>
       <div className='fallback-runtime-section-head'>
-        <h3>Top 失败模型/渠道</h3>
-        <span>近 1 小时切换日志聚合，最多显示前 5 项</span>
+        <h3>精准失败诊断</h3>
+        <span>近 1 小时真实尝试聚合，本地跳过单独统计</span>
       </div>
-      {runtimeHealth.recentSwitchCount === 0 ? (
-        <Message>近 1 小时暂无切换失败记录</Message>
+      {attemptError && <Message warning>{attemptError}</Message>}
+      {attemptLoading && !attemptData ? (
+        <Message>正在加载精准尝试数据...</Message>
+      ) : !attemptData ? (
+        !attemptError && <Message>精准尝试数据暂时不可用</Message>
       ) : (
-        <div className='fallback-health-lists'>
-          <div className='fallback-health-list critical'>
-            <h4>失败部署 / 渠道</h4>
-            {runtimeHealth.topDeploymentFailures.map((item) => (
-              <div className='fallback-health-row' key={item.key}>
-                <div>
-                  <strong>{item.deployment}</strong>
-                  <span>
-                    {item.channel} · {item.model}
-                  </span>
-                  {item.lastReason && <em>{item.lastReason}</em>}
-                </div>
-                <Label color={item.lastStatusCode >= 500 ? 'red' : 'yellow'}>
-                  {formatNumber(item.count)} 次
-                </Label>
+        <>
+          <div className='fallback-attempt-summary'>
+            <article className='fallback-attempt-stat failure'>
+              <div>
+                <span>真实上游失败</span>
+                <small>已实际发往上游的失败尝试</small>
               </div>
-            ))}
-          </div>
-          <div className='fallback-health-list warning'>
-            <h4>失败虚拟模型</h4>
-            {runtimeHealth.topModelFailures.map((item) => (
-              <div className='fallback-health-row' key={item.key}>
-                <div>
-                  <strong>{item.model}</strong>
-                  <span>触发切换失败</span>
-                </div>
-                <Label color='orange'>{formatNumber(item.count)} 次</Label>
+              <strong>{formatNumber(attemptData.failure_event_count)}</strong>
+            </article>
+            <article className='fallback-attempt-stat skipped'>
+              <div>
+                <span>本地跳过</span>
+                <small>
+                  {skippedOutcomes.length === 0
+                    ? '未调用上游的本地路由判断'
+                    : skippedOutcomes
+                        .map(
+                          (item) =>
+                            `${getAttemptOutcomeLabel(item.outcome)} ${formatNumber(
+                              item.count
+                            )} 次`
+                        )
+                        .join(' · ')}
+                </small>
               </div>
-            ))}
+              <strong>{formatNumber(attemptData.skip_event_count)}</strong>
+            </article>
           </div>
-          <div className='fallback-health-list info'>
-            <h4>失败渠道</h4>
-            {runtimeHealth.topChannelFailures.map((item) => (
-              <div className='fallback-health-row' key={item.key}>
-                <div>
-                  <strong>{item.channel}</strong>
-                  <span>按部署当前渠道映射聚合</span>
+
+          <div className='fallback-attempt-diagnostic-grid'>
+            <AttemptAggregateList
+              title='失败部署'
+              items={attemptData.top_deployments || []}
+              valueField='deployment_id'
+              emptyText='暂无真实部署失败'
+            />
+            <AttemptAggregateList
+              title='失败提供商'
+              items={attemptData.top_providers || []}
+              valueField='provider'
+              emptyText='暂无提供商失败'
+            />
+            <AttemptAggregateList
+              title='失败真实模型'
+              items={attemptData.top_models || []}
+              valueField='real_model'
+              emptyText='暂无真实模型失败'
+            />
+            <article className='fallback-attempt-diagnostic-card'>
+              <h4>错误类别</h4>
+              {(attemptData.error_categories || []).length === 0 ? (
+                <span className='fallback-attempt-empty'>暂无错误类别</span>
+              ) : (
+                <div className='fallback-attempt-diagnostic-list'>
+                  {attemptData.error_categories.map((item) => (
+                    <div
+                      className='fallback-attempt-diagnostic-row'
+                      key={item.key}
+                    >
+                      <span>{getAttemptCategoryLabel(item.category)}</span>
+                      <Label basic size='mini'>
+                        {formatNumber(item.count)} 次
+                      </Label>
+                    </div>
+                  ))}
                 </div>
-                <Label color='teal'>{formatNumber(item.count)} 次</Label>
-              </div>
-            ))}
+              )}
+            </article>
           </div>
-        </div>
+
+          <div className='fallback-attempt-chain-head'>
+            <h4>最近请求链路</h4>
+            <span>当前进程内最近完成或进行中的路由尝试</span>
+          </div>
+          {(attemptData.recent_chains || []).length === 0 ? (
+            <Message>暂无最近请求链路</Message>
+          ) : (
+            <div className='fallback-attempt-chain-list'>
+              {attemptData.recent_chains.map((chain, chainIndex) => {
+                const chainKeyBase = getAttemptChainKeyBase(chain);
+                const chainOccurrence = chainKeyOccurrences.get(chainKeyBase) || 0;
+                chainKeyOccurrences.set(chainKeyBase, chainOccurrence + 1);
+                const chainKey = `${chainKeyBase}#${chainOccurrence}`;
+                const chainAccessibleName = `请求链路 ${
+                  chain.request_id || '未提供请求 ID'
+                }，${chain.virtual_model || '未知虚拟模型'}，第 ${
+                  chainIndex + 1
+                } 条`;
+                return (
+                  <article
+                    aria-label={chainAccessibleName}
+                    className='fallback-attempt-chain-card'
+                    key={chainKey}
+                  >
+                  <div className='fallback-attempt-chain-title'>
+                    <div>
+                      <strong>{chain.virtual_model || '-'}</strong>
+                      <span>{chain.request_id || '-'}</span>
+                    </div>
+                    <Label basic size='mini'>
+                      {formatNumber(chain.steps?.length || 0)} 步
+                    </Label>
+                  </div>
+                  <ol className='fallback-attempt-steps'>
+                    {(chain.steps || []).map((step, index) => {
+                      const outcomeTone = getAttemptOutcomeTone(step.outcome);
+                      const stepMeta = [step.provider, step.deployment_id]
+                        .filter(Boolean)
+                        .join(' · ');
+                      const stepDetails = [
+                        step.status_code ? `HTTP ${step.status_code}` : '',
+                        step.error_category && step.error_category !== 'none'
+                          ? getAttemptCategoryLabel(step.error_category)
+                          : '',
+                        Number.isFinite(step.duration_ms)
+                          ? `${formatNumber(step.duration_ms)} ms`
+                          : '',
+                      ]
+                        .filter(Boolean)
+                        .join(' · ');
+                      return (
+                        <li
+                          className={`fallback-attempt-step ${outcomeTone}`}
+                          key={`${step.upstream_attempt_index}-${index}`}
+                        >
+                          <span className='fallback-attempt-step-index'>
+                            {index + 1}
+                          </span>
+                          <div className='fallback-attempt-step-body'>
+                            <div>
+                              <strong>{step.real_model || '-'}</strong>
+                              <Label
+                                basic
+                                size='mini'
+                                color={
+                                  outcomeTone === 'success'
+                                    ? 'green'
+                                    : outcomeTone === 'skipped'
+                                    ? 'orange'
+                                    : 'red'
+                                }
+                              >
+                                {getAttemptOutcomeLabel(step.outcome)}
+                              </Label>
+                            </div>
+                            {stepMeta && <span>{stepMeta}</span>}
+                            {stepDetails && <small>{stepDetails}</small>}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ol>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </section>
 
@@ -340,7 +515,8 @@ const MetricsPanel = ({
         <Icon name='download' /> 导出 CSV
       </Button>
     </div>
-  </>
-);
+    </>
+  );
+};
 
 export default MetricsPanel;

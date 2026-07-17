@@ -11,6 +11,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gin-contrib/sessions"
+	"github.com/gin-contrib/sessions/cookie"
 	"github.com/gin-gonic/gin"
 	"github.com/songquanpeng/one-api/fallback"
 	dbmodel "github.com/songquanpeng/one-api/model"
@@ -208,6 +210,125 @@ func TestTriggerDeploymentHealthCheckReturnsRuntimeErrorDetails(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), `"last_error"`) || !strings.Contains(w.Body.String(), "health check channel") {
 		t.Fatalf("expected last_error details in health-check response, got %s", w.Body.String())
+	}
+}
+
+func TestAttemptObservabilityHandlerReturnsSafeSnapshot(t *testing.T) {
+	originalDB := dbmodel.DB
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open in-memory DB: %v", err)
+	}
+	dbmodel.DB = db
+	t.Cleanup(func() {
+		dbmodel.DB = originalDB
+	})
+	const sensitiveSentinel = "Bearer sk-attempt-observability-sensitive raw_upstream_body content_preview"
+	const deploymentID = "free:attempt-observability-deployment"
+	const requestID = "attempt-observability-request"
+	if err := fallback.RecordAttemptEventIfWorthy(fallback.AttemptEvent{
+		CreatedAt:            time.Now().UTC(),
+		RequestID:            requestID,
+		VirtualModel:         "free/auto",
+		Provider:             "attempt-observability-provider",
+		DeploymentID:         deploymentID,
+		RealModel:            "attempt-observability-model",
+		Outcome:              fallback.AttemptOutcomeFailure,
+		ErrorCategory:        sensitiveSentinel,
+		DurationMs:           25,
+		UpstreamAttemptIndex: 1,
+	}); err != nil {
+		t.Fatalf("record attempt event: %v", err)
+	}
+
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/fallback/attempt-observability", nil)
+
+	getAttemptObservability(c)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var response struct {
+		Success bool            `json:"success"`
+		Data    json.RawMessage `json:"data"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if !response.Success {
+		t.Fatalf("expected success response, got %s", w.Body.String())
+	}
+
+	var snapshot map[string]json.RawMessage
+	if err := json.Unmarshal(response.Data, &snapshot); err != nil {
+		t.Fatalf("unmarshal snapshot: %v", err)
+	}
+	for _, field := range []string{"failure_window_seconds", "top_deployments", "recent_chains", "recent_chain_scope"} {
+		if _, ok := snapshot[field]; !ok {
+			t.Fatalf("expected snapshot field %q in %s", field, w.Body.String())
+		}
+	}
+	for _, expected := range []string{deploymentID, requestID} {
+		if !strings.Contains(w.Body.String(), expected) {
+			t.Fatalf("expected observability data %q in %s", expected, w.Body.String())
+		}
+	}
+
+	marshaled, err := json.Marshal(response)
+	if err != nil {
+		t.Fatalf("marshal success response: %v", err)
+	}
+	for _, sentinel := range []string{sensitiveSentinel, "Bearer", "sk-", "raw_upstream_body", "content_preview"} {
+		if strings.Contains(string(marshaled), sentinel) {
+			t.Fatalf("success response leaked sensitive sentinel %q: %s", sentinel, marshaled)
+		}
+	}
+}
+
+func TestAttemptObservabilityHandlerReturnsSafeServiceUnavailableOnSnapshotFailure(t *testing.T) {
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest(http.MethodGet, "/api/fallback/attempt-observability", nil)
+
+	getAttemptObservabilityWithSnapshot(c, func() (fallback.AttemptObservabilitySnapshot, error) {
+		return fallback.AttemptObservabilitySnapshot{}, errors.New("database is not initialized")
+	})
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503, got %d: %s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Success bool   `json:"success"`
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if response.Success || response.Message != "attempt observability unavailable" {
+		t.Fatalf("expected safe unavailable response, got %s", w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "database is not initialized") {
+		t.Fatalf("response leaked snapshot error: %s", w.Body.String())
+	}
+}
+
+func TestAttemptObservabilityRouteRequiresAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	engine.Use(sessions.Sessions("session", cookie.NewStore([]byte("attempt-observability-test-secret"))))
+	SetFallbackRouter(engine)
+
+	w := httptest.NewRecorder()
+	engine.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/fallback/attempt-observability", nil))
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected unauthenticated request to be rejected by admin middleware, got %d: %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "failure_window_seconds") {
+		t.Fatalf("unauthenticated response must not contain attempt observability data: %s", w.Body.String())
 	}
 }
 
