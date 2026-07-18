@@ -1,16 +1,20 @@
 {
-  "generated_at": "2026-07-17T10:11:25.469400Z",
+  "generated_at": "2026-07-17T10:09:39.4696218Z",
   "kind": "production-capacity-soak-consolidated",
   "credential_source": "real-production-credentials",
   "base_url": "http://localhost:3008",
   "model": "openrouter/auto",
-  "segments": 5,
-  "window_minutes": 40.04,
+  "duration_minutes": 40.04,
+  "interval_sec": 5,
   "summary": {
     "total_requests": 312,
     "success_count": 312,
     "failure_count": 0,
     "success_rate": 1.0,
+    "stream_requests": 144,
+    "tool_enabled_requests": 42,
+    "required_tool_requests": 0,
+    "responses_requests": 26,
     "distinct_providers": [
       "kilo",
       "openrouter",
@@ -31,1838 +35,551 @@
       "stepfun/step-3.7-flash:free",
       "tencent/hy3:free"
     ],
-    "distinct_real_model_count": 13,
     "latency_ms_avg": 2749.4,
-    "latency_ms_p50": 2253,
-    "latency_ms_p95": 4659,
-    "latency_ms_p99": 6673,
-    "latency_ms_max": 52041
+    "latency_ms_p50": 2239,
+    "latency_ms_p95": 4659
   },
   "rotation_fallback_signals": {
-    "cumulative_outcomes": {
-      "skipped_quota": 25,
-      "model_rate_limited": 52
-    },
-    "note": "outcomes are cumulative over the persistent 1-hour attempt store; intermediate model_rate_limited / skipped_quota events are rotated transparently and are NOT user-facing failures.",
-    "total_snapshots_observed": 60,
-    "snapshots_with_cross_provider_fallback": 3,
-    "multi_provider_chains_observed_total": 8
-  },
-  "per_segment_latency": [
-    {
-      "stamp": "2026-07-17-0928",
-      "requests": 61,
-      "success": 61,
-      "p50": 2297,
-      "p95": 4322
-    },
-    {
-      "stamp": "2026-07-17-0936",
-      "requests": 65,
-      "success": 65,
-      "p50": 2303,
-      "p95": 3848
-    },
-    {
-      "stamp": "2026-07-17-0945",
-      "requests": 66,
-      "success": 66,
-      "p50": 2196,
-      "p95": 3654
-    },
-    {
-      "stamp": "2026-07-17-0953",
-      "requests": 62,
-      "success": 62,
-      "p50": 2397,
-      "p95": 5884
-    },
-    {
-      "stamp": "2026-07-17-1001",
-      "requests": 58,
-      "success": 58,
-      "p50": 2229,
-      "p95": 4735
+    "unique_multi_provider_request_count": 3,
+    "multi_provider_chain_appearances": 8,
+    "cumulative_outcome_observations": {
+      "model_rate_limited": {
+        "first_observed": 9,
+        "last_observed": 52,
+        "peak_observed": 52,
+        "observed_increase": 43
+      },
+      "skipped_quota": {
+        "first_observed": 25,
+        "last_observed": 25,
+        "peak_observed": 25,
+        "observed_increase": 0
+      }
     }
-  ],
-  "snapshot_timeline": [
+  },
+  "observability_timeline": [
     {
       "at": "2026-07-17T09:28:28.4701378Z",
       "iteration": 1,
-      "failure_event_count": 9,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 9,
-          "last_seen_at": "2026-07-17T09:15:31.6418645Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo",
-        "openrouter",
-        "pollinations"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "nvidia/nemotron-3.5-content-safety:free",
-        "openai-fast",
-        "openrouter/free",
-        "poolside/laguna-m.1:free",
-        "poolside/laguna-xs-2.1:free",
-        "stepfun/step-3.7-flash:free",
-        "tencent/hy3:free"
-      ],
-      "multi_provider_chains": 3
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 9
+      }
     },
     {
       "at": "2026-07-17T09:29:30.1566623Z",
       "iteration": 9,
-      "failure_event_count": 10,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 10,
-          "last_seen_at": "2026-07-17T09:28:58.3262219Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo",
-        "openrouter",
-        "pollinations"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
-        "nvidia/nemotron-3-super-120b-a12b:free",
-        "nvidia/nemotron-3-ultra-550b-a55b:free",
-        "nvidia/nemotron-3.5-content-safety:free",
-        "openai-fast",
-        "openrouter/free",
-        "poolside/laguna-m.1:free",
-        "poolside/laguna-xs-2.1:free",
-        "stepfun/step-3.7-flash:free",
-        "tencent/hy3:free"
-      ],
-      "multi_provider_chains": 3
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 10
+      }
     },
     {
       "at": "2026-07-17T09:29:37.0916845Z",
       "iteration": 10,
-      "failure_event_count": 10,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 10,
-          "last_seen_at": "2026-07-17T09:28:58.3262219Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo",
-        "openrouter",
-        "pollinations"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "openai-fast",
-        "openrouter/free"
-      ],
-      "multi_provider_chains": 2
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 10
+      }
     },
     {
       "at": "2026-07-17T09:30:38.1821675Z",
       "iteration": 18,
-      "failure_event_count": 11,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 11,
-          "last_seen_at": "2026-07-17T09:30:36.324818Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 11
+      }
     },
     {
       "at": "2026-07-17T09:30:52.6651308Z",
       "iteration": 20,
-      "failure_event_count": 11,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 11,
-          "last_seen_at": "2026-07-17T09:30:36.324818Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 11
+      }
     },
     {
       "at": "2026-07-17T09:32:23.4631710Z",
       "iteration": 28,
-      "failure_event_count": 14,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 14,
-          "last_seen_at": "2026-07-17T09:31:44.8967258Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 14
+      }
     },
     {
       "at": "2026-07-17T09:32:36.8352690Z",
       "iteration": 30,
-      "failure_event_count": 14,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 14,
-          "last_seen_at": "2026-07-17T09:31:44.8967258Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 14
+      }
     },
     {
       "at": "2026-07-17T09:33:38.0924457Z",
       "iteration": 38,
-      "failure_event_count": 15,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 15,
-          "last_seen_at": "2026-07-17T09:32:50.4024758Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 15
+      }
     },
     {
       "at": "2026-07-17T09:33:54.1801220Z",
       "iteration": 40,
-      "failure_event_count": 16,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 16,
-          "last_seen_at": "2026-07-17T09:33:52.2128895Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 16
+      }
     },
     {
       "at": "2026-07-17T09:35:01.8256387Z",
       "iteration": 49,
-      "failure_event_count": 16,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 16,
-          "last_seen_at": "2026-07-17T09:33:52.2128895Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 16
+      }
     },
     {
       "at": "2026-07-17T09:35:08.3850411Z",
       "iteration": 50,
-      "failure_event_count": 16,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 16,
-          "last_seen_at": "2026-07-17T09:33:52.2128895Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 16
+      }
     },
     {
       "at": "2026-07-17T09:36:13.0784949Z",
       "iteration": 59,
-      "failure_event_count": 17,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 17,
-          "last_seen_at": "2026-07-17T09:35:49.9396893Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 17
+      }
     },
     {
       "at": "2026-07-17T09:36:20.7092247Z",
       "iteration": 60,
-      "failure_event_count": 17,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 17,
-          "last_seen_at": "2026-07-17T09:35:49.9396893Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 17
+      }
     },
     {
       "at": "2026-07-17T09:36:58.5149609Z",
       "iteration": 1,
-      "failure_event_count": 17,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 17,
-          "last_seen_at": "2026-07-17T09:35:49.9396893Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 17
+      }
     },
     {
       "at": "2026-07-17T09:38:03.3613686Z",
       "iteration": 10,
-      "failure_event_count": 18,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 18,
-          "last_seen_at": "2026-07-17T09:37:46.9699803Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 18
+      }
     },
     {
       "at": "2026-07-17T09:39:09.5595777Z",
       "iteration": 19,
-      "failure_event_count": 20,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 20,
-          "last_seen_at": "2026-07-17T09:38:38.7205439Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 20
+      }
     },
     {
       "at": "2026-07-17T09:39:16.7554599Z",
       "iteration": 20,
-      "failure_event_count": 20,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 20,
-          "last_seen_at": "2026-07-17T09:38:38.7205439Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 20
+      }
     },
     {
       "at": "2026-07-17T09:40:19.2734701Z",
       "iteration": 28,
-      "failure_event_count": 21,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 21,
-          "last_seen_at": "2026-07-17T09:39:40.1765801Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 21
+      }
     },
     {
       "at": "2026-07-17T09:40:34.2597527Z",
       "iteration": 30,
-      "failure_event_count": 21,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 21,
-          "last_seen_at": "2026-07-17T09:39:40.1765801Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 21
+      }
     },
     {
       "at": "2026-07-17T09:41:41.4409684Z",
       "iteration": 39,
-      "failure_event_count": 22,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 22,
-          "last_seen_at": "2026-07-17T09:40:53.6340231Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 22
+      }
     },
     {
       "at": "2026-07-17T09:41:48.6182284Z",
       "iteration": 40,
-      "failure_event_count": 22,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 22,
-          "last_seen_at": "2026-07-17T09:40:53.6340231Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 22
+      }
     },
     {
       "at": "2026-07-17T09:42:55.9089883Z",
       "iteration": 49,
-      "failure_event_count": 23,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 23,
-          "last_seen_at": "2026-07-17T09:41:54.4420262Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 23
+      }
     },
     {
       "at": "2026-07-17T09:43:02.9278234Z",
       "iteration": 50,
-      "failure_event_count": 23,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 23,
-          "last_seen_at": "2026-07-17T09:41:54.4420262Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 23
+      }
     },
     {
       "at": "2026-07-17T09:44:09.4967008Z",
       "iteration": 59,
-      "failure_event_count": 24,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 24,
-          "last_seen_at": "2026-07-17T09:43:37.8359463Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 24
+      }
     },
     {
       "at": "2026-07-17T09:44:16.7847000Z",
       "iteration": 60,
-      "failure_event_count": 24,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        },
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 24,
-          "last_seen_at": "2026-07-17T09:43:37.8359463Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "skipped_quota": 25,
+        "model_rate_limited": 24
+      }
     },
     {
       "at": "2026-07-17T09:45:12.7930122Z",
       "iteration": 1,
-      "failure_event_count": 25,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:44:53.3017667Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 25,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:46:18.6291763Z",
       "iteration": 10,
-      "failure_event_count": 25,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:44:53.3017667Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 25,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:47:22.0314142Z",
       "iteration": 19,
-      "failure_event_count": 26,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 26,
-          "last_seen_at": "2026-07-17T09:46:37.0717243Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 26,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:47:28.9217199Z",
       "iteration": 20,
-      "failure_event_count": 26,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 26,
-          "last_seen_at": "2026-07-17T09:46:37.0717243Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 26,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:48:30.9502694Z",
       "iteration": 28,
-      "failure_event_count": 29,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 29,
-          "last_seen_at": "2026-07-17T09:47:43.5846442Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 29,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:48:46.4330390Z",
       "iteration": 30,
-      "failure_event_count": 29,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 29,
-          "last_seen_at": "2026-07-17T09:47:43.5846442Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 29,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:49:48.6142555Z",
       "iteration": 39,
-      "failure_event_count": 29,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 29,
-          "last_seen_at": "2026-07-17T09:47:43.5846442Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 29,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:49:56.4528513Z",
       "iteration": 40,
-      "failure_event_count": 30,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 30,
-          "last_seen_at": "2026-07-17T09:49:54.6690837Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 30,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:50:57.9089073Z",
       "iteration": 48,
-      "failure_event_count": 32,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 32,
-          "last_seen_at": "2026-07-17T09:50:46.8930505Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 32,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:51:10.9033258Z",
       "iteration": 50,
-      "failure_event_count": 32,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 32,
-          "last_seen_at": "2026-07-17T09:50:46.8930505Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 32,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:52:18.7477589Z",
       "iteration": 59,
-      "failure_event_count": 33,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 33,
-          "last_seen_at": "2026-07-17T09:51:39.9141896Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 33,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:52:25.6748009Z",
       "iteration": 60,
-      "failure_event_count": 33,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 33,
-          "last_seen_at": "2026-07-17T09:51:39.9141896Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 33,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:53:32.4035232Z",
       "iteration": 1,
-      "failure_event_count": 34,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 34,
-          "last_seen_at": "2026-07-17T09:52:45.7453109Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 34,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:54:39.4484200Z",
       "iteration": 10,
-      "failure_event_count": 35,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 35,
-          "last_seen_at": "2026-07-17T09:53:52.710806Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 35,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:55:42.5082495Z",
       "iteration": 18,
-      "failure_event_count": 36,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 36,
-          "last_seen_at": "2026-07-17T09:54:59.746304Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 36,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:55:56.2982925Z",
       "iteration": 20,
-      "failure_event_count": 35,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 35,
-          "last_seen_at": "2026-07-17T09:54:59.746304Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 35,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:57:04.6241623Z",
       "iteration": 28,
-      "failure_event_count": 38,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 38,
-          "last_seen_at": "2026-07-17T09:56:53.7736255Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 38,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:57:18.6179248Z",
       "iteration": 30,
-      "failure_event_count": 38,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 38,
-          "last_seen_at": "2026-07-17T09:56:53.7736255Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 38,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:58:23.3440347Z",
       "iteration": 38,
-      "failure_event_count": 38,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 38,
-          "last_seen_at": "2026-07-17T09:56:53.7736255Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 38,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:58:38.9921966Z",
       "iteration": 40,
-      "failure_event_count": 38,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 38,
-          "last_seen_at": "2026-07-17T09:56:53.7736255Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 38,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:59:40.3453814Z",
       "iteration": 48,
-      "failure_event_count": 35,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 35,
-          "last_seen_at": "2026-07-17T09:56:53.7736255Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 35,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T09:59:54.2970587Z",
       "iteration": 50,
-      "failure_event_count": 35,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 35,
-          "last_seen_at": "2026-07-17T09:56:53.7736255Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 35,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:00:56.1047836Z",
       "iteration": 58,
-      "failure_event_count": 37,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 37,
-          "last_seen_at": "2026-07-17T10:00:52.2702841Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 37,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:01:12.9264429Z",
       "iteration": 60,
-      "failure_event_count": 37,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 37,
-          "last_seen_at": "2026-07-17T10:00:52.2702841Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 37,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:01:40.0190954Z",
       "iteration": 1,
-      "failure_event_count": 37,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 37,
-          "last_seen_at": "2026-07-17T10:00:52.2702841Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 37,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:02:43.1277734Z",
       "iteration": 9,
-      "failure_event_count": 40,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 40,
-          "last_seen_at": "2026-07-17T10:02:03.2013805Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 40,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:02:52.9154127Z",
       "iteration": 10,
-      "failure_event_count": 40,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 40,
-          "last_seen_at": "2026-07-17T10:02:03.2013805Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 40,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:03:59.7487717Z",
       "iteration": 19,
-      "failure_event_count": 42,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 42,
-          "last_seen_at": "2026-07-17T10:03:57.9722588Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 42,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:04:06.9560523Z",
       "iteration": 20,
-      "failure_event_count": 42,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 42,
-          "last_seen_at": "2026-07-17T10:03:57.9722588Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 42,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:05:07.9170304Z",
       "iteration": 28,
-      "failure_event_count": 44,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 44,
-          "last_seen_at": "2026-07-17T10:04:58.8187441Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 44,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:05:21.6689960Z",
       "iteration": 30,
-      "failure_event_count": 44,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 44,
-          "last_seen_at": "2026-07-17T10:04:58.8187441Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 44,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:06:45.9826300Z",
       "iteration": 35,
-      "failure_event_count": 46,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 46,
-          "last_seen_at": "2026-07-17T10:05:55.203673Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 46,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:07:23.0170928Z",
       "iteration": 40,
-      "failure_event_count": 49,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 49,
-          "last_seen_at": "2026-07-17T10:06:59.1699446Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 49,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:08:25.9197199Z",
       "iteration": 48,
-      "failure_event_count": 51,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 51,
-          "last_seen_at": "2026-07-17T10:07:54.1065186Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 51,
+        "skipped_quota": 25
+      }
     },
     {
       "at": "2026-07-17T10:08:41.7131510Z",
       "iteration": 50,
-      "failure_event_count": 52,
-      "skip_event_count": 25,
-      "outcomes": [
-        {
-          "key": "model_rate_limited",
-          "outcome": "model_rate_limited",
-          "count": 52,
-          "last_seen_at": "2026-07-17T10:08:39.2045727Z"
-        },
-        {
-          "key": "skipped_quota",
-          "outcome": "skipped_quota",
-          "count": 25,
-          "last_seen_at": "2026-07-17T09:15:26.2882541Z"
-        }
-      ],
-      "snapshot_providers": [
-        "kilo"
-      ],
-      "snapshot_real_models": [
-        "cohere/north-mini-code:free",
-        "kilo-auto/free",
-        "kwaipilot/kat-coder-pro-v2.5:free",
-        "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
-      ],
-      "multi_provider_chains": 0
+      "outcomes": {
+        "model_rate_limited": 52,
+        "skipped_quota": 25
+      }
     }
-  ]
+  ],
+  "source_manifest": {
+    "segments": [
+      {
+        "stamp": "2026-07-17-0928",
+        "segment_file": "production-soak-2026-07-17-0928.json",
+        "segment_sha256": "0dc998160bc6cb632645edd10867c82ad3f3bfe8b43012b71333f48f31436cad",
+        "sidecar_file": "latency-log.jsonl",
+        "sidecar_entry_sha256": "8a540649d91b0621c5b328a94482f552d24bf89148816a29e094b890f20ebfa8"
+      },
+      {
+        "stamp": "2026-07-17-0936",
+        "segment_file": "production-soak-2026-07-17-0936.json",
+        "segment_sha256": "dc4297c369878fb4823b0c93e3ab19de51e88a191c434c298762d0a1445f4ff2",
+        "sidecar_file": "latency-log.jsonl",
+        "sidecar_entry_sha256": "cec09f3585d4fc75d399087f7a6c75c08499a3c02e1418cc7d8de344929c7f76"
+      },
+      {
+        "stamp": "2026-07-17-0945",
+        "segment_file": "production-soak-2026-07-17-0945.json",
+        "segment_sha256": "b866448f9ddc6920003d55fd8644f809a173bb261962bd87d639d8eeba67e4f6",
+        "sidecar_file": "latency-log.jsonl",
+        "sidecar_entry_sha256": "1979d037c4b8c6a68e392f0c2a824afa461be91c4b0a504d54c7503aa1b10937"
+      },
+      {
+        "stamp": "2026-07-17-0953",
+        "segment_file": "production-soak-2026-07-17-0953.json",
+        "segment_sha256": "a03abbb8b165bff6e1055409975a2d47ab5f1420803d128229fa7a6b9d245317",
+        "sidecar_file": "latency-log.jsonl",
+        "sidecar_entry_sha256": "1fd074098e2b0aa192029f18bd9c254dd887a05af9e41bba04a5ff30bfe6f11e"
+      },
+      {
+        "stamp": "2026-07-17-1001",
+        "segment_file": "production-soak-2026-07-17-1001.json",
+        "segment_sha256": "0826d805a8c564ba66faccc37c0948598d3cedbd5e6aeb49b0d1492188851d9a",
+        "sidecar_file": "latency-log.jsonl",
+        "sidecar_entry_sha256": "79d6a5342b27c293268ba43f23aa3f6de887900c20b5c8e41127650309b61782"
+      }
+    ],
+    "latency_sidecar": {
+      "file": "latency-log.jsonl",
+      "sha256": "2647bf304e162f5bc7ea10577ee9ec0126e3ea2fd96e1ef75c0ba11d57e19368"
+    }
+  }
 }

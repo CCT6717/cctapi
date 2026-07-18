@@ -47,6 +47,9 @@
 .PARAMETER SnapshotEvery
     Poll /api/fallback/attempt-observability every N requests. Default: 10.
 
+.PARAMETER MaxRequests
+    Optional request cap for smoke validation. Zero means use the duration-derived count.
+
 .PARAMETER IncludeTools
     Also send a structured tool-call request periodically.
 
@@ -67,12 +70,29 @@ param(
   [double]$MinSuccessRate = 0.95,
   [string]$OutputDir = "docs/evidence",
   [int]$SnapshotEvery = 10,
+  [int]$MaxRequests = 0,
   [switch]$IncludeTools,
   [switch]$IncludeResponses,
   [switch]$OutputJson
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($DurationMin -le 0) { throw "DurationMin must be greater than 0" }
+if ($IntervalSec -le 0) { throw "IntervalSec must be greater than 0" }
+if ($TimeoutSec -le 0) { throw "TimeoutSec must be greater than 0" }
+if ($SnapshotEvery -le 0) { throw "SnapshotEvery must be greater than 0" }
+if ($MaxRequests -lt 0) { throw "MaxRequests must be at least 0" }
+if ($MinSuccessRate -le 0 -or $MinSuccessRate -gt 1) { throw "MinSuccessRate must be greater than 0 and at most 1" }
+
+$baseUri = $null
+if (-not [Uri]::TryCreate($BaseUrl, [UriKind]::Absolute, [ref]$baseUri) -or $baseUri.Scheme -notin @("http", "https")) {
+  throw "BaseUrl must be an absolute HTTP or HTTPS URL"
+}
+if (-not [string]::IsNullOrEmpty($baseUri.UserInfo) -or -not [string]::IsNullOrEmpty($baseUri.Query) -or -not [string]::IsNullOrEmpty($baseUri.Fragment)) {
+  throw "BaseUrl must not contain credentials, query parameters, or fragments"
+}
+$BaseUrl = $baseUri.AbsoluteUri.TrimEnd("/")
 
 # ---------------------------------------------------------------------------
 # Credential gate: never run without real production credentials.
@@ -83,8 +103,6 @@ if ([string]::IsNullOrWhiteSpace($ApiToken)) {
 if ([string]::IsNullOrWhiteSpace($AdminToken)) {
   throw "Missing admin credential: set CCT_ADMIN_TOKEN or pass -AdminToken. Required to read /api/fallback/attempt-observability."
 }
-
-$BaseUrl = $BaseUrl.TrimEnd("/")
 
 function Request-Fallback {
   param(
@@ -140,6 +158,35 @@ function Parse-AttemptObservability {
   return $json.data
 }
 
+function Get-SafeErrorCategory {
+  param([System.Exception]$Exception)
+  $message = $Exception.Message
+  if ($Exception -is [System.TimeoutException] -or $message -match "timed? out|timeout") { return "timeout" }
+  if ($message -match "HTTP [45]\d\d|status code") { return "http_error" }
+  if ($message -match "missing|unexpected|tool") { return "protocol_error" }
+  if ($message -match "JSON") { return "invalid_json" }
+  return "request_error"
+}
+
+function Assert-RequiredToolCall {
+  param([object]$Choice)
+  $toolCalls = @($Choice.message.tool_calls)
+  if ($toolCalls.Count -lt 1) { throw "Required tool response missing message.tool_calls." }
+  if ($toolCalls[0].function.name -ne "get_time") { throw "Required tool response returned unexpected function." }
+  try {
+    $arguments = $toolCalls[0].function.arguments | ConvertFrom-Json -ErrorAction Stop
+  } catch {
+    throw "Required tool arguments are invalid JSON."
+  }
+  $isJsonObject = $null -ne $arguments -and (
+    $arguments.GetType().FullName -eq "System.Management.Automation.PSCustomObject" -or
+    $arguments -is [System.Collections.IDictionary]
+  )
+  if (-not $isJsonObject) {
+    throw "Required tool arguments must be a JSON object."
+  }
+}
+
 function Send-ChatRequest {
   param([bool]$Stream, [bool]$WithTools)
   $body = @{
@@ -153,7 +200,7 @@ function Send-ChatRequest {
     $body["tools"] = @(
       @{ type = "function"; function = @{ name = "get_time"; description = "Get current time"; parameters = @{ type = "object"; properties = @{}; required = @() } } }
     )
-    $body["tool_choice"] = "auto"
+    $body["tool_choice"] = @{ type = "function"; function = @{ name = "get_time" } }
   }
   $r = Request-Fallback -Method POST -Path "/v1/chat/completions" -Token $ApiToken -Body $body
   if ($r.StatusCode -lt 200 -or $r.StatusCode -ge 300) { throw "Chat failed: HTTP $($r.StatusCode)" }
@@ -162,6 +209,9 @@ function Send-ChatRequest {
   } else {
     $j = $r.Content | ConvertFrom-Json
     if (-not $j.choices -or $j.choices.Count -lt 1) { throw "Non-stream response missing choices." }
+    if ($WithTools) {
+      Assert-RequiredToolCall -Choice $j.choices[0]
+    }
   }
   return $true
 }
@@ -193,6 +243,9 @@ function Write-PartialEvidence {
       success_count = $stats.successCount
       failure_count = $stats.failureCount
       success_rate = [Math]::Round($sr, 4)
+      stream_requests = $stats.streamCount
+      required_tool_requests = $stats.requiredToolCount
+      responses_requests = $stats.responsesCount
       distinct_providers = @($distinctProviders.Keys | Sort-Object)
       distinct_real_models = @($distinctModels.Keys | Sort-Object)
     }
@@ -208,6 +261,7 @@ function Write-PartialEvidence {
 # ---------------------------------------------------------------------------
 $startedAt = [DateTime]::UtcNow
 $totalIterations = [Math]::Max(1, [int][Math]::Floor(($DurationMin * 60) / $IntervalSec))
+if ($MaxRequests -gt 0) { $totalIterations = [Math]::Min($totalIterations, $MaxRequests) }
 $endedBy = $startedAt.AddMinutes($DurationMin)
 
 $stats = [pscustomobject]@{
@@ -215,7 +269,7 @@ $stats = [pscustomobject]@{
   successCount  = 0
   failureCount  = 0
   streamCount   = 0
-  toolCount     = 0
+  requiredToolCount = 0
   responsesCount = 0
   latenciesMs   = @()
   errors        = @()
@@ -249,9 +303,9 @@ for ($i = 1; $i -le $totalIterations; $i++) {
   if ($now -ge $endedBy) { break }
 
   # Rotate request shape across iterations.
-  $useStream = ($i % 2) -eq 0
   $useTools  = $IncludeTools -and ($i % 7) -eq 0
   $useResp   = $IncludeResponses -and ($i % 11) -eq 0
+  $useStream = (($i % 2) -eq 0) -and -not $useTools
 
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
   $ok = $false
@@ -269,14 +323,15 @@ for ($i = 1; $i -le $totalIterations; $i++) {
       if ($ok) {
         $stats.successCount++
         if ($useStream) { $stats.streamCount++ }
-        if ($useTools)  { $stats.toolCount++ }
+        if ($useTools)  { $stats.requiredToolCount++ }
       } else {
         $stats.failureCount++
       }
     }
   } catch {
-    $msg = $_.Exception.Message
-    $stats.errors += [pscustomobject]@{ iteration = $i; at = [DateTime]::UtcNow.ToString("o"); error = $msg }
+    $stats.failureCount++
+    $category = Get-SafeErrorCategory -Exception $_.Exception
+    $stats.errors += [pscustomobject]@{ iteration = $i; at = [DateTime]::UtcNow.ToString("o"); category = $category }
     if ($stats.errors.Count -gt 50) { $stats.errors = $stats.errors[0..49] }
   }
   $sw.Stop()
@@ -321,6 +376,7 @@ for ($i = 1; $i -le $totalIterations; $i++) {
   }
 
   # Pace until next iteration or the deadline.
+  if ($i -ge $totalIterations) { break }
   $remainingMs = ($endedBy - [DateTime]::UtcNow).TotalMilliseconds
   if ($remainingMs -le 0) { break }
   $sleepMs = [Math]::Min($IntervalSec * 1000, [Math]::Max(0, [int]$remainingMs))
@@ -370,7 +426,7 @@ $evidence = [pscustomobject]@{
     failure_count = $stats.failureCount
     success_rate = [Math]::Round($successRate, 4)
     stream_requests = $stats.streamCount
-    tool_requests = $stats.toolCount
+    required_tool_requests = $stats.requiredToolCount
     responses_requests = $stats.responsesCount
     distinct_providers = @($distinctProviders.Keys | Sort-Object)
     distinct_real_models = @($distinctModels.Keys | Sort-Object)
@@ -403,6 +459,9 @@ $latLine = [pscustomobject]@{
   total_requests = $stats.totalRequests
   success_count = $stats.successCount
   failure_count = $stats.failureCount
+  stream_requests = $stats.streamCount
+  required_tool_requests = $stats.requiredToolCount
+  responses_requests = $stats.responsesCount
   latencies_ms = $stats.latenciesMs
 } | ConvertTo-Json -Depth 4 -Compress
 [System.IO.File]::AppendAllText(

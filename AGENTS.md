@@ -58,9 +58,14 @@ The frontend build currently has zero ESLint warnings. A clean build is expected
 
 ## Current Handoff
 
-Last verified handoff: 2026-07-16.
+Last verified handoff: 2026-07-19.
 
 - Branch `main` is pushed to `origin/main`.
+- Precise attempt observability is merged through PR `#7` at `4c6cad6`. The admin-only `/api/fallback/attempt-observability` endpoint now provides exact one-hour failure/skip aggregates plus bounded process-local request chains, and `/fallback/metrics` renders the corresponding compact Chinese diagnostics.
+- The credential-gated production soak harness and consolidated evidence are finalized in the current release candidate. Five paced segments covered 40.04 minutes and 312 requests through `openrouter/auto`: 312 succeeded, 0 failed, 13 real models and Kilo/OpenRouter/Pollinations were observed, and model-level 429s were rotated transparently.
+- Final sanitized capacity evidence: `docs/evidence/soak-2026-07-17/production-soak-consolidated.json`. Its average/p50/p95 latencies are 2749.4/2239/4659 ms. The artifact binds five matched segment/latency pairs with count invariants and SHA-256 manifests; these measurements describe the run and are not an SLA.
+- Raw segment snapshots and the latency sidecar are local audit inputs, not release artifacts. The consolidated evidence is the canonical repository record and excludes the early pre-fix counter sample.
+- Product feature development is temporarily frozen after this closure. Default to security, dependency, provider-compatibility, and critical reliability maintenance; do not start another feature slice without an explicit user request.
 - Architecture-boundary release candidate is on `codex/fallback-routing-boundaries` in PR `#1`. Validated code commit `a898b59373c57a74bf622b03294d7c96a0ba3171` passed CI run `29345985697` across frontend, Go, repository, and E2E jobs.
 - Runtime-state boundaries, safe structured attempt events, centralized relay decisions, request-scoped routing snapshots, the single-instance recovery runbook, and evidence-based release gates are implemented and independently reviewed.
 - The exact validated candidate binary is running locally at `http://127.0.0.1:3008`; HTTP, isolated-database Playwright (16/16), Chat Completions, Responses, Anthropic Messages, streaming, and structured tool-call acceptance passed through `kilo-auto/free`.
@@ -309,17 +314,8 @@ Completed Kilo model-level rate-limit rotation:
 
 Remaining production work:
 
-- The 2026-07-14 anonymous-provider paced soak is recorded in `docs/evidence/provider-paced-soak-2026-07-14.json`:
-  - Kilo completed 4/6 requests, then hit an upstream shared OpenRouter free-model rate limit and recovered to `healthy` after cooldown.
-  - OVH completed 1/3 requests, honored upstream `Retry-After`, and remained `rate_limited` on the recovery probe.
-  - Treat anonymous Kilo/OVH capacity as opportunistic only. Before sustained production traffic, repeat the soak with intended credentials or paid quota.
-- The catalog store is designed for the current single-process SQLite deployment. A future multi-instance deployment should add database-level compare-and-swap or leader ownership for catalog publication.
-
-- The 2026-07-14 anonymous-provider paced soak is recorded in `docs/evidence/provider-paced-soak-2026-07-14.json`:
-  - Kilo completed 4/6 requests, then hit an upstream shared OpenRouter free-model rate limit and recovered to `healthy` after cooldown.
-  - OVH completed 1/3 requests, honored upstream `Retry-After`, and remained `rate_limited` on the recovery probe.
-  - Treat anonymous Kilo/OVH capacity as opportunistic only. Before sustained production traffic, repeat the soak with intended credentials or paid quota.
-- Kilo catalog models now rotate on confirmed model-specific HTTP 429 responses. A future scoring slice may further lower automatic-routing priority for providers that remain rate-limited across repeated cooldown windows.
+- Treat anonymous and free-provider capacity as opportunistic. The 2026-07-17 credential-gated local soak validates the application boundary, but it does not certify a public HTTPS ingress, contractual upstream capacity, or an end-to-end SLA.
+- Do not derive an SLA from this soak. Any future latency commitment requires a separately designed timeout/slow-model policy and a dedicated acceptance run.
 - The catalog store is designed for the current single-process SQLite deployment. A future multi-instance deployment should add database-level compare-and-swap or leader ownership for catalog publication.
 
 ## Completed Architecture Phase 1 (2026-07-14)
@@ -441,4 +437,4 @@ Do not remove upstream One API / JustSong / MIT attribution.
 - Do not add another standalone connectivity-test panel; extend the existing virtual model config module instead.
 - In the gateway editor, deployment ownership and per-VM mode control should be derived from `fallback_order` first, with `pools` only as a fallback when no explicit `fallback_order` exists.
 - In the gateway editor, selecting a new `fixed` or `quota` deployment inside one VM must clear any existing config-derived or draft `fixed` / `quota` selection in that same VM, so the UI never shows multiple active rows for the same exclusive mode.
-- Top failure model/channel in the runtime panel is currently derived from switch logs. It is approximate. Exact failure ranking would require a backend deployment-attempt event table or a dedicated health aggregation endpoint.
+- Top failure deployment/provider/model diagnostics now come from the exact `attempt_events` aggregation exposed by `/api/fallback/attempt-observability`; switch logs remain a separate record of deployment changes rather than the source of failure ranking.
